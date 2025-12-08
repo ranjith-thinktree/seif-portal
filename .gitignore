@@ -1,5 +1,8 @@
 # Root level gitignore
 
+# Documents directory
+documents/
+
 # Database files (you may want to exclude actual database files)
 *.sql
 !schema.sql
