@@ -27,14 +27,13 @@ SEIF/
 │   │   ├── utils/          # Utility functions
 │   │   └── websocket/      # Socket.io implementation
 │   └── templates/          # CSV templates
-├── frontend/               # React + Vite frontend
-│   ├── src/
-│   │   ├── components/     # Reusable components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API service layer
-│   │   ├── routes/         # Route configuration
-│   │   └── utils/          # Utility functions
-└── documents/              # Project documentation
+└── frontend/               # React + Vite frontend
+    ├── src/
+    │   ├── components/     # Reusable components
+    │   ├── pages/          # Page components
+    │   ├── services/       # API service layer
+    │   ├── routes/         # Route configuration
+    │   └── utils/          # Utility functions
 ```
 
 ## 🛠️ Technology Stack
@@ -160,16 +159,17 @@ After importing the database, you can login with these credentials:
 | ESSCI | essci@seif.org | password123 |
 | Read Only | readonly@seif.org | password123 |
 
-## 📚 API Documentation
+## 📚 API Endpoints
 
-API documentation is available in `backend/API_DOCUMENTATION.md`
-
-## 📖 Additional Documentation
-
-- `documents/QUICK_START.md` - Quick start guide
-- `documents/DATABASE_DOCUMENTATION.md` - Database schema and relationships
-- `documents/PORTAL_WORKFLOW.md` - Application workflow
-- `documents/CSV_TEMPLATE_SPECIFICATION.md` - CSV upload format
+The API provides RESTful endpoints for:
+- Authentication (`/api/v1/auth`)
+- Partners (`/api/v1/partners`)
+- Centers (`/api/v1/centers`)
+- Batches (`/api/v1/batches`)
+- Students (`/api/v1/students`)
+- Data Upload (`/api/v1/uploads`)
+- Review & Approval (`/api/v1/review`)
+- Notifications (`/api/v1/notifications`)
 
 ## 🔐 Security Features
 
