@@ -1,0 +1,8 @@
+Center ID,Batch Number,Batch Start Date,Batch End Date,Student ID,Name of the Trainee,DOB,Father Name,Gender,Mobile Number,Email ID,Qualification,Course Attended,Student Address,Student City,Student State,Student District
+C001,BATCH-2024-Q4-ELEC,15-10-2024,15-04-2025,STU-2024-001,Priya Sharma,25-05-2000,Rajesh Sharma,Female,9123456789,priya.sharma@example.com,12th Pass,Electrical,123 MG Road,Pune,Maharashtra,Pune
+C001,BATCH-2024-Q4-ELEC,15-10-2024,15-04-2025,STU-2024-002,Amit Verma,10-08-1999,Suresh Verma,Male,9234567890,amit.verma@example.com,Graduate,Electrical,456 FC Road,Pune,Maharashtra,Pune
+C001,BATCH-2024-Q4-ELEC,15-10-2024,15-04-2025,STU-2024-003,Rahul Singh,15-03-2001,Vikram Singh,Male,9345678901,rahul.singh@example.com,10th Pass,Electrical,789 Shivaji Nagar,Pune,Maharashtra,Pune
+C002,BATCH-2024-Q4-SOLR,01-11-2024,01-05-2025,STU-2024-004,Neha Patel,12-09-1998,Ramesh Patel,Female,9456789012,neha.patel@example.com,ITI,Solar,321 Linking Road,Mumbai,Maharashtra,Mumbai
+C002,BATCH-2024-Q4-SOLR,01-11-2024,01-05-2025,STU-2024-005,Vikram Joshi,18-07-2000,Prakash Joshi,Male,9567890123,vikram.joshi@example.com,Diploma,Solar,654 Andheri West,Mumbai,Maharashtra,Mumbai Suburban
+C003,BATCH-2024-Q4-IAUT,20-10-2024,20-04-2025,STU-2024-006,Karthik Reddy,05-12-1999,Mohan Reddy,Male,9678901234,karthik.reddy@example.com,B.Tech,Industrial Automation,987 Whitefield,Bangalore,Karnataka,Bangalore Urban
+C003,BATCH-2024-Q4-IAUT,20-10-2024,20-04-2025,STU-2024-007,Suresh Kumar,22-06-2001,Ravi Kumar,Male,9789012345,suresh.kumar@example.com,12th Pass,Industrial Automation,432 Koramangala,Bangalore,Karnataka,Bangalore Urban

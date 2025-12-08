@@ -1,0 +1,621 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  ArrowPathIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+} from "@heroicons/react/24/outline";
+import {
+  getUploadDetailsForAdmin,
+  getBatchStudents,
+  approveUpload,
+  rejectUpload,
+} from "../../services/upload.service";
+import { MainLayout } from "../../components/layout";
+import SuccessModal from "../../components/common/SuccessModal";
+import RejectionModal from "../../components/common/RejectionModal";
+
+/**
+ * Review Page
+ * Admin page for reviewing and approving/rejecting uploads
+ */
+const ReviewPage = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [upload, setUpload] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expandedCenters, setExpandedCenters] = useState(new Set());
+  const [expandedBatches, setExpandedBatches] = useState(new Set());
+  const [batchStudents, setBatchStudents] = useState({});
+  const [loadingBatches, setLoadingBatches] = useState(new Set());
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  /**
+   * Fetch upload details
+   */
+  const fetchUploadDetails = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await getUploadDetailsForAdmin(id);
+      setUpload(result.data);
+
+      // Auto-expand first center
+      if (result.data.centers.length > 0) {
+        setExpandedCenters(new Set([result.data.centers[0].id]));
+      }
+    } catch (err) {
+      console.error("Failed to fetch upload details:", err);
+      setError("Failed to load upload details. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchUploadDetails();
+  }, [fetchUploadDetails]);
+
+  /**
+   * Toggle center expansion
+   */
+  const toggleCenter = (centerId) => {
+    const newSet = new Set(expandedCenters);
+    if (newSet.has(centerId)) {
+      newSet.delete(centerId);
+    } else {
+      newSet.add(centerId);
+    }
+    setExpandedCenters(newSet);
+  };
+
+  /**
+   * Load students for a batch (on-demand)
+   */
+  const loadBatchStudents = async (batchId, page = 1) => {
+    if (loadingBatches.has(batchId)) return;
+
+    const newLoadingSet = new Set(loadingBatches);
+    newLoadingSet.add(batchId);
+    setLoadingBatches(newLoadingSet);
+
+    try {
+      const result = await getBatchStudents(batchId, page, 50);
+      setBatchStudents((prev) => ({
+        ...prev,
+        [batchId]: {
+          students: result.data,
+          pagination: result.pagination,
+        },
+      }));
+    } catch (err) {
+      console.error("Failed to load batch students:", err);
+    } finally {
+      const newLoadingSet = new Set(loadingBatches);
+      newLoadingSet.delete(batchId);
+      setLoadingBatches(newLoadingSet);
+    }
+  };
+
+  /**
+   * Toggle batch expansion (loads students on first expand)
+   */
+  const toggleBatch = (batchId) => {
+    const newSet = new Set(expandedBatches);
+    if (newSet.has(batchId)) {
+      newSet.delete(batchId);
+    } else {
+      // Load students when expanding for the first time
+      if (!batchStudents[batchId]) {
+        loadBatchStudents(batchId);
+      }
+      newSet.add(batchId);
+    }
+    setExpandedBatches(newSet);
+  };
+
+  /**
+   * Handle approve
+   */
+  const handleApprove = () => {
+    setShowApproveModal(true);
+  };
+
+  const handleApproveConfirm = async () => {
+    setIsProcessing(true);
+    try {
+      await approveUpload(id, remarks || null);
+      setShowApproveModal(false);
+      setTimeout(() => {
+        navigate("/inbox");
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to approve:", err);
+      setShowApproveModal(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  /**
+   * Handle reject - now handled in RejectionModal onSubmit
+   */
+
+  if (loading) {
+    return (
+      <div className="h-full bg-background-secondary flex items-center justify-center">
+        <ArrowPathIcon className="h-8 w-8 text-primary-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !upload) {
+    return (
+      <div className="h-full bg-background-secondary flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive">{error || "Upload not found"}</p>
+          <button
+            onClick={() => navigate("/inbox")}
+            className="mt-4 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+          >
+            Back to Inbox
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <div className="h-[calc(100vh-8rem)] flex flex-col">
+        {/* Header */}
+        <div className="bg-white border-b border-border px-6 py-4 -mx-6 -mt-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">
+                  Review Upload
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  Partner:{" "}
+                  <span className="font-medium">{upload.partner_name}</span> •
+                  File: <span className="font-medium">{upload.file_name}</span>
+                </p>
+              </div>
+
+              {upload.status === "pending" && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowRejectModal(true)}
+                    disabled={isProcessing}
+                    className="px-6 py-2 bg-white border border-destructive text-destructive rounded-lg hover:bg-destructive/10 font-medium transition-colors disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    onClick={handleApprove}
+                    disabled={isProcessing}
+                    className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isProcessing ? "Processing..." : "Approve All"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
+                <p className="text-sm text-muted-foreground font-medium">
+                  Total Records
+                </p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {upload.total_records}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
+                <p className="text-sm text-muted-foreground font-medium">
+                  Centers
+                </p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {upload.centers.length}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
+                <p className="text-sm text-muted-foreground font-medium">
+                  Batches
+                </p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {upload.centers.reduce((sum, c) => sum + c.batch_count, 0)}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
+                <p className="text-sm text-muted-foreground font-medium">
+                  Version
+                </p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  v{upload.version}
+                </p>
+              </div>
+            </div>
+
+            {/* Centers List */}
+            <div className="space-y-4">
+              {upload.centers.map((center) => (
+                <div
+                  key={center.id}
+                  className="bg-white rounded-lg shadow-card overflow-hidden"
+                >
+                  {/* Center Header */}
+                  <button
+                    onClick={() => toggleCenter(center.id)}
+                    className="w-full px-6 py-4 flex items-center justify-between hover:bg-background-secondary transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandedCenters.has(center.id) ? (
+                        <ChevronDownIcon className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
+                      )}
+                      <div className="text-left">
+                        <h3 className="font-semibold text-foreground">
+                          {center.center_name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {center.csv_center_id} • {center.center_type} •{" "}
+                          {center.city}, {center.state}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                      <span>{center.batch_count} batches</span>
+                      <span>{center.student_count} students</span>
+                    </div>
+                  </button>
+
+                  {/* Center Details */}
+                  {expandedCenters.has(center.id) && (
+                    <div className="border-t border-border">
+                      {/* Center Info */}
+                      <div className="px-6 py-4 bg-background-secondary">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Region</p>
+                            <p className="font-medium text-foreground">
+                              {center.region}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Established</p>
+                            <p className="font-medium text-foreground">
+                              {center.year_of_establishment || "N/A"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Center Head</p>
+                            <p className="font-medium text-foreground">
+                              {center.center_head || "N/A"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Contact</p>
+                            <p className="font-medium text-foreground">
+                              {center.mobile_number || "N/A"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Batches */}
+                      <div className="divide-y divide-border">
+                        {center.batches.map((batch) => (
+                          <div key={batch.id}>
+                            {/* Batch Header */}
+                            <button
+                              onClick={() => toggleBatch(batch.id)}
+                              className="w-full px-6 py-3 flex items-center justify-between hover:bg-background-secondary transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                {expandedBatches.has(batch.id) ? (
+                                  <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
+                                )}
+                                <div className="text-left">
+                                  <h4 className="font-medium text-foreground">
+                                    {batch.batch_number}
+                                  </h4>
+                                  <p className="text-xs text-muted-foreground">
+                                    {batch.batch_start_date} to{" "}
+                                    {batch.batch_complete_date || "Ongoing"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm">
+                                <span className="text-muted-foreground">
+                                  {batch.student_count} students (
+                                  {batch.male_students}M /{" "}
+                                  {batch.female_students}F)
+                                </span>
+                                <span
+                                  className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                    batch.status === "active"
+                                      ? "bg-primary-100 text-primary-700"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {batch.status}
+                                </span>
+                              </div>
+                            </button>
+
+                            {/* Students Table */}
+                            {expandedBatches.has(batch.id) && (
+                              <div className="px-6 pb-4">
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="bg-muted">
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                                          Student ID
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                                          Name
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                                          Gender
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                                          Course
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                                          Duration
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                                          Status
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                                          Contact
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border bg-white">
+                                      {loadingBatches.has(batch.id) ? (
+                                        <tr>
+                                          <td
+                                            colSpan="7"
+                                            className="px-3 py-8 text-center"
+                                          >
+                                            <ArrowPathIcon className="h-6 w-6 text-primary-500 animate-spin mx-auto mb-2" />
+                                            <p className="text-muted-foreground text-sm">
+                                              Loading students...
+                                            </p>
+                                          </td>
+                                        </tr>
+                                      ) : batchStudents[batch.id]?.students
+                                          ?.length > 0 ? (
+                                        <>
+                                          {batchStudents[batch.id].students.map(
+                                            (student) => (
+                                              <tr
+                                                key={student.id}
+                                                className="hover:bg-background-secondary"
+                                              >
+                                                <td className="px-3 py-2 text-foreground">
+                                                  {student.student_id}
+                                                </td>
+                                                <td className="px-3 py-2 text-foreground font-medium">
+                                                  {student.student_name}
+                                                </td>
+                                                <td className="px-3 py-2 text-muted-foreground">
+                                                  {student.gender}
+                                                </td>
+                                                <td className="px-3 py-2 text-foreground">
+                                                  {student.course_name}
+                                                </td>
+                                                <td className="px-3 py-2 text-muted-foreground">
+                                                  {student.course_duration_months
+                                                    ? `${student.course_duration_months} months`
+                                                    : "N/A"}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                  <span
+                                                    className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                                      student.training_status ===
+                                                      "in_progress"
+                                                        ? "bg-blue-100 text-blue-700"
+                                                        : student.training_status ===
+                                                          "completed"
+                                                        ? "bg-primary-100 text-primary-700"
+                                                        : student.training_status ===
+                                                          "enrolled"
+                                                        ? "bg-secondary-100 text-secondary-700"
+                                                        : "bg-muted text-muted-foreground"
+                                                    }`}
+                                                  >
+                                                    {student.training_status}
+                                                  </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-muted-foreground text-xs">
+                                                  {student.mobile_number ||
+                                                    student.email ||
+                                                    "N/A"}
+                                                </td>
+                                              </tr>
+                                            )
+                                          )}
+                                          {/* Pagination Controls */}
+                                          {batchStudents[batch.id].pagination
+                                            .totalPages > 1 && (
+                                            <tr>
+                                              <td
+                                                colSpan="7"
+                                                className="px-3 py-3 bg-background-secondary"
+                                              >
+                                                <div className="flex items-center justify-between">
+                                                  <div className="text-sm text-muted-foreground">
+                                                    Showing{" "}
+                                                    {(batchStudents[batch.id]
+                                                      .pagination.page -
+                                                      1) *
+                                                      50 +
+                                                      1}{" "}
+                                                    to{" "}
+                                                    {Math.min(
+                                                      batchStudents[batch.id]
+                                                        .pagination.page * 50,
+                                                      batchStudents[batch.id]
+                                                        .pagination.total
+                                                    )}{" "}
+                                                    of{" "}
+                                                    {
+                                                      batchStudents[batch.id]
+                                                        .pagination.total
+                                                    }{" "}
+                                                    students
+                                                  </div>
+                                                  <div className="flex gap-2">
+                                                    <button
+                                                      onClick={() =>
+                                                        loadBatchStudents(
+                                                          batch.id,
+                                                          batchStudents[
+                                                            batch.id
+                                                          ].pagination.page - 1
+                                                        )
+                                                      }
+                                                      disabled={
+                                                        batchStudents[batch.id]
+                                                          .pagination.page === 1
+                                                      }
+                                                      className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
+                                                    >
+                                                      Previous
+                                                    </button>
+                                                    <span className="px-3 py-1 text-sm text-foreground">
+                                                      Page{" "}
+                                                      {
+                                                        batchStudents[batch.id]
+                                                          .pagination.page
+                                                      }{" "}
+                                                      of{" "}
+                                                      {
+                                                        batchStudents[batch.id]
+                                                          .pagination.totalPages
+                                                      }
+                                                    </span>
+                                                    <button
+                                                      onClick={() =>
+                                                        loadBatchStudents(
+                                                          batch.id,
+                                                          batchStudents[
+                                                            batch.id
+                                                          ].pagination.page + 1
+                                                        )
+                                                      }
+                                                      disabled={
+                                                        batchStudents[batch.id]
+                                                          .pagination.page ===
+                                                        batchStudents[batch.id]
+                                                          .pagination.totalPages
+                                                      }
+                                                      className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
+                                                    >
+                                                      Next
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <tr>
+                                          <td
+                                            colSpan="7"
+                                            className="px-3 py-8 text-center text-muted-foreground"
+                                          >
+                                            No students found
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Reject Modal */}
+      <RejectionModal
+        isOpen={showRejectModal}
+        onClose={() => {
+          setShowRejectModal(false);
+          setRejectionReason("");
+          setRemarks("");
+        }}
+        title="Reject Upload"
+        description="Please provide a reason for rejecting this upload. This will be sent to the partner for review."
+        onSubmit={async ({ reason, remarks }) => {
+          try {
+            setIsProcessing(true);
+            await rejectUpload(id, reason, remarks);
+            setShowRejectModal(false);
+            setTimeout(() => {
+              navigate("/inbox");
+            }, 1500);
+          } catch (error) {
+            console.error("Error rejecting upload:", error);
+          } finally {
+            setIsProcessing(false);
+          }
+        }}
+        isLoading={isProcessing}
+        reasonLabel="Rejection Reason"
+        remarksLabel="Additional Remarks"
+        reasonPlaceholder="Explain why this upload is being rejected..."
+        remarksPlaceholder="Any additional comments..."
+        minReasonLength={1}
+      />
+
+      {/* Approve Modal */}
+      <SuccessModal
+        isOpen={showApproveModal}
+        onClose={() => setShowApproveModal(false)}
+        title="Approve Upload"
+        description="Are you sure you want to approve this upload? This will move all data to production."
+        partnerName={upload?.partner_name || ""}
+        centerName={`${upload?.centers?.length || 0} Centers`}
+        onConfirm={handleApproveConfirm}
+        isLoading={isProcessing}
+        showCancel={true}
+        buttonText="Confirm Approval"
+      />
+    </MainLayout>
+  );
+};
+
+export default ReviewPage;

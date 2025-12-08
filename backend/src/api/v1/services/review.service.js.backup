@@ -1,0 +1,537 @@
+const db = require('../../../database/connection');
+const { v4: uuidv4 } = require('uuid');
+const { convertToUUID } = require('../../../utils/uuid.util');
+
+/**
+ * Review Service
+ * Handles center-wise review and approval of uploaded data
+ */
+class ReviewService {
+  /**
+   * Get upload details with review progress
+   */
+  async getUploadForReview(uploadId) {
+    try {
+      const uploadUuid = convertToUUID(uploadId);
+
+      // Get upload details with partner info
+      const uploads = await db.query(
+        `SELECT 
+          ud.*,
+          p.name as partner_name,
+          p.contact_person as partner_contact,
+          u.full_name as uploaded_by_name
+        FROM uploaded_data ud
+        LEFT JOIN partners p ON ud.partner_id = p.id
+        LEFT JOIN users u ON ud.uploaded_by = u.id
+        WHERE ud.id = ?`,
+        [uploadUuid]
+      );
+
+      if (uploads.length === 0) {
+        return null;
+      }
+
+      const upload = uploads[0];
+
+      // Get review statistics
+      const stats = await db.query(
+        `SELECT 
+          COUNT(*) as total_centers,
+          SUM(CASE WHEN review_status = 'approved' THEN 1 ELSE 0 END) as approved_centers,
+          SUM(CASE WHEN review_status = 'rejected' THEN 1 ELSE 0 END) as rejected_centers,
+          SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) as pending_centers
+        FROM uploaded_centers
+        WHERE upload_id = ?`,
+        [uploadUuid]
+      );
+
+      upload.review_stats = stats[0];
+
+      return upload;
+    } catch (error) {
+      console.error('Error in getUploadForReview:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get pending centers for an upload
+   */
+  async getPendingCenters(uploadId, { page = 1, limit = 10, search = '' }) {
+    try {
+      const uploadUuid = convertToUUID(uploadId);
+      const offset = (page - 1) * limit;
+      let whereConditions = ['uc.data_upload_id = ?'];
+      let queryParams = [uploadUuid];
+
+      // Search filter
+      if (search) {
+        whereConditions.push('(uc.center_name LIKE ? OR uc.city LIKE ? OR uc.state LIKE ?)');
+        const searchPattern = `%${search}%`;
+        queryParams.push(searchPattern, searchPattern, searchPattern);
+      }
+
+      const whereClause = whereConditions.join(' AND ');
+
+      // Get total count
+      const countResult = await db.query(
+        `SELECT COUNT(*) as total 
+        FROM uploaded_centers uc
+        WHERE ${whereClause}`,
+        queryParams
+      );
+      const total = countResult[0].total;
+
+      // Get paginated data
+      const centers = await db.query(
+        `SELECT 
+          uc.*,
+          CONCAT(u.first_name, ' ', u.last_name) as reviewed_by_name,
+          (SELECT COUNT(*) FROM uploaded_students WHERE uploaded_center_id = uc.id) as student_count
+        FROM uploaded_centers uc
+        LEFT JOIN users u ON uc.reviewed_by = u.id
+        WHERE ${whereClause}
+        ORDER BY 
+          FIELD(uc.review_status, 'pending', 'approved', 'rejected'),
+          uc.created_at DESC
+        LIMIT ? OFFSET ?`,
+        [...queryParams, limit, offset]
+      );
+
+      return {
+        data: centers,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      console.error('Error in getPendingCenters:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get students for a specific center in upload
+   */
+  async getCenterStudentsForReview(uploadId, centerId, { page = 1, limit = 10, search = '' }) {
+    try {
+      const uploadUuid = convertToUUID(uploadId);
+      const centerUuid = convertToUUID(centerId);
+      const offset = (page - 1) * limit;
+
+      let whereConditions = ['us.data_upload_id = ?', 'us.uploaded_center_id = ?'];
+      let queryParams = [uploadUuid, centerUuid];
+
+      // Search filter
+      if (search) {
+        whereConditions.push(
+          '(us.student_id LIKE ? OR us.student_name LIKE ? OR us.email LIKE ?)'
+        );
+        const searchPattern = `%${search}%`;
+        queryParams.push(searchPattern, searchPattern, searchPattern);
+      }
+
+      const whereClause = whereConditions.join(' AND ');
+
+      // Get total count
+      const countResult = await db.query(
+        `SELECT COUNT(*) as total 
+        FROM uploaded_students us
+        WHERE ${whereClause}`,
+        queryParams
+      );
+      const total = countResult[0].total;
+
+      // Get paginated data
+      const students = await db.query(
+        `SELECT 
+          us.*,
+          uc.center_name,
+          ub.batch_number
+        FROM uploaded_students us
+        LEFT JOIN uploaded_centers uc ON us.uploaded_center_id = uc.id
+        LEFT JOIN uploaded_batches ub ON us.uploaded_batch_id = ub.id
+        WHERE ${whereClause}
+        ORDER BY us.student_id
+        LIMIT ? OFFSET ?`,
+        [...queryParams, limit, offset]
+      );
+
+      // Get center details
+      const centerResult = await db.query(
+        `SELECT 
+          uc.*,
+          (SELECT COUNT(*) FROM uploaded_students WHERE uploaded_center_id = uc.id) as student_count
+        FROM uploaded_centers uc
+        WHERE uc.id = ? AND uc.data_upload_id = ?`,
+        [centerUuid, uploadUuid]
+      );
+
+      return {
+        data: students,
+        center: centerResult[0] || null,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      console.error('Error in getCenterStudentsForReview:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Approve a center (moves center, batches, and students to main tables)
+   */
+  async approveCenter(uploadId, centerId, userId) {
+    const connection = await db.getConnection();
+    
+    try {
+      await connection.beginTransaction();
+
+      const uploadUuid = convertToUUID(uploadId);
+      const centerUuid = convertToUUID(centerId);
+      const userUuid = convertToUUID(userId);
+
+      // Get center details
+      const centers = await connection.query(
+        'SELECT * FROM uploaded_centers WHERE id = ? AND upload_id = ? AND review_status = ?',
+        [centerUuid, uploadUuid, 'pending']
+      );
+
+      if (centers.length === 0) {
+        throw new Error('Center not found or already reviewed');
+      }
+
+      const center = centers[0];
+
+      // Generate new UUID for approved center
+      const approvedCenterId = uuidv4();
+
+      // Insert into main centers table
+      await connection.query(
+        `INSERT INTO centers (
+          id, partner_id, center_name, center_type, region, address,
+          city, state, pincode, year_of_establishment, center_head,
+          center_head_contact, status, approval_status, approved_by, approved_at,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), NOW())`,
+        [
+          approvedCenterId,
+          center.partner_id,
+          center.center_name,
+          center.center_type,
+          center.region,
+          center.address,
+          center.city,
+          center.state,
+          center.pincode,
+          center.year_of_establishment,
+          center.center_head,
+          center.center_head_contact,
+          'active',
+          'approved',
+          userUuid,
+        ]
+      );
+
+      // Get batches for this center
+      const batches = await connection.query(
+        'SELECT * FROM uploaded_batches WHERE center_id = ? AND upload_id = ?',
+        [centerUuid, uploadUuid]
+      );
+
+      // Insert batches and track mappings
+      const batchIdMap = {};
+      for (const batch of batches) {
+        const approvedBatchId = uuidv4();
+        batchIdMap[batch.id] = approvedBatchId;
+
+        await connection.query(
+          `INSERT INTO batches (
+            id, center_id, partner_id, batch_number, batch_start_date,
+            batch_complete_date, total_students, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [
+            approvedBatchId,
+            approvedCenterId,
+            center.partner_id,
+            batch.batch_number,
+            batch.batch_start_date,
+            batch.batch_complete_date,
+            batch.total_students,
+            'active',
+          ]
+        );
+
+        // Update uploaded_batches
+        await connection.query(
+          `UPDATE uploaded_batches 
+          SET review_status = ?, reviewed_by = ?, reviewed_at = NOW(), approved_batch_id = ?
+          WHERE id = ?`,
+          ['approved', userUuid, approvedBatchId, batch.id]
+        );
+      }
+
+      // Get students for this center
+      const students = await connection.query(
+        'SELECT * FROM uploaded_students WHERE center_id = ? AND upload_id = ?',
+        [centerUuid, uploadUuid]
+      );
+
+      // Insert students
+      for (const student of students) {
+        const approvedStudentId = uuidv4();
+        const approvedBatchId = batchIdMap[student.batch_id];
+
+        await connection.query(
+          `INSERT INTO students (
+            id, center_id, batch_id, partner_id, enrollment_id, first_name,
+            middle_name, last_name, email, mobile_number, gender, date_of_birth,
+            address, city, state, pincode, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [
+            approvedStudentId,
+            approvedCenterId,
+            approvedBatchId,
+            center.partner_id,
+            student.enrollment_id,
+            student.first_name,
+            student.middle_name,
+            student.last_name,
+            student.email,
+            student.mobile_number,
+            student.gender,
+            student.date_of_birth,
+            student.address,
+            student.city,
+            student.state,
+            student.pincode,
+          ]
+        );
+
+        // Update uploaded_students
+        await connection.query(
+          `UPDATE uploaded_students 
+          SET review_status = ?, reviewed_by = ?, reviewed_at = NOW(), approved_student_id = ?
+          WHERE id = ?`,
+          ['approved', userUuid, approvedStudentId, student.id]
+        );
+      }
+
+      // Update center review status
+      await connection.query(
+        `UPDATE uploaded_centers 
+        SET review_status = ?, reviewed_by = ?, reviewed_at = NOW(), approved_center_id = ?
+        WHERE id = ?`,
+        ['approved', userUuid, approvedCenterId, centerUuid]
+      );
+
+      // Update upload progress
+      await connection.query(
+        `UPDATE data_uploads 
+         SET centers_reviewed = centers_reviewed + 1,
+             centers_approved = centers_approved + 1,
+             review_progress = CASE 
+               WHEN centers_reviewed + 1 >= centers_total THEN 'completed'
+               ELSE 'in_progress'
+             END
+         WHERE id = ?`,
+        [uploadId]
+      );
+
+      // Check if all centers are reviewed
+      const [uploadCheck] = await connection.query(
+        'SELECT * FROM data_uploads WHERE id = ?',
+        [uploadId]
+      );
+
+      const allReviewed = uploadCheck[0].centers_reviewed >= uploadCheck[0].centers_total;
+
+      // Create notification for partner
+      const notificationId = uuidv4();
+      await connection.query(
+        `INSERT INTO notifications (
+          id, recipient_id, type, alert_type, title, message,
+          related_entity_type, related_entity_id, sent_via, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          notificationId,
+          center.partner_id,
+          'DATA_APPROVED',
+          'success',
+          allReviewed ? 'Upload Approved' : 'Center Approved',
+          allReviewed 
+            ? `Your data upload has been fully approved. All centers and students are now active.`
+            : `Center "${center.center_name}" has been approved and is now active.`,
+          'center',
+          approvedCenterId,
+          'in_app',
+        ]
+      );
+
+      await connection.commit();
+
+      return {
+        success: true,
+        approvedCenterId,
+        allReviewed,
+      };
+    } catch (error) {
+      await connection.rollback();
+      console.error('Error in approveCenter:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Reject a center
+   */
+  async rejectCenter(uploadId, centerId, userId, reason, remarks) {
+    const connection = await db.getConnection();
+    
+    try {
+      await connection.beginTransaction();
+
+      const uploadUuid = convertToUUID(uploadId);
+      const centerUuid = convertToUUID(centerId);
+      const userUuid = convertToUUID(userId);
+
+      // Get center details
+      const centers = await connection.query(
+        'SELECT * FROM uploaded_centers WHERE id = ? AND upload_id = ? AND review_status = ?',
+        [centerUuid, uploadUuid, 'pending']
+      );
+
+      if (centers.length === 0) {
+        throw new Error('Center not found or already reviewed');
+      }
+
+      const center = centers[0];
+
+      // Update center status
+      await connection.query(
+        `UPDATE uploaded_centers 
+        SET review_status = ?, rejection_reason = ?, rejection_remarks = ?,
+            reviewed_by = ?, reviewed_at = NOW()
+        WHERE id = ?`,
+        ['rejected', reason, remarks, userUuid, centerUuid]
+      );
+
+      // Update batches status
+      await connection.query(
+        `UPDATE uploaded_batches 
+        SET review_status = ?, reviewed_by = ?, reviewed_at = NOW()
+        WHERE center_id = ? AND upload_id = ?`,
+        ['rejected', userUuid, centerUuid, uploadUuid]
+      );
+
+      // Update students status
+      await connection.query(
+        `UPDATE uploaded_students 
+        SET review_status = ?, reviewed_by = ?, reviewed_at = NOW()
+        WHERE center_id = ? AND upload_id = ?`,
+        ['rejected', userUuid, centerUuid, uploadUuid]
+      );
+
+      // Update upload progress
+      await connection.query(
+        `UPDATE data_uploads 
+         SET centers_reviewed = centers_reviewed + 1,
+             centers_rejected = centers_rejected + 1,
+             review_progress = CASE 
+               WHEN centers_reviewed + 1 >= centers_total THEN 'completed'
+               ELSE 'in_progress'
+             END
+         WHERE id = ?`,
+        [uploadId]
+      );
+
+      // Create notification for partner
+      const notificationId = uuidv4();
+      await connection.query(
+        `INSERT INTO notifications (
+          id, recipient_id, type, alert_type, title, message, remark,
+          related_entity_type, related_entity_id, sent_via, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          notificationId,
+          center.partner_id,
+          'DATA_REJECTED',
+          'error',
+          'Center Rejected',
+          `Center "${center.center_name}" has been rejected. Reason: ${reason}`,
+          remarks,
+          'uploaded_center',
+          centerUuid,
+          'in_app',
+        ]
+      );
+
+      await connection.commit();
+
+      return {
+        success: true,
+        centerUuid,
+      };
+    } catch (error) {
+      await connection.rollback();
+      console.error('Error in rejectCenter:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Get rejected centers for partner
+   */
+  async getRejectedCentersForPartner(uploadId, partnerId) {
+    try {
+      const uploadUuid = convertToUUID(uploadId);
+      const partnerUuid = convertToUUID(partnerId);
+
+      // Get upload details
+      const uploads = await db.query(
+        `SELECT * FROM uploaded_data WHERE id = ? AND partner_id = ?`,
+        [uploadUuid, partnerUuid]
+      );
+
+      if (uploads.length === 0) {
+        return null;
+      }
+
+      // Get rejected centers
+      const centers = await db.query(
+        `SELECT 
+          uc.*,
+          u.full_name as reviewed_by_name,
+          (SELECT COUNT(*) FROM uploaded_students WHERE center_id = uc.id) as student_count
+        FROM uploaded_centers uc
+        LEFT JOIN users u ON uc.reviewed_by = u.id
+        WHERE uc.upload_id = ? AND uc.review_status = 'rejected'
+        ORDER BY uc.reviewed_at DESC`,
+        [uploadUuid]
+      );
+
+      return {
+        upload: uploads[0],
+        centers,
+      };
+    } catch (error) {
+      console.error('Error in getRejectedCentersForPartner:', error);
+      throw error;
+    }
+  }
+}
+
+module.exports = new ReviewService();
