@@ -2,7 +2,6 @@ require('dotenv').config();
 
 // Initialize Sentry for error tracking (must be first)
 const Sentry = require('@sentry/node');
-const { nodeProfilingIntegration } = require('@sentry/profiling-node');
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({
@@ -12,12 +11,6 @@ if (process.env.SENTRY_DSN) {
     
     // Performance Monitoring
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    
-    // Profiling
-    profilesSampleRate: 1.0,
-    integrations: [
-      nodeProfilingIntegration(),
-    ],
     
     // Filter sensitive data
     beforeSend(event, hint) {
