@@ -43,12 +43,7 @@ router.post(
 );
 
 // Get application logs (SUPER_ADMIN only)
-router.get(
-  '/logs',
-  authenticate,
-  checkRole(['SUPER_ADMIN']),
-  adminLogsController.getLogs
-);
+router.get('/logs', authenticate, checkRole(['SUPER_ADMIN']), adminLogsController.getLogs);
 
 // Get system information (SUPER_ADMIN only)
 router.get(
@@ -59,11 +54,6 @@ router.get(
 );
 
 // Clear logs (SUPER_ADMIN only)
-router.post(
-  '/logs/clear',
-  authenticate,
-  checkRole(['SUPER_ADMIN']),
-  adminLogsController.clearLogs
-);
+router.post('/logs/clear', authenticate, checkRole(['SUPER_ADMIN']), adminLogsController.clearLogs);
 
 module.exports = router;

@@ -97,6 +97,14 @@ jobs:
             --paths "/*"
           echo "✅ Cache invalidation triggered"
 
+      - name: Configure S3 website for SPA routing
+        run: |
+          echo "🔧 Configuring S3 website for React Router SPA..."
+          aws s3 website s3://${{ secrets.S3_BUCKET_NAME }}/ \
+            --index-document index.html \
+            --error-document index.html
+          echo "✅ S3 website configuration updated"
+
       - name: Verify deployment
         run: |
           echo "🔍 Verifying S3 deployment..."

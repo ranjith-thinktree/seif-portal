@@ -335,6 +335,8 @@ const createNotificationForAdmin = async (dataUploadId, partnerId, partnerName, 
 const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
   try {
     const offset = (page - 1) * limit;
+    const validLimit = parseInt(limit);
+    const validOffset = parseInt(offset);
 
     const [uploads] = await pool.query(
       `SELECT 
@@ -348,8 +350,8 @@ const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
       LEFT JOIN users r ON du.reviewed_by = r.id
       WHERE du.partner_id = ?
       ORDER BY du.created_at DESC
-      LIMIT ? OFFSET ?`,
-      [partnerId, limit, offset]
+      LIMIT ${validLimit} OFFSET ${validOffset}`,
+      [partnerId]
     );
 
     const [countResult] = await pool.query(
@@ -457,8 +459,6 @@ const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10) => {
       params.push(status);
     }
 
-    params.push(limit, offset);
-
     const [uploads] = await pool.query(
       `SELECT 
         du.id, du.file_name, du.total_records, du.status,
@@ -472,7 +472,7 @@ const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10) => {
       ORDER BY 
         CASE WHEN du.status = 'pending' THEN 1 ELSE 2 END,
         du.created_at DESC
-      LIMIT ? OFFSET ?`,
+      LIMIT ${limit} OFFSET ${offset}`,
       params
     );
 
@@ -569,14 +569,16 @@ const getUploadDetailsForAdmin = async (uploadId) => {
 const getBatchStudents = async (batchId, page = 1, limit = 50) => {
   try {
     const offset = (page - 1) * limit;
+    const validLimit = parseInt(limit);
+    const validOffset = parseInt(offset);
 
     // Get paginated students
     const [students] = await pool.query(
       `SELECT * FROM uploaded_students 
        WHERE uploaded_batch_id = ? 
        ORDER BY partner_student_id 
-       LIMIT ? OFFSET ?`,
-      [batchId, limit, offset]
+       LIMIT ${validLimit} OFFSET ${validOffset}`,
+      [batchId]
     );
 
     // Get total count

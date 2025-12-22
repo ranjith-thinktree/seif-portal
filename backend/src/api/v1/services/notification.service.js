@@ -199,7 +199,6 @@ const getUserNotifications = async (userId, role, filters = {}) => {
     }
 
     // Get notifications
-    params.push(limit, offset);
     const [notifications] = await pool.query(
       `SELECT 
         id, recipient_id, recipient_role, type, alert_type, title, message, 
@@ -208,14 +207,14 @@ const getUserNotifications = async (userId, role, filters = {}) => {
       FROM notifications
       ${whereClause}
       ${orderByClause}
-      LIMIT ? OFFSET ?`,
+      LIMIT ${limit} OFFSET ${offset}`,
       params
     );
 
     // Get total count
     const [countResult] = await pool.query(
       `SELECT COUNT(*) as total FROM notifications ${whereClause}`,
-      params.slice(0, -2) // Remove limit and offset
+      params
     );
 
     // Parse payload JSON

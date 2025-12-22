@@ -34,7 +34,12 @@ class PartnerService {
     sort_order = 'desc',
   }) {
     try {
-      const offset = (page - 1) * limit;
+      // Ensure page and limit are valid integers
+      const validPage = Math.max(1, parseInt(page) || 1);
+      const validLimit = Math.max(1, Math.min(1000, parseInt(limit) || 10));
+      const offset = (validPage - 1) * validLimit;
+
+      console.log('[getAllPartners] DEBUG:', { page, limit, validPage, validLimit, offset });
       let whereConditions = [];
       let queryParams = [];
 
@@ -112,9 +117,9 @@ class PartnerService {
       );
       const total = countResult[0].total;
 
-      // Get paginated data
+      // Get paginated data - use direct integers for LIMIT/OFFSET to avoid mysql2 parameter issues
       const partners = await db.query(
-        `SELECT 
+        `SELECT
           p.*,
           u.full_name as approved_by_name,
           (SELECT COUNT(*) FROM centers WHERE partner_id = p.id AND approval_status = 'approved') as total_centers,
@@ -125,17 +130,17 @@ class PartnerService {
         LEFT JOIN users u ON p.approved_by = u.id
         ${whereClause}
         ORDER BY ${sortField} ${sortDirection}
-        LIMIT ? OFFSET ?`,
-        [...queryParams, parseInt(limit), parseInt(offset)]
+        LIMIT ${validLimit} OFFSET ${offset}`,
+        queryParams
       );
 
       return {
         data: partners,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page: validPage,
+          limit: validLimit,
           total,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.ceil(total / validLimit),
         },
       };
     } catch (error) {
@@ -809,7 +814,9 @@ class PartnerService {
   async getRejectedUploads(partnerId, { page = 1, limit = 10, search = '' }) {
     try {
       const partnerUuid = convertToUUID(partnerId);
-      const offset = (page - 1) * limit;
+      const validPage = Math.max(1, parseInt(page) || 1);
+      const validLimit = Math.max(1, Math.min(1000, parseInt(limit) || 10));
+      const offset = (validPage - 1) * validLimit;
 
       let whereConditions = ['du.partner_id = ?', 'du.deleted_at IS NULL'];
       let queryParams = [partnerUuid];
@@ -850,17 +857,17 @@ class PartnerService {
         WHERE ${whereClause} AND uc.review_status = 'rejected'
         GROUP BY du.id
         ORDER BY du.created_at DESC
-        LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        LIMIT ${validLimit} OFFSET ${offset}`,
+        queryParams
       );
 
       return {
         data: uploads,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page: validPage,
+          limit: validLimit,
           total,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.ceil(total / validLimit),
         },
       };
     } catch (error) {
@@ -991,18 +998,18 @@ class PartnerService {
         LEFT JOIN uploaded_batches ub ON us.uploaded_batch_id = ub.id
         WHERE ${whereClause}
         ORDER BY us.student_name
-        LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        LIMIT ${validLimit} OFFSET ${offset}`,
+        queryParams
       );
 
       return {
         center: center[0],
         students,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page: validPage,
+          limit: validLimit,
           total,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.ceil(total / validLimit),
         },
       };
     } catch (error) {

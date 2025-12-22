@@ -101,60 +101,12 @@ export const SIDEBAR_MENU = [
     icon: CircleStackIcon,
     roles: [ROLES.SUPER_ADMIN],
   },
-  /* {
-    name: "Partner Management",
-    path: ROUTES.PARTNERS,
-    icon: BuildingOfficeIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  },
-  {
-    name: "Center Management",
-    path: ROUTES.CENTERS,
-    icon: BuildingStorefrontIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  },
-  {
-    name: "Data Uploads",
-    path: ROUTES.DATA_UPLOADS,
-    icon: DocumentTextIcon,
-    roles: [ROLES.PARTNER],
-  },
-  {
-    name: "Upload Data",
-    path: ROUTES.UPLOAD_DATA,
-    icon: DocumentTextIcon,
-    roles: [ROLES.PARTNER],
-  },
-  {
-    name: "Requests",
-    path: ROUTES.REQUESTS,
-    icon: ClipboardDocumentListIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  },
-  {
-    name: "My Requests",
-    path: ROUTES.MY_REQUESTS,
-    icon: ClipboardDocumentListIcon,
-    roles: [ROLES.PARTNER],
-  },
-  {
-    name: "Analytics",
-    path: ROUTES.ANALYTICS,
-    icon: ChartBarIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.SEIF_READONLY],
-  },
   {
     name: "Terminal",
     path: ROUTES.ADMIN_TERMINAL,
     icon: CommandLineIcon,
     roles: [ROLES.SUPER_ADMIN],
   },
-  {
-    name: "Downloads",
-    path: ROUTES.DOWNLOADS,
-    icon: ArrowDownTrayIcon,
-    roles: [ROLES.ESSCI],
-  },*/
 ];
 
 /**

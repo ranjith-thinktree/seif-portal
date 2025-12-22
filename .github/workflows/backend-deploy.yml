@@ -29,7 +29,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./backend
-        run: npm ci --production
+        run: npm ci --production --legacy-peer-deps
 
       - name: Create .env file
         working-directory: ./backend
@@ -72,10 +72,11 @@ jobs:
         run: |
           cd backend
           tar -czf ../backend-deploy.tar.gz \
-            --exclude='node_modules/.cache' \
             --exclude='logs' \
             --exclude='uploads' \
+            --exclude='coverage' \
             --exclude='.git' \
+            --exclude='*.log' \
             .
 
       - name: Configure AWS credentials
@@ -94,27 +95,26 @@ jobs:
       - name: Deploy via Systems Manager
         run: |
           echo "🚀 Starting deployment via AWS Systems Manager..."
-          
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ env.INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --comment "SEIF Backend Deployment - ${{ github.sha }}" \
             --parameters 'commands=[
               "echo \"=== Starting SEIF Backend Deployment ===\"",
-              "cd /home/ubuntu/seif-portal/backend || exit 1",
+              "cd /home/ubuntu/seif-backend || exit 1",
               "pm2 stop seif-backend || true",
               "echo \"Creating backup...\"",
               "mkdir -p /tmp/seif-backup",
-              "cp -r /home/ubuntu/seif-portal/backend /tmp/seif-backup/backend-$(date +%Y%m%d-%H%M%S) || true",
+              "cp -r /home/ubuntu/seif-backend /tmp/seif-backup/backend-$(date +%Y%m%d-%H%M%S) || true",
               "echo \"Downloading deployment package...\"",
               "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deployments/backend-latest.tar.gz /tmp/backend-deploy.tar.gz",
               "echo \"Extracting files...\"",
-              "tar -xzf /tmp/backend-deploy.tar.gz -C /home/ubuntu/seif-portal/backend",
-              "cd /home/ubuntu/seif-portal/backend",
-              "echo \"Installing dependencies...\"",
-              "npm ci --production",
+              "rm -rf /home/ubuntu/seif-backend/*",
+              "tar -xzf /tmp/backend-deploy.tar.gz -C /home/ubuntu/seif-backend",
+              "cd /home/ubuntu/seif-backend",
               "echo \"Restarting PM2...\"",
-              "pm2 restart seif-backend || pm2 start src/server.js --name seif-backend",
+              "pm2 restart seif-backend || pm2 start ecosystem.config.js",
               "pm2 save",
               "rm /tmp/backend-deploy.tar.gz",
               "echo \"=== Deployment completed successfully! ===\"",
@@ -123,16 +123,16 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --output text \
             --query 'Command.CommandId')
-          
+
           echo "Command ID: $COMMAND_ID"
           echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-          
+
           echo "⏳ Waiting for deployment to complete..."
           aws ssm wait command-executed \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ env.INSTANCE_ID }}" \
             --region ${{ env.AWS_REGION }}
-          
+
           echo "✅ Deployment command completed!"
 
       - name: Get deployment output
@@ -152,9 +152,9 @@ jobs:
         run: |
           echo "⏳ Waiting for backend to start..."
           sleep 15
-          
+
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}:5000/health || echo "000")
-          
+
           if [ "$RESPONSE" = "200" ]; then
             echo "✅ Backend health check passed!"
             echo "🔗 Backend URL: http://${{ secrets.EC2_HOST }}:5000"
@@ -167,19 +167,19 @@ jobs:
         if: failure() && env.COMMAND_ID
         run: |
           echo "⚠️ Deployment failed! Attempting rollback..."
-          
+
           ROLLBACK_CMD=$(aws ssm send-command \
             --instance-ids "${{ env.INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --comment "SEIF Backend Rollback" \
             --parameters 'commands=[
-              "cd /home/ubuntu/seif-portal",
+              "cd /home/ubuntu",
               "LATEST_BACKUP=$(ls -t /tmp/seif-backup/ | head -1)",
               "if [ -d \"/tmp/seif-backup/$LATEST_BACKUP\" ]; then",
               "  echo \"Rolling back to $LATEST_BACKUP\"",
-              "  rm -rf /home/ubuntu/seif-portal/backend",
-              "  cp -r /tmp/seif-backup/$LATEST_BACKUP /home/ubuntu/seif-portal/backend",
-              "  cd /home/ubuntu/seif-portal/backend",
+              "  rm -rf /home/ubuntu/seif-backend",
+              "  cp -r /tmp/seif-backup/$LATEST_BACKUP /home/ubuntu/seif-backend",
+              "  cd /home/ubuntu/seif-backend",
               "  pm2 restart seif-backend",
               "  echo \"✅ Rollback completed\"",
               "else",
@@ -189,15 +189,15 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --output text \
             --query 'Command.CommandId')
-          
+
           echo "Rollback Command ID: $ROLLBACK_CMD"
-          
+
           # Wait for rollback
           aws ssm wait command-executed \
             --command-id "$ROLLBACK_CMD" \
             --instance-id "${{ env.INSTANCE_ID }}" \
             --region ${{ env.AWS_REGION }}
-          
+
           echo "Rollback completed"
 
       - name: Deployment summary
@@ -211,7 +211,7 @@ jobs:
           echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ job.status }}" == "success" ]; then
             echo "✅ **Result:** Deployment successful!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY

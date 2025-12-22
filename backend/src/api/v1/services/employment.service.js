@@ -174,6 +174,8 @@ class EmploymentService {
       const total = countResult[0].total;
 
       // Get paginated uploads
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const [uploads] = await db.pool.query(
         `SELECT 
           eu.*,
@@ -182,8 +184,8 @@ class EmploymentService {
         LEFT JOIN users u ON eu.uploaded_by = u.id
         WHERE eu.partner_id = ?
         ORDER BY eu.created_at DESC
-        LIMIT ? OFFSET ?`,
-        [partnerUuid, limit, offset]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        [partnerUuid]
       );
 
       return {
@@ -303,6 +305,8 @@ class EmploymentService {
       const total = countResult[0].total;
 
       // Get paginated uploads
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const [uploads] = await db.pool.query(
         `SELECT 
           eu.*,
@@ -313,8 +317,8 @@ class EmploymentService {
         LEFT JOIN users u ON eu.uploaded_by = u.id
         WHERE ${whereClause}
         ORDER BY eu.created_at DESC
-        LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        params
       );
 
       return {

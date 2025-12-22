@@ -131,7 +131,7 @@ class CenterService {
       );
       const total = countResult[0].total;
 
-      // Get paginated data
+      // Get paginated data - use direct integers for LIMIT/OFFSET
       const centers = await db.query(
         `SELECT 
           c.*,
@@ -146,8 +146,8 @@ class CenterService {
         LEFT JOIN users u ON c.approved_by = u.id
         ${whereClause}
         ORDER BY ${sortField} ${sortDirection}
-        LIMIT ? OFFSET ?`,
-        [...queryParams, parseInt(limit), parseInt(offset)]
+        LIMIT ${validLimit} OFFSET ${offset}`,
+        queryParams
       );
 
       return {

@@ -135,6 +135,8 @@ class StudentService {
       const total = countResult[0].total;
 
       // Get paginated data
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const students = await db.query(
         `SELECT 
           s.*,
@@ -147,8 +149,8 @@ class StudentService {
         LEFT JOIN partners p ON s.partner_id = p.id
         ${whereClause}
         ORDER BY ${sortField} ${sortDirection}
-        LIMIT ? OFFSET ?`,
-        [...queryParams, parseInt(limit), parseInt(offset)]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        queryParams
       );
 
       return {

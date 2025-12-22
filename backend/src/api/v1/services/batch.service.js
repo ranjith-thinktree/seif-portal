@@ -79,6 +79,8 @@ class BatchService {
       const total = countResult[0].total;
 
       // Get paginated data
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const batches = await db.query(
         `SELECT 
           b.*,
@@ -90,8 +92,8 @@ class BatchService {
         LEFT JOIN partners p ON b.partner_id = p.id
         ${whereClause}
         ORDER BY b.batch_start_date DESC
-        LIMIT ? OFFSET ?`,
-        [...queryParams, parseInt(limit), parseInt(offset)]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        queryParams
       );
 
       return {

@@ -35,10 +35,14 @@ class DataService {
   async getGlobalStats() {
     try {
       // Total Partners
-      const [partners] = await db.query(
-        `SELECT COUNT(*) as total FROM partners WHERE status = 'active'`
-      );
+      const [partners] = await db.query(`SELECT COUNT(*) as total FROM partners`);
       const totalPartners = partners[0]?.total || 0;
+      console.log(
+        '[DEBUG] Total Partners Query Result:',
+        partners[0],
+        'totalPartners:',
+        totalPartners
+      );
 
       // Total Partners Pending Approval
       const [partnersPending] = await db.query(
@@ -47,9 +51,7 @@ class DataService {
       const pendingPartnerApprovals = partnersPending[0]?.total || 0;
 
       // Total Centers
-      const [centers] = await db.query(
-        `SELECT COUNT(*) as total FROM centers WHERE status = 'active'`
-      );
+      const [centers] = await db.query(`SELECT COUNT(*) as total FROM centers`);
       const totalCenters = centers[0]?.total || 0;
 
       // Total Centers Pending Approval
@@ -59,9 +61,7 @@ class DataService {
       const pendingCenterApprovals = centersPending[0]?.total || 0;
 
       // Total Batches
-      const [batches] = await db.query(
-        `SELECT COUNT(*) as total FROM batches WHERE status = 'active'`
-      );
+      const [batches] = await db.query(`SELECT COUNT(*) as total FROM batches`);
       const totalBatches = batches[0]?.total || 0;
 
       // Total Students

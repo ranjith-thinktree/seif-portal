@@ -33,7 +33,7 @@ class AdminLogsController {
       if (type === 'error' || type === 'all') {
         try {
           const errorContent = await fs.readFile(errorLogPath, 'utf-8');
-          const errorLines = errorContent.split('\n').filter(line => line.trim());
+          const errorLines = errorContent.split('\n').filter((line) => line.trim());
           logs.error = errorLines.slice(-maxLines);
         } catch (err) {
           logs.error = ['No error logs found'];
@@ -44,7 +44,7 @@ class AdminLogsController {
       if (type === 'output' || type === 'all') {
         try {
           const outContent = await fs.readFile(outLogPath, 'utf-8');
-          const outLines = outContent.split('\n').filter(line => line.trim());
+          const outLines = outContent.split('\n').filter((line) => line.trim());
           logs.output = outLines.slice(-maxLines);
         } catch (err) {
           logs.output = ['No output logs found'];
@@ -55,7 +55,7 @@ class AdminLogsController {
       if (type === 'combined' || type === 'all') {
         try {
           const combinedContent = await fs.readFile(combinedLogPath, 'utf-8');
-          const combinedLines = combinedContent.split('\n').filter(line => line.trim());
+          const combinedLines = combinedContent.split('\n').filter((line) => line.trim());
           logs.combined = combinedLines.slice(-maxLines);
         } catch (err) {
           logs.combined = ['No combined logs found'];
@@ -77,7 +77,7 @@ class AdminLogsController {
   async getSystemInfo(req, res) {
     try {
       const os = require('os');
-      
+
       const systemInfo = {
         node_version: process.version,
         platform: process.platform,
@@ -86,16 +86,16 @@ class AdminLogsController {
           total: os.totalmem(),
           free: os.freemem(),
           used: os.totalmem() - os.freemem(),
-          usagePercent: ((os.totalmem() - os.freemem()) / os.totalmem() * 100).toFixed(2)
+          usagePercent: (((os.totalmem() - os.freemem()) / os.totalmem()) * 100).toFixed(2),
         },
         cpu: {
           model: os.cpus()[0].model,
           cores: os.cpus().length,
-          loadAverage: os.loadavg()
+          loadAverage: os.loadavg(),
         },
         environment: process.env.NODE_ENV,
         pid: process.pid,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       return successResponse(res, 'System info fetched successfully', systemInfo);

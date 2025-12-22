@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useSelector } from 'react-redux';
-import apiClient from '../../api/client';
+import React, { useState, useEffect, useRef } from "react";
+import { useSelector } from "react-redux";
+import apiClient from "../../api/client";
 
 const AdminTerminalPage = () => {
   const [logs, setLogs] = useState({ error: [], output: [], combined: [] });
   const [systemInfo, setSystemInfo] = useState(null);
-  const [selectedTab, setSelectedTab] = useState('error');
+  const [selectedTab, setSelectedTab] = useState("error");
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lines, setLines] = useState(100);
@@ -16,12 +16,14 @@ const AdminTerminalPage = () => {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`/admin/logs?lines=${lines}&type=all`);
+      const response = await apiClient.get(
+        `/admin/logs?lines=${lines}&type=all`
+      );
       if (response.data.success) {
         setLogs(response.data.data);
       }
     } catch (error) {
-      console.error('Failed to fetch logs:', error);
+      console.error("Failed to fetch logs:", error);
     } finally {
       setLoading(false);
     }
@@ -30,25 +32,29 @@ const AdminTerminalPage = () => {
   // Fetch system info
   const fetchSystemInfo = async () => {
     try {
-      const response = await apiClient.get('/admin/system-info');
+      const response = await apiClient.get("/admin/system-info");
       if (response.data.success) {
         setSystemInfo(response.data.data);
       }
     } catch (error) {
-      console.error('Failed to fetch system info:', error);
+      console.error("Failed to fetch system info:", error);
     }
   };
 
   // Clear logs
   const handleClearLogs = async () => {
-    if (window.confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
+    if (
+      window.confirm(
+        "Are you sure you want to clear all logs? This action cannot be undone."
+      )
+    ) {
       try {
-        await apiClient.post('/admin/logs/clear');
+        await apiClient.post("/admin/logs/clear");
         setLogs({ error: [], output: [], combined: [] });
-        alert('Logs cleared successfully');
+        alert("Logs cleared successfully");
       } catch (error) {
-        console.error('Failed to clear logs:', error);
-        alert('Failed to clear logs');
+        console.error("Failed to clear logs:", error);
+        alert("Failed to clear logs");
       }
     }
   };
@@ -83,12 +89,16 @@ const AdminTerminalPage = () => {
   }, [logs, selectedTab]);
 
   // Check if user is SUPER_ADMIN
-  if (user?.role !== 'SUPER_ADMIN') {
+  if (user?.role !== "SUPER_ADMIN") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-red-600 mb-4">Access Denied</h1>
-          <p className="text-gray-600">This page is only accessible to SUPER_ADMIN users.</p>
+          <h1 className="text-3xl font-bold text-red-600 mb-4">
+            Access Denied
+          </h1>
+          <p className="text-gray-600">
+            This page is only accessible to SUPER_ADMIN users.
+          </p>
         </div>
       </div>
     );
@@ -96,11 +106,11 @@ const AdminTerminalPage = () => {
 
   const getCurrentLogs = () => {
     switch (selectedTab) {
-      case 'error':
+      case "error":
         return logs.error;
-      case 'output':
+      case "output":
         return logs.output;
-      case 'combined':
+      case "combined":
         return logs.combined;
       default:
         return [];
@@ -115,11 +125,11 @@ const AdminTerminalPage = () => {
   };
 
   const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
   return (
@@ -127,8 +137,12 @@ const AdminTerminalPage = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">🖥️ Admin Terminal</h1>
-          <p className="text-gray-600">Real-time application logs and system monitoring</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            🖥️ Admin Terminal
+          </h1>
+          <p className="text-gray-600">
+            Real-time application logs and system monitoring
+          </p>
         </div>
 
         {/* System Info */}
@@ -138,7 +152,9 @@ const AdminTerminalPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Node Version</p>
-                <p className="text-lg font-semibold text-blue-600">{systemInfo.node_version}</p>
+                <p className="text-lg font-semibold text-blue-600">
+                  {systemInfo.node_version}
+                </p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Uptime</p>
@@ -152,20 +168,27 @@ const AdminTerminalPage = () => {
                   {systemInfo.memory.usagePercent}%
                 </p>
                 <p className="text-xs text-gray-500">
-                  {formatBytes(systemInfo.memory.used)} / {formatBytes(systemInfo.memory.total)}
+                  {formatBytes(systemInfo.memory.used)} /{" "}
+                  {formatBytes(systemInfo.memory.total)}
                 </p>
               </div>
               <div className="bg-yellow-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">CPU Cores</p>
-                <p className="text-lg font-semibold text-yellow-600">{systemInfo.cpu.cores}</p>
+                <p className="text-lg font-semibold text-yellow-600">
+                  {systemInfo.cpu.cores}
+                </p>
               </div>
               <div className="bg-red-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Environment</p>
-                <p className="text-lg font-semibold text-red-600">{systemInfo.environment}</p>
+                <p className="text-lg font-semibold text-red-600">
+                  {systemInfo.environment}
+                </p>
               </div>
               <div className="bg-indigo-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">Process ID</p>
-                <p className="text-lg font-semibold text-indigo-600">{systemInfo.pid}</p>
+                <p className="text-lg font-semibold text-indigo-600">
+                  {systemInfo.pid}
+                </p>
               </div>
             </div>
           </div>
@@ -177,31 +200,31 @@ const AdminTerminalPage = () => {
             {/* Tab Selection */}
             <div className="flex gap-2">
               <button
-                onClick={() => setSelectedTab('error')}
+                onClick={() => setSelectedTab("error")}
                 className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                  selectedTab === 'error'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  selectedTab === "error"
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
                 Error Logs ({logs.error.length})
               </button>
               <button
-                onClick={() => setSelectedTab('output')}
+                onClick={() => setSelectedTab("output")}
                 className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                  selectedTab === 'output'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  selectedTab === "output"
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
                 Output Logs ({logs.output.length})
               </button>
               <button
-                onClick={() => setSelectedTab('combined')}
+                onClick={() => setSelectedTab("combined")}
                 className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                  selectedTab === 'combined'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  selectedTab === "combined"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                 }`}
               >
                 Combined ({logs.combined.length})
@@ -212,7 +235,9 @@ const AdminTerminalPage = () => {
 
             {/* Lines Selection */}
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Lines:</label>
+              <label className="text-sm font-medium text-gray-700">
+                Lines:
+              </label>
               <select
                 value={lines}
                 onChange={(e) => setLines(parseInt(e.target.value))}
@@ -234,7 +259,9 @@ const AdminTerminalPage = () => {
                 onChange={(e) => setAutoRefresh(e.target.checked)}
                 className="w-4 h-4 text-blue-600"
               />
-              <span className="text-sm font-medium text-gray-700">Auto Refresh (5s)</span>
+              <span className="text-sm font-medium text-gray-700">
+                Auto Refresh (5s)
+              </span>
             </label>
 
             {/* Action Buttons */}
@@ -243,7 +270,7 @@ const AdminTerminalPage = () => {
               disabled={loading}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
             >
-              {loading ? 'Loading...' : '🔄 Refresh'}
+              {loading ? "Loading..." : "🔄 Refresh"}
             </button>
 
             <button
@@ -275,36 +302,65 @@ const AdminTerminalPage = () => {
           <div
             ref={terminalRef}
             className="p-4 h-[600px] overflow-y-auto font-mono text-sm text-green-400"
-            style={{ backgroundColor: '#0d1117' }}
+            style={{ backgroundColor: "#0d1117" }}
           >
             {getCurrentLogs().length === 0 ? (
-              <p className="text-gray-500">No logs available. Click Refresh to fetch logs.</p>
+              <p className="text-gray-500">
+                No logs available. Click Refresh to fetch logs.
+              </p>
             ) : (
-              getCurrentLogs().map((line, index) => (
-                <div
-                  key={index}
-                  className={`mb-1 ${
-                    line.includes('error') || line.includes('Error')
-                      ? 'text-red-400'
-                      : line.includes('warning') || line.includes('Warning')
-                      ? 'text-yellow-400'
-                      : 'text-green-400'
-                  }`}
-                >
-                  <span className="text-gray-600">{index + 1} | </span>
-                  {line}
-                </div>
-              ))
+              getCurrentLogs().map((line, index) => {
+                // Enhanced error detection
+                const isError = line.match(
+                  /error|Error|ERROR|Failed|failed|Exception|errno|sqlMessage/i
+                );
+                const isWarning = line.match(/warning|Warning|WARN/i);
+                const isSuccess = line.match(
+                  /success|Success|✅|connected|started/i
+                );
+                const isInfo = line.match(/INFO|info|🔵|📡|🚀/);
+
+                return (
+                  <div
+                    key={index}
+                    className={`mb-1 ${
+                      isError
+                        ? "text-red-400 bg-red-900/20 px-2 py-0.5 rounded"
+                        : isWarning
+                        ? "text-yellow-400 bg-yellow-900/20 px-2 py-0.5 rounded"
+                        : isSuccess
+                        ? "text-green-400"
+                        : isInfo
+                        ? "text-blue-400"
+                        : "text-gray-300"
+                    }`}
+                  >
+                    <span className="text-gray-600">{index + 1} | </span>
+                    {isError && (
+                      <span className="text-red-500 font-bold">❌ </span>
+                    )}
+                    {isWarning && (
+                      <span className="text-yellow-500 font-bold">⚠️ </span>
+                    )}
+                    {line}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
 
         {/* Footer Info */}
         <div className="mt-4 text-center text-sm text-gray-500">
-          <p>Last updated: {logs.timestamp ? new Date(logs.timestamp).toLocaleString() : 'Never'}</p>
+          <p>
+            Last updated:{" "}
+            {logs.timestamp
+              ? new Date(logs.timestamp).toLocaleString()
+              : "Never"}
+          </p>
           <p className="mt-1">
-            ⚠️ This terminal shows application logs from the backend server. Use it to debug issues
-            in real-time.
+            ⚠️ This terminal shows application logs from the backend server. Use
+            it to debug issues in real-time.
           </p>
         </div>
       </div>

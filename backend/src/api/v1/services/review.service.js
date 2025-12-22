@@ -84,6 +84,8 @@ class ReviewService {
       const total = countResult[0].total;
 
       // Get paginated data
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const centers = await db.query(
         `SELECT 
           uc.*,
@@ -95,8 +97,8 @@ class ReviewService {
         ORDER BY 
           FIELD(uc.review_status, 'pending', 'approved', 'rejected'),
           uc.created_at DESC
-        LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        queryParams
       );
 
       return {
@@ -147,6 +149,8 @@ class ReviewService {
       const total = countResult[0].total;
 
       // Get paginated data
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const students = await db.query(
         `SELECT 
           us.*,
@@ -157,8 +161,8 @@ class ReviewService {
         LEFT JOIN uploaded_batches ub ON us.uploaded_batch_id = ub.id
         WHERE ${whereClause}
         ORDER BY us.partner_student_id
-        LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        queryParams
       );
 
       // Get center details
@@ -892,6 +896,8 @@ class ReviewService {
       const total = countResult[0].total;
 
       // Get paginated data
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const centers = await db.query(
         `SELECT 
           c.*,
@@ -902,8 +908,8 @@ class ReviewService {
         LEFT JOIN users u ON u.partner_id = c.partner_id AND u.role = 'PARTNER'
         WHERE ${whereClause}
         ORDER BY c.created_at DESC
-        LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        queryParams
       );
 
       return {
@@ -1091,6 +1097,8 @@ class ReviewService {
       const total = countResult[0].total;
 
       // Get paginated data
+      const validLimit = parseInt(limit);
+      const validOffset = parseInt(offset);
       const uploads = await db.query(
         `SELECT 
           du.*,
@@ -1103,8 +1111,8 @@ class ReviewService {
         LEFT JOIN users u ON du.uploaded_by = u.id
         WHERE ${whereClause}
         ORDER BY du.created_at DESC
-        LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        queryParams
       );
 
       return {
