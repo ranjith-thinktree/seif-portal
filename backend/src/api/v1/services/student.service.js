@@ -148,7 +148,7 @@ class StudentService {
         ${whereClause}
         ORDER BY ${sortField} ${sortDirection}
         LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        [...queryParams, parseInt(limit), parseInt(offset)]
       );
 
       return {

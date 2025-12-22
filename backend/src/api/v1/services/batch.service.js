@@ -91,7 +91,7 @@ class BatchService {
         ${whereClause}
         ORDER BY b.batch_start_date DESC
         LIMIT ? OFFSET ?`,
-        [...queryParams, limit, offset]
+        [...queryParams, parseInt(limit), parseInt(offset)]
       );
 
       return {
