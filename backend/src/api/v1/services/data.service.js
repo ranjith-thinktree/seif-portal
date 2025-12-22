@@ -37,12 +37,6 @@ class DataService {
       // Total Partners
       const [partners] = await db.query(`SELECT COUNT(*) as total FROM partners`);
       const totalPartners = partners[0]?.total || 0;
-      console.log(
-        '[DEBUG] Total Partners Query Result:',
-        partners[0],
-        'totalPartners:',
-        totalPartners
-      );
 
       // Total Partners Pending Approval
       const [partnersPending] = await db.query(
