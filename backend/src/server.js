@@ -6,6 +6,7 @@ const { testConnection, closePool } = require('./database/connection');
 const { initializeWebSocket } = require('./websocket/socket');
 
 const PORT = config.server.port;
+// CI/CD Test - Automated deployment active
 
 // Test database connection before starting server
 const startServer = async () => {
