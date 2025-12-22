@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const partnerController = require('../controllers/partner.controller');
+const partnerBulkController = require('../controllers/partner.bulk.controller');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 const validate = require('../../../middleware/validate.middleware');
+const multer = require('multer');
 const {
   createPartnerValidator,
   updatePartnerValidator,
@@ -12,6 +14,21 @@ const {
   approvePartnerValidator,
   rejectPartnerValidator,
 } = require('../validators/partner.validator');
+
+// Configure multer for CSV upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+});
 
 /**
  * @route   GET /api/v1/partners
@@ -25,6 +42,43 @@ router.get(
   listPartnersValidator,
   validate,
   partnerController.getAllPartners
+);
+
+/**
+ * @route   GET /api/v1/partners/filter-options
+ * @desc    Get filter options for partners
+ * @access  Private (Admin, SUPER_ADMIN, ESSCI, SEIF_READONLY)
+ */
+router.get(
+  '/filter-options',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY']),
+  partnerController.getFilterOptions
+);
+
+/**
+ * @route   POST /api/v1/partners/bulk-upload
+ * @desc    Bulk upload partners from CSV
+ * @access  Private (ADMIN, SUPER_ADMIN)
+ */
+router.post(
+  '/bulk-upload',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  upload.single('file'),
+  partnerBulkController.bulkUploadPartners
+);
+
+/**
+ * @route   GET /api/v1/partners/bulk-template
+ * @desc    Download CSV template for bulk partner upload
+ * @access  Private (ADMIN, SUPER_ADMIN)
+ */
+router.get(
+  '/bulk-template',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  partnerBulkController.downloadTemplate
 );
 
 /**
@@ -108,6 +162,18 @@ router.delete(
 );
 
 /**
+ * @route   POST /api/v1/partners/bulk-delete
+ * @desc    Bulk delete partners
+ * @access  Private (Admin, SUPER_ADMIN)
+ */
+router.post(
+  '/bulk-delete',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  partnerController.bulkDeletePartners
+);
+
+/**
  * @route   PATCH /api/v1/partners/:id/approve
  * @desc    Approve partner
  * @access  Private (Admin, SUPER_ADMIN)
@@ -133,6 +199,20 @@ router.patch(
   rejectPartnerValidator,
   validate,
   partnerController.rejectPartner
+);
+
+/**
+ * @route   POST /api/v1/partners/:id/resend-email
+ * @desc    Resend welcome email to partner
+ * @access  Private (Admin, SUPER_ADMIN)
+ */
+router.post(
+  '/:id/resend-email',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  partnerIdValidator,
+  validate,
+  partnerController.resendWelcomeEmail
 );
 
 /**
@@ -217,6 +297,56 @@ router.get(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   partnerController.getUploadChanges
+);
+
+// =====================================================
+// Reference Data Routes for Partner Onboarding
+// =====================================================
+
+/**
+ * @route   GET /api/v1/partners/reference/countries
+ * @desc    Get all countries
+ * @access  Private
+ */
+router.get('/reference/countries', authenticate, partnerController.getCountries);
+
+/**
+ * @route   GET /api/v1/partners/reference/states/:countryId
+ * @desc    Get states by country ID
+ * @access  Private
+ */
+router.get('/reference/states/:countryId', authenticate, partnerController.getStatesByCountry);
+
+/**
+ * @route   GET /api/v1/partners/reference/cities
+ * @desc    Get cities by state and country (query params: stateId, countryId)
+ * @access  Private
+ */
+router.get('/reference/cities', authenticate, partnerController.getCitiesByStateAndCountry);
+
+/**
+ * @route   GET /api/v1/partners/reference/regions
+ * @desc    Get all regions
+ * @access  Private
+ */
+router.get('/reference/regions', authenticate, partnerController.getRegions);
+
+/**
+ * @route   GET /api/v1/partners/reference/registered-as
+ * @desc    Get registered_as options
+ * @access  Private
+ */
+router.get('/reference/registered-as', authenticate, partnerController.getRegisteredAsOptions);
+
+/**
+ * @route   GET /api/v1/partners/reference/organization-types
+ * @desc    Get organization type options
+ * @access  Private
+ */
+router.get(
+  '/reference/organization-types',
+  authenticate,
+  partnerController.getOrganizationTypeOptions
 );
 
 module.exports = router;

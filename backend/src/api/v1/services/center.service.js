@@ -49,10 +49,13 @@ class CenterService {
         queryParams.push(approval_status);
       }
 
-      // Partner filter
+      // Partner filter (supports array for multi-select)
       if (partner_id) {
-        whereConditions.push('c.partner_id = ?');
-        queryParams.push(partner_id);
+        const partnerIds = Array.isArray(partner_id) ? partner_id : [partner_id];
+        if (partnerIds.length > 0) {
+          whereConditions.push(`c.partner_id IN (${partnerIds.map(() => '?').join(',')})`);
+          queryParams.push(...partnerIds);
+        }
       }
 
       // Status filter
@@ -224,6 +227,18 @@ class CenterService {
 
       center.batches = batches;
 
+      // Get courses for this center
+      const courses = await db.query(
+        `SELECT 
+          c.id, c.course_name, c.course_code
+        FROM center_courses cc
+        JOIN courses c ON cc.course_id = c.id
+        WHERE cc.center_id = ?`,
+        [centerId]
+      );
+
+      center.courses = courses;
+
       return center;
     } catch (error) {
       console.error('Error in getCenterById:', error);
@@ -232,13 +247,37 @@ class CenterService {
   }
 
   /**
-   * Create new center
+   * Create a new center
    * @param {Object} centerData - Center data
-   * @param {string} createdByRole - Role of user creating the center
+   * @param {string} createdByRole - Role of user creating center
    * @returns {Promise<Object>} Created center
    */
   async createCenter(centerData, createdByRole) {
     try {
+      console.log('📝 Creating center with data:', JSON.stringify(centerData, null, 2));
+
+      // Validate required fields
+      if (!centerData.partner_id) {
+        throw new Error('partner_id is required');
+      }
+      if (!centerData.center_name) {
+        throw new Error('center_name is required');
+      }
+
+      // Check if center already exists (same name + partner)
+      const [existing] = await db.query(
+        `SELECT id, center_name, approval_status FROM centers 
+         WHERE partner_id = ? AND center_name = ?
+         LIMIT 1`,
+        [centerData.partner_id, centerData.center_name]
+      );
+
+      if (existing && existing.length > 0) {
+        throw new Error(
+          `Center "${centerData.center_name}" already exists with status: ${existing[0].approval_status}`
+        );
+      }
+
       const centerId = uuidv4();
 
       const {
@@ -248,6 +287,10 @@ class CenterService {
         region,
         city,
         state,
+        country,
+        country_id,
+        state_id,
+        city_id,
         address,
         year_of_establishment,
         status = 'active',
@@ -259,6 +302,7 @@ class CenterService {
         refurbishment_eligible = 0,
         refurbishment_frequency_months,
         last_refurbishment_date,
+        course_ids = [], // Array of course IDs
       } = centerData;
 
       // Partners create centers with pending approval
@@ -266,35 +310,58 @@ class CenterService {
       const approval_status =
         createdByRole === 'ADMIN' || createdByRole === 'SUPER_ADMIN' ? 'approved' : 'pending';
 
+      // Set status based on approval
+      // Partners: inactive until approved, Admins: active immediately
+      const centerStatus =
+        createdByRole === 'ADMIN' || createdByRole === 'SUPER_ADMIN' ? 'active' : 'inactive';
+
+      // Convert undefined to null for MySQL compatibility
       await db.query(
         `INSERT INTO centers (
-          id, partner_id, center_name, center_type, region, city, state, address,
+          id, partner_id, center_name, center_type, region,
+          country_id, state_id, city_id, country, city, state, address,
           year_of_establishment, status, approval_status, center_head, mobile_number,
           email, latitude, longitude, refurbishment_eligible,
           refurbishment_frequency_months, last_refurbishment_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           centerId,
-          partner_id,
-          center_name,
-          center_type,
-          region,
-          city,
-          state,
-          address,
-          year_of_establishment,
-          status,
+          partner_id || null,
+          center_name || null,
+          center_type || null,
+          region || null,
+          country_id || null,
+          state_id || null,
+          city_id || null,
+          country || null,
+          city || null,
+          state || null,
+          address || null,
+          year_of_establishment || null,
+          centerStatus, // Use computed status
           approval_status,
-          center_head,
-          mobile_number,
-          email,
-          latitude,
-          longitude,
+          center_head || null,
+          mobile_number || null,
+          email || null,
+          latitude || null,
+          longitude || null,
           refurbishment_eligible,
-          refurbishment_frequency_months,
-          last_refurbishment_date,
+          refurbishment_frequency_months || null,
+          last_refurbishment_date || null,
         ]
       );
+
+      // Insert center-course relationships
+      if (course_ids && course_ids.length > 0) {
+        const courseInserts = course_ids.map((courseId) =>
+          db.query(`INSERT INTO center_courses (id, center_id, course_id) VALUES (?, ?, ?)`, [
+            uuidv4(),
+            centerId,
+            courseId,
+          ])
+        );
+        await Promise.all(courseInserts);
+      }
 
       return await this.getCenterById(centerId);
     } catch (error) {
@@ -327,6 +394,10 @@ class CenterService {
         'center_name',
         'center_type',
         'region',
+        'country_id',
+        'state_id',
+        'city_id',
+        'country',
         'city',
         'state',
         'address',
@@ -345,17 +416,33 @@ class CenterService {
       allowedFields.forEach((field) => {
         if (updateData[field] !== undefined) {
           updates.push(`${field} = ?`);
-          values.push(updateData[field]);
+          // Convert undefined to null for MySQL
+          values.push(updateData[field] === undefined ? null : updateData[field]);
         }
       });
 
-      if (updates.length === 0) {
-        return existingCenter;
+      // Handle course updates if provided
+      if (updateData.course_ids !== undefined) {
+        // Delete existing course relationships
+        await db.query('DELETE FROM center_courses WHERE center_id = ?', [centerId]);
+
+        // Insert new course relationships
+        if (updateData.course_ids && updateData.course_ids.length > 0) {
+          const courseInserts = updateData.course_ids.map((courseId) =>
+            db.query(`INSERT INTO center_courses (id, center_id, course_id) VALUES (?, ?, ?)`, [
+              uuidv4(),
+              centerId,
+              courseId,
+            ])
+          );
+          await Promise.all(courseInserts);
+        }
       }
 
-      values.push(centerId);
-
-      await db.query(`UPDATE centers SET ${updates.join(', ')} WHERE id = ?`, values);
+      if (updates.length > 0) {
+        values.push(centerId);
+        await db.query(`UPDATE centers SET ${updates.join(', ')} WHERE id = ?`, values);
+      }
 
       return await this.getCenterById(centerId);
     } catch (error) {
@@ -365,11 +452,11 @@ class CenterService {
   }
 
   /**
-   * Delete center
+   * Get center deletion impact (check what data will be affected)
    * @param {string} id - Center ID
-   * @returns {Promise<boolean>} Success status
+   * @returns {Promise<Object>} Impact report
    */
-  async deleteCenter(id) {
+  async getCenterDeletionImpact(id) {
     try {
       const centerId = convertToUUID(id);
 
@@ -378,17 +465,118 @@ class CenterService {
         throw new Error('Center not found');
       }
 
-      // Check if center has batches
-      const batches = await db.query('SELECT COUNT(*) as count FROM batches WHERE center_id = ?', [
-        centerId,
-      ]);
+      // Check production batches
+      const [batches] = await db.query(
+        'SELECT COUNT(*) as count FROM batches WHERE center_id = ?',
+        [centerId]
+      );
 
-      if (batches[0].count > 0) {
-        throw new Error(
-          'Cannot delete center with existing batches. Please delete all batches first.'
+      // Check production students
+      const [students] = await db.query(
+        'SELECT COUNT(*) as count FROM students WHERE center_id = ?',
+        [centerId]
+      );
+
+      // Check pending uploaded batches
+      const [uploadedBatches] = await db.query(
+        'SELECT COUNT(*) as count FROM uploaded_batches WHERE uploaded_center_id = ?',
+        [centerId]
+      );
+
+      // Check pending uploaded students
+      const [uploadedStudents] = await db.query(
+        'SELECT COUNT(*) as count FROM uploaded_students WHERE uploaded_center_id = ?',
+        [centerId]
+      );
+
+      // Check center courses
+      const [centerCourses] = await db.query(
+        'SELECT COUNT(*) as count FROM center_courses WHERE center_id = ?',
+        [centerId]
+      );
+
+      const impact = {
+        center: existingCenter,
+        canDelete: true,
+        blockingReasons: [],
+        warnings: [],
+        counts: {
+          batches: batches[0]?.count || 0,
+          students: students[0]?.count || 0,
+          uploadedBatches: uploadedBatches[0]?.count || 0,
+          uploadedStudents: uploadedStudents[0]?.count || 0,
+          courses: centerCourses[0]?.count || 0,
+        },
+      };
+
+      // Check for blocking conditions
+      if (impact.counts.batches > 0) {
+        impact.canDelete = false;
+        impact.blockingReasons.push(
+          `Center has ${impact.counts.batches} active batch${impact.counts.batches > 1 ? 'es' : ''}`
         );
       }
 
+      if (impact.counts.students > 0) {
+        impact.canDelete = false;
+        impact.blockingReasons.push(
+          `Center has ${impact.counts.students} enrolled student${impact.counts.students > 1 ? 's' : ''}`
+        );
+      }
+
+      if (impact.counts.uploadedBatches > 0) {
+        impact.canDelete = false;
+        impact.blockingReasons.push(
+          `Center has ${impact.counts.uploadedBatches} pending batch upload${impact.counts.uploadedBatches > 1 ? 's' : ''}`
+        );
+      }
+
+      if (impact.counts.uploadedStudents > 0) {
+        impact.canDelete = false;
+        impact.blockingReasons.push(
+          `Center has ${impact.counts.uploadedStudents} pending student upload${impact.counts.uploadedStudents > 1 ? 's' : ''}`
+        );
+      }
+
+      // Warnings (things that will be deleted but don't block)
+      if (impact.counts.courses > 0) {
+        impact.warnings.push(
+          `${impact.counts.courses} course assignment${impact.counts.courses > 1 ? 's' : ''} will be removed`
+        );
+      }
+
+      return impact;
+    } catch (error) {
+      console.error('Error in getCenterDeletionImpact:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete center (with strict validation)
+   * @param {string} id - Center ID
+   * @returns {Promise<boolean>} Success status
+   */
+  async deleteCenter(id) {
+    try {
+      const centerId = convertToUUID(id);
+
+      // Get deletion impact first
+      const impact = await this.getCenterDeletionImpact(id);
+
+      // Block deletion if there are any blocking reasons
+      if (!impact.canDelete) {
+        const reasons = impact.blockingReasons.join('. ');
+        throw new Error(
+          `Cannot delete center: ${reasons}. Please delete all batches and students first, and review or reject all pending uploads.`
+        );
+      }
+
+      // All checks passed - safe to delete
+      // Delete center_courses first (foreign key constraint)
+      await db.query('DELETE FROM center_courses WHERE center_id = ?', [centerId]);
+
+      // Then delete the center
       await db.query('DELETE FROM centers WHERE id = ?', [centerId]);
 
       return true;
@@ -421,6 +609,7 @@ class CenterService {
       await db.query(
         `UPDATE centers 
         SET approval_status = 'approved', 
+            status = 'active',
             approved_by = ?, 
             approved_at = NOW(),
             rejection_reason = NULL
@@ -489,14 +678,25 @@ class CenterService {
       }
 
       // Get unique values for each filterable field
-      const [regions, cities, states, centerTypes, years, statuses, approvalStatuses] =
+      const [partners, regions, cities, states, centerTypes, years, statuses, approvalStatuses] =
         await Promise.all([
+          // Partners (only for non-partner roles)
+          role !== 'PARTNER'
+            ? db.query(
+                `SELECT DISTINCT p.id as value, p.name as label 
+               FROM centers c 
+               INNER JOIN partners p ON c.partner_id = p.id
+               ${whereCondition}
+               ORDER BY p.name ASC`,
+                queryParams
+              )
+            : Promise.resolve([]),
           // Regions
           db.query(
             `SELECT DISTINCT region as value, region as label 
            FROM centers c 
            ${whereCondition}
-           AND region IS NOT NULL AND region != ''
+           ${whereCondition ? 'AND' : 'WHERE'} region IS NOT NULL AND region != ''
            ORDER BY region ASC`,
             queryParams
           ),
@@ -505,7 +705,7 @@ class CenterService {
             `SELECT DISTINCT city as value, city as label 
            FROM centers c 
            ${whereCondition}
-           AND city IS NOT NULL AND city != ''
+           ${whereCondition ? 'AND' : 'WHERE'} city IS NOT NULL AND city != ''
            ORDER BY city ASC`,
             queryParams
           ),
@@ -514,7 +714,7 @@ class CenterService {
             `SELECT DISTINCT state as value, state as label 
            FROM centers c 
            ${whereCondition}
-           AND state IS NOT NULL AND state != ''
+           ${whereCondition ? 'AND' : 'WHERE'} state IS NOT NULL AND state != ''
            ORDER BY state ASC`,
             queryParams
           ),
@@ -523,7 +723,7 @@ class CenterService {
             `SELECT DISTINCT center_type as value, center_type as label 
            FROM centers c 
            ${whereCondition}
-           AND center_type IS NOT NULL AND center_type != ''
+           ${whereCondition ? 'AND' : 'WHERE'} center_type IS NOT NULL AND center_type != ''
            ORDER BY center_type ASC`,
             queryParams
           ),
@@ -532,7 +732,7 @@ class CenterService {
             `SELECT DISTINCT year_of_establishment as value, year_of_establishment as label 
            FROM centers c 
            ${whereCondition}
-           AND year_of_establishment IS NOT NULL
+           ${whereCondition ? 'AND' : 'WHERE'} year_of_establishment IS NOT NULL
            ORDER BY year_of_establishment DESC`,
             queryParams
           ),
@@ -542,7 +742,7 @@ class CenterService {
            CONCAT(UPPER(SUBSTRING(status, 1, 1)), SUBSTRING(status, 2)) as label 
            FROM centers c 
            ${whereCondition}
-           AND status IS NOT NULL
+           ${whereCondition ? 'AND' : 'WHERE'} status IS NOT NULL
            ORDER BY status ASC`,
             queryParams
           ),
@@ -559,6 +759,7 @@ class CenterService {
         ]);
 
       return {
+        partners: partners.map((p) => ({ value: p.value, label: p.label })),
         regions: regions.map((r) => ({ value: r.value, label: r.label })),
         cities: cities.map((c) => ({ value: c.value, label: c.label })),
         states: states.map((s) => ({ value: s.value, label: s.label })),
@@ -642,6 +843,119 @@ class CenterService {
       return centers;
     } catch (error) {
       console.error('Error in exportCenters:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all active courses
+   * @returns {Promise<Array>} List of courses
+   */
+  async getAllCourses() {
+    try {
+      const courses = await db.query(
+        `SELECT id, course_name, course_code, description, duration_months
+        FROM courses
+        WHERE is_active = 1
+        ORDER BY course_name ASC`
+      );
+
+      return courses;
+    } catch (error) {
+      console.error('Error in getAllCourses:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk delete centers with dependency checking
+   * @param {Array<string>} ids - Array of center IDs to delete
+   * @param {string} role - User role
+   * @param {string} userPartnerId - Partner ID of the user (for PARTNER role)
+   * @returns {Promise<Object>} Deletion results with success/failure details
+   */
+  async bulkDeleteCenters(ids, role, userPartnerId = null) {
+    try {
+      const results = {
+        success: [],
+        failed: [],
+        summary: {
+          total: ids.length,
+          successful: 0,
+          failed: 0,
+        },
+      };
+
+      // Convert all IDs to UUIDs
+      const centerUUIDs = ids.map((id) => convertToUUID(id));
+
+      // Validate all centers exist and check authorization
+      for (const centerId of centerUUIDs) {
+        try {
+          const center = await this.getCenterById(centerId);
+          if (!center) {
+            results.failed.push({
+              id: centerId,
+              readable_id: centerId,
+              name: 'Unknown',
+              reason: 'Center not found',
+            });
+            continue;
+          }
+
+          // Authorization check for PARTNER role
+          if (role === 'PARTNER' && center.partner_id !== userPartnerId) {
+            results.failed.push({
+              id: centerId,
+              readable_id: center.center_id,
+              name: center.center_name,
+              reason: 'Not authorized to delete this center',
+            });
+            continue;
+          }
+
+          // Check for dependencies
+          const impact = await this.getCenterDeletionImpact(centerId);
+
+          if (!impact.canDelete) {
+            const reasons = impact.blockingReasons.join('. ');
+            results.failed.push({
+              id: centerId,
+              readable_id: center.center_id,
+              name: center.center_name,
+              reason: reasons,
+            });
+            continue;
+          }
+
+          // All checks passed - safe to delete
+          // Delete center_courses first (foreign key constraint)
+          await db.query('DELETE FROM center_courses WHERE center_id = ?', [centerId]);
+
+          // Then delete the center
+          await db.query('DELETE FROM centers WHERE id = ?', [centerId]);
+
+          results.success.push({
+            id: centerId,
+            readable_id: center.center_id,
+            name: center.center_name,
+          });
+        } catch (error) {
+          results.failed.push({
+            id: centerId,
+            readable_id: centerId,
+            name: 'Unknown',
+            reason: error.message,
+          });
+        }
+      }
+
+      results.summary.successful = results.success.length;
+      results.summary.failed = results.failed.length;
+
+      return results;
+    } catch (error) {
+      console.error('Error in bulkDeleteCenters:', error);
       throw error;
     }
   }

@@ -54,15 +54,15 @@ export const SIDEBAR_MENU = [
   },
   {
     name: "Data",
-    path: ROUTES.PARTNERS,
+    path: ROUTES.DATA_MANAGEMENT,
     icon: FolderIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ESSCI, ROLES.SEIF_READONLY],
-  },
-  {
-    name: "Data",
-    path: ROUTES.MY_CENTERS,
-    icon: FolderIcon,
-    roles: [ROLES.PARTNER],
+    roles: [
+      ROLES.SUPER_ADMIN,
+      ROLES.ADMIN,
+      ROLES.ESSCI,
+      ROLES.SEIF_READONLY,
+      ROLES.PARTNER,
+    ],
   },
   {
     name: "User Management",

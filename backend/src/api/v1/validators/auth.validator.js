@@ -66,7 +66,10 @@ const registerValidator = [
     .isIn(Object.values(USER_ROLES))
     .withMessage(`Role must be one of: ${Object.values(USER_ROLES).join(', ')}`),
 
-  body('partner_id').optional().matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).withMessage('Invalid partner ID format'),
+  body('partner_id')
+    .optional()
+    .matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .withMessage('Invalid partner ID format'),
 ];
 
 /**
@@ -80,20 +83,30 @@ const refreshTokenValidator = [
  * Change password validation
  */
 const changePasswordValidator = [
-  body('oldPassword').notEmpty().withMessage('Current password is required'),
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
 
   body('newPassword')
     .notEmpty()
     .withMessage('New password is required')
-    .isLength({ min: 8 })
-    .withMessage('New password must be at least 8 characters long')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .isLength({ min: 8, max: 128 })
+    .withMessage('New password must be between 8 and 128 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;:,.<>?])/)
     .withMessage(
-      'New password must contain at least one uppercase letter, one lowercase letter, and one number'
+      'New password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
     )
     .custom((value, { req }) => {
-      if (value === req.body.oldPassword) {
+      if (value === req.body.currentPassword) {
         throw new Error('New password must be different from current password');
+      }
+      return true;
+    }),
+
+  body('confirmPassword')
+    .notEmpty()
+    .withMessage('Confirm password is required')
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error('Confirm password does not match new password');
       }
       return true;
     }),

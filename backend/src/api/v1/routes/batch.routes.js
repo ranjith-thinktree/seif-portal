@@ -27,6 +27,30 @@ router.get(
 );
 
 /**
+ * @route   GET /api/v1/batches/filter-options
+ * @desc    Get filter options for batches (partners, centers, statuses)
+ * @access  All authenticated users
+ */
+router.get(
+  '/filter-options',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  batchController.getBatchFilterOptions
+);
+
+/**
+ * @route   GET /api/v1/batches/export
+ * @desc    Export batches to CSV
+ * @access  All authenticated users
+ */
+router.get(
+  '/export',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  batchController.exportBatches
+);
+
+/**
  * @route   GET /api/v1/batches/by-center/:centerId
  * @desc    Get all batches for a specific center
  * @access  All authenticated users
@@ -95,6 +119,18 @@ router.delete(
   batchIdValidator,
   validate,
   batchController.deleteBatch
+);
+
+/**
+ * @route   POST /api/v1/batches/bulk-delete
+ * @desc    Bulk delete batches
+ * @access  ADMIN, SUPER_ADMIN, PARTNER
+ */
+router.post(
+  '/bulk-delete',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER']),
+  batchController.bulkDeleteBatches
 );
 
 module.exports = router;

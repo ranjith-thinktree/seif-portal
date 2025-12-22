@@ -22,13 +22,21 @@ class BatchController {
 
       const { role, partner_id: userPartnerId } = req.user;
 
+      // Handle center_id and partner_id as arrays (multi-select support)
+      const centerIdFilter = center_id ? (Array.isArray(center_id) ? center_id : [center_id]) : '';
+      const partnerIdFilter = partner_id
+        ? Array.isArray(partner_id)
+          ? partner_id
+          : [partner_id]
+        : '';
+
       const result = await batchService.getAllBatches({
         page: parseInt(page),
         limit: parseInt(limit),
         search,
         status,
-        center_id,
-        partner_id,
+        center_id: centerIdFilter,
+        partner_id: partnerIdFilter,
         role,
         user_partner_id: userPartnerId,
       });
@@ -89,7 +97,7 @@ class BatchController {
 
       const batch = await batchService.createBatch(batchData);
 
-      return successResponse(res, batch, 'Batch created successfully', 201);
+      return successResponse(res, 'Batch created successfully', batch, 201);
     } catch (error) {
       console.error('Error in createBatch controller:', error);
 
@@ -126,9 +134,9 @@ class BatchController {
         return errorResponse(res, 'You can only update your own batches', 403);
       }
 
-      const batch = await batchService.updateBatch(id, updateData);
+      const batch = await batchService.updateBatch(id, batchData);
 
-      return successResponse(res, batch, 'Batch updated successfully');
+      return successResponse(res, 'Batch updated successfully', batch);
     } catch (error) {
       console.error('Error in updateBatch controller:', error);
 
@@ -149,7 +157,7 @@ class BatchController {
 
       await batchService.deleteBatch(id);
 
-      return successResponse(res, null, 'Batch deleted successfully');
+      return successResponse(res, 'Batch deleted successfully', null);
     } catch (error) {
       console.error('Error in deleteBatch controller:', error);
 
@@ -186,6 +194,131 @@ class BatchController {
     } catch (error) {
       console.error('Error in getBatchesByCenter controller:', error);
       return errorResponse(res, 'Failed to retrieve batches', 500);
+    }
+  }
+
+  /**
+   * Get filter options for batches
+   */
+  async getBatchFilterOptions(req, res) {
+    try {
+      const { role, partner_id: userPartnerId } = req.user;
+
+      const options = await batchService.getBatchFilterOptions({
+        role,
+        user_partner_id: userPartnerId,
+      });
+
+      return successResponse(res, 'Filter options retrieved successfully', options);
+    } catch (error) {
+      console.error('Error in getBatchFilterOptions controller:', error);
+      return errorResponse(res, 'Failed to retrieve filter options', 500);
+    }
+  }
+
+  /**
+   * Export batches to CSV
+   */
+  async exportBatches(req, res) {
+    try {
+      const { search = '', status = '', center_id = '', partner_id = '' } = req.query;
+
+      const { role, partner_id: userPartnerId } = req.user;
+
+      // Handle center_id and partner_id as arrays (multi-select support)
+      const centerIdFilter = center_id ? (Array.isArray(center_id) ? center_id : [center_id]) : '';
+      const partnerIdFilter = partner_id
+        ? Array.isArray(partner_id)
+          ? partner_id
+          : [partner_id]
+        : '';
+
+      const batches = await batchService.exportBatches({
+        search,
+        status,
+        center_id: centerIdFilter,
+        partner_id: partnerIdFilter,
+        role,
+        user_partner_id: userPartnerId,
+      });
+
+      // Convert to CSV format
+      if (!batches || batches.length === 0) {
+        return successResponse(res, 'No batches found for export', []);
+      }
+
+      // Get headers from first row
+      const headers = Object.keys(batches[0]);
+      const csvRows = [];
+
+      // Add header row
+      csvRows.push(headers.join(','));
+
+      // Add data rows
+      for (const batch of batches) {
+        const values = headers.map((header) => {
+          const value = batch[header];
+          // Handle null/undefined
+          if (value === null || value === undefined) return '';
+          // Escape quotes and wrap in quotes if contains comma/quote/newline
+          const escaped = String(value).replace(/"/g, '""');
+          return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+        });
+        csvRows.push(values.join(','));
+      }
+
+      const csvContent = csvRows.join('\n');
+
+      // Set headers for CSV download
+      const today = new Date().toISOString().split('T')[0];
+      const filename = `batches_export_${today}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.status(200).send(csvContent);
+    } catch (error) {
+      console.error('Error in exportBatches controller:', error);
+      return errorResponse(res, 'Failed to export batches', 500);
+    }
+  }
+
+  /**
+   * Bulk delete batches
+   * @route POST /api/v1/batches/bulk-delete
+   * @access Admin, SUPER_ADMIN, PARTNER
+   */
+  async bulkDeleteBatches(req, res) {
+    try {
+      const { ids } = req.body;
+      const { role, partner_id } = req.user;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return errorResponse(res, 'Please provide an array of batch IDs to delete', 400);
+      }
+
+      const results = await batchService.bulkDeleteBatches(ids, role, partner_id);
+
+      // Return appropriate status code
+      if (results.summary.failed === 0) {
+        return successResponse(
+          res,
+          `Successfully deleted ${results.summary.successful} batch(es)`,
+          results
+        );
+      } else if (results.summary.successful === 0) {
+        return errorResponse(res, 'Failed to delete any batches', 400, results);
+      } else {
+        // Partial success
+        return res.status(207).json({
+          success: true,
+          message: `Deleted ${results.summary.successful} batch(es), ${results.summary.failed} failed`,
+          data: results,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error('Error in bulkDeleteBatches:', error);
+      return errorResponse(res, error.message || 'Failed to delete batches', 500);
     }
   }
 }

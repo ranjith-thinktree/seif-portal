@@ -72,3 +72,17 @@ export const getUploadCenterDetails = async (uploadId) => {
   );
   return response.data;
 };
+
+// Default export for convenient importing
+const notificationService = {
+  getNotifications,
+  getUnreadCount,
+  getNotificationById,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  getGroupedNotifications,
+  getUploadCenterDetails,
+};
+
+export default notificationService;

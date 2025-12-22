@@ -2,7 +2,11 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import { STORAGE_KEYS } from "../constants";
 import { toast } from "react-toastify";
-import { NotificationContext } from "./NotificationContextDefinition";
+import { NotificationContext } from "./NotificationContextDefinition.js";
+import {
+  getGroupedNotifications,
+  getUnreadCount,
+} from "../services/notification.service";
 
 const SOCKET_URL =
   import.meta.env.VITE_API_URL?.replace("/api/v1", "") ||
@@ -40,7 +44,7 @@ export const NotificationProvider = ({ children }) => {
     const newSocket = io(SOCKET_URL, {
       auth: { token },
       transports: ["websocket", "polling"],
-      reconnection: true,
+      reconnection: false, // Disable auto-reconnect, we handle it manually on token refresh
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
@@ -99,15 +103,17 @@ export const NotificationProvider = ({ children }) => {
     });
 
     newSocket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error.message);
       setIsConnected(false);
 
       // If authentication error, don't retry - wait for token refresh
       if (error.message.includes("Authentication")) {
-        console.log(
-          "Socket authentication failed, will retry on token refresh"
-        );
+        // Don't log expired token errors - they're expected
+        if (!error.message.includes("expired")) {
+          console.error("Socket authentication error:", error.message);
+        }
         newSocket.disconnect();
+      } else {
+        console.error("Socket connection error:", error.message);
       }
     });
 
@@ -183,13 +189,48 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   /**
-   * Initialize connection on mount (only if token exists)
+   * Fetch initial notifications from API
+   */
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      if (!token) return;
+
+      console.log("📥 Fetching initial notifications...");
+
+      // Fetch grouped notifications (includes both center and upload notifications)
+      const response = await getGroupedNotifications({
+        page: 1,
+        limit: 10, // Get first 10 for dashboard display
+        sortBy: "newest",
+      });
+
+      if (response.data) {
+        console.log("✅ Fetched notifications:", response.data.length);
+        setNotifications(response.data);
+      }
+
+      // Fetch unread count
+      const countResponse = await getUnreadCount();
+      if (countResponse.count !== undefined) {
+        setUnreadCount(countResponse.count);
+      }
+    } catch (error) {
+      console.error("❌ Failed to fetch notifications:", error);
+    }
+  }, []);
+
+  /**
+   * Initialize connection and fetch notifications on mount
    */
   useEffect(() => {
     const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
 
     if (token) {
-      // Delay socket connection to ensure app is fully initialized
+      // Fetch initial notifications first
+      fetchNotifications();
+
+      // Then connect socket for real-time updates
       const timer = setTimeout(() => {
         connectSocket();
       }, 500);
@@ -199,6 +240,7 @@ export const NotificationProvider = ({ children }) => {
         disconnectSocket();
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**

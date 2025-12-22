@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { MainLayout } from "../../components/layout";
-import DataTable, { StatusBadge } from "../../components/common/DataTable";
+import EnhancedDataTable, {
+  StatusBadge,
+} from "../../components/common/EnhancedDataTable";
 import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
 import Breadcrumb from "../../components/common/Breadcrumb";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import BulkDeleteButton from "../../components/common/BulkDeleteButton";
+import ConfirmationModal from "../../components/common/ConfirmationModal";
 import {
   getStudents,
+  bulkDeleteStudents,
   exportStudents,
   downloadCSV,
   getStudentFilterOptions,
@@ -16,15 +21,22 @@ import {
 import { toast } from "react-toastify";
 import { useAuth } from "../../hooks";
 
-const StudentsPage = () => {
+const StudentsPage = ({ embedded = false }) => {
   const navigate = useNavigate();
-  const { centerId } = useParams();
+  const { centerId, batchId } = useParams();
+  const location = useLocation();
   const { role } = useAuth();
 
   const canExport = ["ADMIN", "SUPER_ADMIN", "ESSCI", "PARTNER"].includes(role);
 
   const [students, setStudents] = useState([]);
-  const [centerName, setCenterName] = useState("");
+  const [table, setTable] = useState(null);
+  const [centerName, setCenterName] = useState(
+    location.state?.centerName || ""
+  );
+  const [batchNumber, setBatchNumber] = useState(
+    location.state?.batchNumber || ""
+  );
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -34,29 +46,42 @@ const StudentsPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilters, setActiveFilters] = useState({
+    partner_id: [],
+    center_id: [], // Keep empty - centerId from route is handled separately
+    batch_id: [], // Keep empty - batchId from route is handled separately
     gender: "",
     city: "",
     state: "",
     course_name: "",
-    batch_id: "",
-    placement_status: "",
+    training_status: "",
   });
   const [filterOptions, setFilterOptions] = useState({
+    partners: [],
+    centers: [],
+    batches: [],
     genders: [],
     cities: [],
     states: [],
     courses: [],
-    batches: [],
-    placements: [],
+    trainings: [],
   });
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
+
+  // Bulk delete states
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkDeleteResults, setBulkDeleteResults] = useState(null);
 
   // Fetch filter options
   useEffect(() => {
     const fetchFilterOptions = async () => {
       try {
-        const params = centerId ? { center_id: centerId } : {};
+        const params = {};
+        if (centerId) params.center_id = centerId;
+        if (batchId) params.batch_id = batchId;
+
         const response = await getStudentFilterOptions(params);
         setFilterOptions(response.data);
       } catch (error) {
@@ -64,7 +89,7 @@ const StudentsPage = () => {
       }
     };
     fetchFilterOptions();
-  }, [centerId]);
+  }, [centerId, batchId]);
 
   // Fetch students
   const fetchStudents = useCallback(async () => {
@@ -76,14 +101,20 @@ const StudentsPage = () => {
         search: searchTerm,
         sort_by: sortBy,
         sort_order: sortOrder,
-        ...(centerId && { center_id: centerId }),
         ...activeFilters, // Spread all active filters
       };
 
-      // Remove empty filters
+      // Override with route params if they exist (takes precedence)
+      if (centerId) params.center_id = centerId;
+      if (batchId) params.batch_id = batchId;
+
+      // Remove empty filters (including empty arrays)
       Object.keys(params).forEach(
         (key) =>
-          (params[key] === "" || params[key] === null) && delete params[key]
+          (params[key] === "" ||
+            params[key] === null ||
+            (Array.isArray(params[key]) && params[key].length === 0)) &&
+          delete params[key]
       );
 
       const response = await getStudents(params);
@@ -98,6 +129,15 @@ const StudentsPage = () => {
       ) {
         setCenterName(response.data.data[0].center_name);
       }
+
+      // Set batch number from first student record if available
+      if (
+        batchId &&
+        response.data.data.length > 0 &&
+        response.data.data[0].batch_number
+      ) {
+        setBatchNumber(response.data.data[0].batch_number);
+      }
     } catch (error) {
       console.error("Error fetching students:", error);
       toast.error("Failed to load students");
@@ -109,14 +149,55 @@ const StudentsPage = () => {
     pagination.limit,
     searchTerm,
     centerId,
+    batchId,
     activeFilters,
     sortBy,
     sortOrder,
   ]);
 
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    setBulkDeleteLoading(true);
+    try {
+      const response = await bulkDeleteStudents(selectedRows);
+      setBulkDeleteResults(response.data);
+
+      // Show success toast if any deletions succeeded
+      if (response.data.summary.successful > 0) {
+        toast.success(
+          `Successfully deleted ${response.data.summary.successful} student(s)`
+        );
+        fetchStudents(); // Refresh table
+        setSelectedRows([]); // Clear selection
+      }
+
+      // Show error toast if all failed
+      if (response.data.summary.successful === 0) {
+        toast.error("Failed to delete any students");
+      }
+    } catch (error) {
+      console.error("Error bulk deleting students:", error);
+      toast.error(error.response?.data?.message || "Failed to delete students");
+      setBulkDeleteResults(null);
+      setShowBulkDeleteModal(false);
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
+  // Fetch students when dependencies change (removed fetchStudents from deps to prevent loop)
   useEffect(() => {
     fetchStudents();
-  }, [fetchStudents]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pagination.page,
+    pagination.limit,
+    centerId,
+    batchId,
+    activeFilters,
+    sortBy,
+    sortOrder,
+  ]);
 
   // Handle search with debounce
   useEffect(() => {
@@ -129,7 +210,8 @@ const StudentsPage = () => {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, fetchStudents, pagination.page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   // Handle filter change
   const handleFilterChange = (key, value) => {
@@ -140,15 +222,17 @@ const StudentsPage = () => {
     setPagination((prev) => ({ ...prev, page: 1 })); // Reset to first page
   };
 
-  // Handle clear all filters
+  // Clear filters
   const handleClearFilters = () => {
     setActiveFilters({
+      partner_id: [],
+      center_id: [], // Keep empty - centerId from route is handled separately
+      batch_id: [], // Keep empty - batchId from route is handled separately
       gender: "",
       city: "",
       state: "",
       course_name: "",
-      batch_id: "",
-      placement_status: "",
+      training_status: "",
     });
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
@@ -170,9 +254,11 @@ const StudentsPage = () => {
     try {
       const params = {
         search: searchTerm,
-        ...(centerId && { center_id: centerId }),
         ...activeFilters,
       };
+
+      if (centerId) params.center_id = centerId;
+      if (batchId) params.batch_id = batchId;
 
       // Remove empty filters
       Object.keys(params).forEach(
@@ -207,129 +293,147 @@ const StudentsPage = () => {
   // Table columns - Show ALL student data
   const columns = [
     {
-      header: "S.NO",
-      accessor: "id",
-      width: "5%",
-      render: (row, index) =>
-        (pagination.page - 1) * pagination.limit + index + 1,
-    },
-    {
+      id: "student_id",
+      accessorKey: "student_id",
       header: "Student ID",
-      accessor: "student_id",
-      width: "10%",
+      cell: ({ row }) => (
+        <div className="font-medium">{row.original.student_id}</div>
+      ),
+      size: 130,
+      enableHiding: false,
     },
     {
+      id: "student_name",
+      accessorKey: "student_name",
       header: "Student Name",
-      accessor: "student_name",
-      width: "12%",
+      cell: ({ row }) => (
+        <div className="font-medium">{row.original.student_name}</div>
+      ),
+      size: 180,
     },
     {
+      id: "date_of_birth",
+      accessorKey: "date_of_birth",
       header: "DOB",
-      accessor: "date_of_birth",
-      render: (row) =>
-        row.date_of_birth
-          ? new Date(row.date_of_birth).toLocaleDateString()
+      cell: ({ row }) =>
+        row.original.date_of_birth
+          ? new Date(row.original.date_of_birth).toLocaleDateString()
           : "-",
+      size: 110,
     },
     {
+      id: "gender",
+      accessorKey: "gender",
       header: "Gender",
-      accessor: "gender",
-      render: (row) => row.gender || "-",
+      cell: ({ row }) => row.original.gender || "-",
+      size: 90,
     },
     {
+      id: "mobile_number",
+      accessorKey: "mobile_number",
       header: "Mobile",
-      accessor: "mobile_number",
-      render: (row) => row.mobile_number || "-",
+      cell: ({ row }) => row.original.mobile_number || "-",
+      size: 130,
     },
     {
+      id: "email",
+      accessorKey: "email",
       header: "Email",
-      accessor: "email",
-      render: (row) => row.email || "-",
+      cell: ({ row }) => row.original.email || "-",
+      size: 200,
     },
     {
+      id: "address",
+      accessorKey: "address",
       header: "Address",
-      accessor: "address",
-      render: (row) => row.address || "-",
+      cell: ({ row }) => (
+        <div className="truncate max-w-xs" title={row.original.address}>
+          {row.original.address || "-"}
+        </div>
+      ),
+      size: 200,
     },
     {
+      id: "city",
+      accessorKey: "city",
       header: "City",
-      accessor: "city",
-      render: (row) => row.city || "-",
+      cell: ({ row }) => row.original.city || "-",
+      size: 120,
     },
     {
+      id: "state",
+      accessorKey: "state",
       header: "State",
-      accessor: "state",
-      render: (row) => row.state || "-",
+      cell: ({ row }) => row.original.state || "-",
+      size: 120,
     },
     {
+      id: "center_name",
+      accessorKey: "center_name",
       header: "Center",
-      accessor: "center_name",
-      width: "12%",
-      render: (row) => row.center_name || "-",
+      cell: ({ row }) => row.original.center_name || "-",
+      size: 180,
     },
     {
+      id: "batch_number",
+      accessorKey: "batch_number",
       header: "Batch",
-      accessor: "batch_number",
-      render: (row) => (
+      cell: ({ row }) => (
         <Badge variant="outline" className="text-xs">
-          {row.batch_number || "-"}
+          {row.original.batch_number || "-"}
         </Badge>
       ),
+      size: 140,
     },
     {
+      id: "course_name",
+      accessorKey: "course_name",
       header: "Course",
-      accessor: "course_name",
-      render: (row) => row.course_name || "-",
+      cell: ({ row }) => row.original.course_name || "-",
+      size: 180,
     },
     {
+      id: "course_duration",
+      accessorKey: "course_duration",
       header: "Duration",
-      accessor: "course_duration",
-      render: (row) => row.course_duration || "-",
+      cell: ({ row }) => row.original.course_duration || "-",
+      size: 100,
     },
     {
+      id: "enrollment_date",
+      accessorKey: "enrollment_date",
       header: "Enrollment Date",
-      accessor: "enrollment_date",
-      render: (row) =>
-        row.enrollment_date
-          ? new Date(row.enrollment_date).toLocaleDateString()
+      cell: ({ row }) =>
+        row.original.enrollment_date
+          ? new Date(row.original.enrollment_date).toLocaleDateString()
           : "-",
+      size: 140,
     },
     {
+      id: "training_status",
+      accessorKey: "training_status",
       header: "Training Status",
-      accessor: "training_status",
-      render: (row) => row.training_status || "-",
-    },
-    {
-      header: "Placement",
-      accessor: "placement_status",
-      render: (row) =>
-        row.placement_status ? (
-          <Badge
-            variant="outline"
-            className={
-              row.placement_status === "Placed"
-                ? "bg-green-100 text-green-800"
-                : "bg-gray-100 text-gray-800"
-            }
-          >
-            {row.placement_status}
-          </Badge>
-        ) : (
-          "-"
-        ),
+      cell: ({ row }) => (
+        <Badge variant="outline">{row.original.training_status || "-"}</Badge>
+      ),
+      size: 140,
     },
   ];
 
-  return (
-    <MainLayout>
+  const content = (
+    <>
       <div className="space-y-6">
         {/* Breadcrumb with Back Button */}
-        {centerId && (
+        {(centerId || batchId) && (
           <div className="flex items-center justify-between">
             <Breadcrumb items={breadcrumbItems} />
             <Button variant="outline" onClick={handleBack} className="gap-2">
               <ArrowLeftIcon className="h-4 w-4" />
-              {role === "PARTNER" ? "Back to Centers" : "Back to Centers"}
+              {batchId
+                ? "Back to Batches"
+                : role === "PARTNER"
+                ? "Back to Centers"
+                : "Back to Centers"}
             </Button>
           </div>
         )}
@@ -338,94 +442,185 @@ const StudentsPage = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {centerId && centerName
+              {batchNumber
+                ? `${batchNumber} - Students`
+                : centerName
                 ? `${centerName} - Students`
                 : centerId
                 ? "Center Students"
+                : batchId
+                ? "Batch Students"
                 : "Students"}
             </h1>
             <p className="text-gray-600 mt-1">
-              {centerId
+              {batchId
+                ? "View all students enrolled in this batch"
+                : centerId
                 ? "View all students enrolled in this center"
                 : "View all enrolled students across centers"}
             </p>
           </div>
         </div>
 
-        {/* Search with Filters */}
-        <div>
-          <AdvancedSearchBar
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search by name, student ID, email, mobile..."
-            filterGroups={[
-              {
-                label: "Gender",
-                key: "gender",
-                options: filterOptions.genders,
-              },
-              {
-                label: "City",
-                key: "city",
-                options: filterOptions.cities,
-              },
-              {
-                label: "State",
-                key: "state",
-                options: filterOptions.states,
-              },
-              {
-                label: "Course",
-                key: "course_name",
-                options: filterOptions.courses,
-              },
-              ...(centerId && filterOptions.batches.length > 0
-                ? [
-                    {
-                      label: "Batch",
-                      key: "batch_id",
-                      options: filterOptions.batches,
-                    },
-                  ]
-                : []),
-              {
-                label: "Placement Status",
-                key: "placement_status",
-                options: filterOptions.placements,
-              },
-            ]}
-            activeFilters={activeFilters}
-            onFilterChange={handleFilterChange}
-            onClearFilters={handleClearFilters}
-            sortOptions={[
-              { label: "Student Name", value: "student_name" },
-              { label: "Enrollment ID", value: "enrollment_id" },
-              { label: "Gender", value: "gender" },
-              { label: "City", value: "city" },
-              { label: "Course", value: "course_name" },
-              { label: "Placement Status", value: "placement_status" },
-              { label: "Enrollment Date", value: "created_at" },
-            ]}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={handleSortChange}
-          />
+        {/* Search with Filters and Export */}
+        <div className="space-y-4">
+          {/* Bulk Delete Button */}
+          {canExport && selectedRows.length > 0 && (
+            <div className="flex justify-end">
+              <BulkDeleteButton
+                selectedCount={selectedRows.length}
+                onDelete={() => setShowBulkDeleteModal(true)}
+                loading={bulkDeleteLoading}
+              />
+            </div>
+          )}
+
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <AdvancedSearchBar
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="Search by name, student ID, email, mobile..."
+                table={table}
+                storageKey="students"
+                filterGroups={[
+                  ...(!centerId && !batchId && filterOptions.partners.length > 0
+                    ? [
+                        {
+                          label: "Partner",
+                          key: "partner_id",
+                          options: filterOptions.partners,
+                          multi: true,
+                        },
+                      ]
+                    : []),
+                  ...(!centerId && !batchId && filterOptions.centers.length > 0
+                    ? [
+                        {
+                          label: "Center",
+                          key: "center_id",
+                          options: filterOptions.centers,
+                          multi: true,
+                        },
+                      ]
+                    : []),
+                  ...(!batchId && filterOptions.batches.length > 0
+                    ? [
+                        {
+                          label: "Batch",
+                          key: "batch_id",
+                          options: filterOptions.batches,
+                          multi: true,
+                        },
+                      ]
+                    : []),
+                  {
+                    label: "Gender",
+                    key: "gender",
+                    options: filterOptions.genders,
+                  },
+                  {
+                    label: "City",
+                    key: "city",
+                    options: filterOptions.cities,
+                  },
+                  {
+                    label: "State",
+                    key: "state",
+                    options: filterOptions.states,
+                  },
+                  {
+                    label: "Course",
+                    key: "course_name",
+                    options: filterOptions.courses,
+                  },
+                  {
+                    label: "Training Status",
+                    key: "training_status",
+                    options: filterOptions.trainings,
+                  },
+                ]}
+                activeFilters={
+                  centerId || batchId
+                    ? // Hide center_id/batch_id from filter badge when viewing specific center/batch
+                      (() => {
+                        const {
+                          center_id: _center_id,
+                          batch_id: _batch_id,
+                          ...rest
+                        } = activeFilters;
+                        return rest;
+                      })()
+                    : activeFilters
+                }
+                onFilterChange={handleFilterChange}
+                onClearFilters={handleClearFilters}
+                sortOptions={[
+                  { label: "Student Name", value: "student_name" },
+                  { label: "Student ID", value: "student_id" },
+                  { label: "Gender", value: "gender" },
+                  { label: "City", value: "city" },
+                  { label: "Course", value: "course_name" },
+                  { label: "Training Status", value: "training_status" },
+                  { label: "Created Date", value: "created_at" },
+                ]}
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSortChange={handleSortChange}
+              />
+            </div>
+            {canExport && (
+              <Button
+                onClick={handleExport}
+                variant="outline"
+                size="default"
+                className="gap-2 whitespace-nowrap"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" />
+                Export CSV
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Table */}
-        <DataTable
+        <EnhancedDataTable
           columns={columns}
           data={students}
           pagination={pagination}
           onPageChange={handlePageChange}
-          onExport={canExport ? handleExport : null}
           isLoading={isLoading}
           emptyMessage="No students found"
-          showExport={canExport}
+          showSerialNumber={true}
+          storageKey="students"
+          onTableReady={setTable}
+          enableRowSelection={canExport}
+          selectedRows={selectedRows}
+          onSelectionChange={setSelectedRows}
+          getRowId={(row) => row.id}
         />
       </div>
-    </MainLayout>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        open={showBulkDeleteModal}
+        onClose={() => {
+          setShowBulkDeleteModal(false);
+          setBulkDeleteResults(null);
+        }}
+        onConfirm={handleBulkDelete}
+        title="Delete Students"
+        message={`Are you sure you want to delete ${selectedRows.length} student(s)?`}
+        itemCount={selectedRows.length}
+        items={students.filter((s) => selectedRows.includes(s.id))}
+        loading={bulkDeleteLoading}
+        results={bulkDeleteResults}
+        itemType="students"
+      />
+    </>
   );
+
+  return embedded ? content : <MainLayout>{content}</MainLayout>;
 };
 
 export default StudentsPage;

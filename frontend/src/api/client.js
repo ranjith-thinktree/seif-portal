@@ -89,10 +89,19 @@ apiClient.interceptors.response.use(
           refreshToken,
         });
 
-        const { accessToken } = response.data.data;
+        const { accessToken, user } = response.data.data;
 
         // Store new access token
         localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+
+        // Update user data if provided (includes updated fields like full_name)
+        if (user) {
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+          // Dispatch event with user data for Redux store update
+          window.dispatchEvent(
+            new CustomEvent("user-updated", { detail: { user } })
+          );
+        }
 
         // Dispatch event for socket reconnection
         window.dispatchEvent(new CustomEvent("token-refreshed"));
@@ -110,7 +119,8 @@ apiClient.interceptors.response.use(
         // Refresh token failed - clear storage and redirect to login
         processQueue(refreshError, null);
 
-        console.log("❌ Token refresh failed, logging out...");
+        const errorMessage = refreshError.response?.data?.message || 'Session expired';
+        console.log(`❌ Token refresh failed: ${errorMessage}`);
 
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
         localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
@@ -133,6 +143,10 @@ apiClient.interceptors.response.use(
 
         if (!isOnAuthPage) {
           console.log("Redirecting to login page...");
+          // Show user-friendly message
+          if (errorMessage.includes('User not found')) {
+            alert('Your account is no longer available. Please contact support or login with a different account.');
+          }
           window.location.href = "/login";
         }
 

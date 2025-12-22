@@ -1,39 +1,51 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout";
-import DataTable, { StatusBadge } from "../../components/common/DataTable";
+import EnhancedDataTable, {
+  StatusBadge,
+} from "../../components/common/EnhancedDataTable";
 import PartnerForm from "../../components/forms/PartnerForm";
+import BulkPartnerUpload from "../../components/forms/BulkPartnerUpload";
 import { SuccessModal, RejectionModal } from "../../components/common";
-import SearchBar from "../../components/common/SearchBar";
+import ResetPartnerPasswordModal from "../../components/modals/ResetPartnerPasswordModal";
+import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
+import BulkDeleteButton from "../../components/common/BulkDeleteButton";
+import ConfirmationModal from "../../components/common/ConfirmationModal";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import {
   PlusIcon,
-  MagnifyingGlassIcon,
   CheckIcon,
   XMarkIcon,
   PencilIcon,
   TrashIcon,
+  ArrowDownTrayIcon,
+  EnvelopeIcon,
+  KeyIcon,
 } from "@heroicons/react/24/outline";
 import {
   getPartners,
   createPartner,
   updatePartner,
   deletePartner,
+  bulkDeletePartners,
   approvePartner,
   rejectPartner,
+  resendPartnerWelcomeEmail,
   exportPartners,
   downloadCSV,
+  getPartnerFilterOptions,
 } from "../../services/data.service";
 import { toast } from "react-toastify";
-import { isAdminRole } from "../../utils/role";
+import { useAuth } from "../../hooks";
 
-const PartnersPage = () => {
+const PartnersPage = ({ embedded = false }) => {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const isAdmin = isAdminRole(user.role);
-  const canExport = ["ADMIN", "SUPER_ADMIN", "ESSCI"].includes(user.role);
+  const { role } = useAuth();
+
+  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(role);
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const canExport = ["ADMIN", "SUPER_ADMIN", "ESSCI"].includes(role);
 
   const [partners, setPartners] = useState([]);
   const [pagination, setPagination] = useState({
@@ -44,27 +56,53 @@ const PartnersPage = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState([
-    { label: "Active", value: "active", checked: false },
-    { label: "Inactive", value: "inactive", checked: false },
-    ...(isAdmin
-      ? [
-          { label: "Pending Approval", value: "pending", checked: false },
-          { label: "Approved", value: "approved", checked: false },
-          { label: "Rejected", value: "rejected", checked: false },
-        ]
-      : []),
-  ]);
-  const [sortBy, setSortBy] = useState("");
-  const [sortOrder, setSortOrder] = useState("asc");
+  const [activeFilters, setActiveFilters] = useState({
+    type: "",
+    city: "",
+    state: "",
+    status: "",
+    approval_status: "",
+  });
+  const [filterOptions, setFilterOptions] = useState({
+    types: [],
+    cities: [],
+    states: [],
+    statuses: [],
+    approvalStatuses: [],
+  });
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [columnVisibility, setColumnVisibility] = useState({});
+  const [table, setTable] = useState(null); // Store table instance from EnhancedDataTable
   const [showForm, setShowForm] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [editingPartner, setEditingPartner] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Bulk delete states
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkDeleteResults, setBulkDeleteResults] = useState(null);
+
+  // Fetch filter options
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const response = await getPartnerFilterOptions();
+        setFilterOptions(response.data);
+      } catch (error) {
+        console.error("Error fetching filter options:", error);
+      }
+    };
+    fetchFilterOptions();
+  }, []);
 
   // Fetch partners
   const fetchPartners = useCallback(async () => {
@@ -74,7 +112,16 @@ const PartnersPage = () => {
         page: pagination.page,
         limit: pagination.limit,
         search: searchTerm,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        ...activeFilters,
       };
+
+      // Remove empty filters
+      Object.keys(params).forEach(
+        (key) =>
+          (params[key] === "" || params[key] === null) && delete params[key]
+      );
 
       const response = await getPartners(params);
       setPartners(response.data.data);
@@ -85,11 +132,20 @@ const PartnersPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [pagination.page, pagination.limit, searchTerm]);
+  }, [
+    pagination.page,
+    pagination.limit,
+    searchTerm,
+    activeFilters,
+    sortBy,
+    sortOrder,
+  ]);
 
+  // Fetch partners when dependencies change (removed fetchPartners from deps to prevent loop)
   useEffect(() => {
     fetchPartners();
-  }, [fetchPartners]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.limit, activeFilters, sortBy, sortOrder]);
 
   // Handle search with debounce
   useEffect(() => {
@@ -102,7 +158,8 @@ const PartnersPage = () => {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, fetchPartners, pagination.page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   // Handle page change
   const handlePageChange = (newPage) => {
@@ -167,6 +224,36 @@ const PartnersPage = () => {
     }
   };
 
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    setBulkDeleteLoading(true);
+    try {
+      const response = await bulkDeletePartners(selectedRows);
+      setBulkDeleteResults(response.data);
+
+      // Show success toast if any deletions succeeded
+      if (response.data.summary.successful > 0) {
+        toast.success(
+          `Successfully deleted ${response.data.summary.successful} partner(s)`
+        );
+        fetchPartners(); // Refresh table
+        setSelectedRows([]); // Clear selection
+      }
+
+      // Show error toast if all failed
+      if (response.data.summary.successful === 0) {
+        toast.error("Failed to delete any partners");
+      }
+    } catch (error) {
+      console.error("Error bulk deleting partners:", error);
+      toast.error(error.response?.data?.message || "Failed to delete partners");
+      setBulkDeleteResults(null);
+      setShowBulkDeleteModal(false);
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
   // Handle approve partner
   const handleApprovePartner = (partnerId) => {
     const partner = partners.find((p) => p.id === partnerId);
@@ -217,25 +304,68 @@ const PartnersPage = () => {
     }
   };
 
+  // Handle resend welcome email
+  const handleResendWelcomeEmail = async (partnerId) => {
+    try {
+      await resendPartnerWelcomeEmail(partnerId);
+      toast.success("Welcome email sent successfully with new credentials");
+    } catch (error) {
+      console.error("Error resending welcome email:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to send welcome email"
+      );
+    }
+  };
+
+  // Handle reset password
+  const handleResetPassword = (partner) => {
+    setSelectedPartner(partner);
+    setShowResetPasswordModal(true);
+  };
+
   // Handle filter change
-  const handleFilterChange = (value, checked) => {
-    setFilters((prev) =>
-      prev.map((f) => (f.value === value ? { ...f, checked } : f))
-    );
+  const handleFilterChange = (key, value) => {
+    setActiveFilters((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+    setPagination((prev) => ({ ...prev, page: 1 })); // Reset to first page
+  };
+
+  // Handle clear all filters
+  const handleClearFilters = () => {
+    setActiveFilters({
+      type: "",
+      city: "",
+      state: "",
+      status: "",
+      approval_status: "",
+    });
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   // Handle sort change
-  const handleSortChange = (sortByValue, sortOrderValue) => {
-    setSortBy(sortByValue);
-    setSortOrder(sortOrderValue);
+  const handleSortChange = (field, order) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   // Handle export
   const handleExport = async () => {
     try {
-      const blob = await exportPartners({
+      const params = {
         search: searchTerm,
-      });
+        ...activeFilters,
+      };
+
+      // Remove empty filters
+      Object.keys(params).forEach(
+        (key) =>
+          (params[key] === "" || params[key] === null) && delete params[key]
+      );
+
+      const blob = await exportPartners(params);
       downloadCSV(blob, `partners_${new Date().getTime()}.csv`);
       toast.success("Partners exported successfully");
     } catch (error) {
@@ -250,122 +380,201 @@ const PartnersPage = () => {
   };
 
   // Handle edit click
-  const handleEditClick = (e, partner) => {
-    e.stopPropagation();
+  const handleEditClick = (partner) => {
     setEditingPartner(partner);
     setShowForm(true);
   };
 
-  // Table columns
+  // Table columns - TanStack Table format
   const columns = [
     {
+      id: "name",
+      accessorKey: "name",
       header: "Partner Name",
-      accessor: "name",
-      width: "20%",
-    },
-    {
-      header: "Centers",
-      accessor: "total_centers",
-      render: (row) => (
-        <Badge variant="outline">{row.total_centers || 0}</Badge>
+      cell: ({ row }) => (
+        <div
+          onClick={() => handleRowClick(row.original)}
+          className="font-medium cursor-pointer hover:text-blue-600 truncate"
+        >
+          {row.getValue("name")}
+        </div>
       ),
+      size: 200,
+      minSize: 150,
+      maxSize: 400,
+      enableHiding: false,
     },
     {
-      header: "Students",
-      accessor: "total_students",
-      render: (row) => (
-        <Badge variant="outline">{row.total_students || 0}</Badge>
+      id: "partner_id",
+      accessorKey: "partner_id",
+      header: "Partner ID",
+      cell: ({ row }) => (
+        <div className="truncate">{row.getValue("partner_id")}</div>
       ),
+      size: 150,
+      minSize: 100,
+      maxSize: 250,
+      enableHiding: true,
     },
     {
-      header: "Male",
-      accessor: "total_male_students",
-      render: (row) => (
-        <Badge variant="outline">{row.total_male_students || 0}</Badge>
+      id: "organization_type",
+      accessorKey: "organization_type",
+      header: "Partner Type",
+      cell: ({ row }) => (
+        <div className="truncate">{row.getValue("organization_type")}</div>
       ),
+      size: 180,
+      minSize: 120,
+      maxSize: 300,
+      enableHiding: true,
     },
     {
-      header: "Female",
-      accessor: "total_female_students",
-      render: (row) => (
-        <Badge variant="outline">{row.total_female_students || 0}</Badge>
+      id: "total_centers",
+      accessorKey: "total_centers",
+      header: "Number of Centers",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="truncate">
+          {row.getValue("total_centers") || 0}
+        </Badge>
       ),
+      size: 140,
+      minSize: 100,
+      maxSize: 200,
+      enableHiding: true,
     },
     {
+      id: "total_students",
+      accessorKey: "total_students",
+      header: "Number of Students",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="truncate">
+          {row.getValue("total_students") || 0}
+        </Badge>
+      ),
+      size: 140,
+      minSize: 100,
+      maxSize: 200,
+      enableHiding: true,
+    },
+    {
+      id: "city",
+      accessorKey: "city",
+      header: "City",
+      cell: ({ row }) => (
+        <div className="truncate">{row.getValue("city") || "-"}</div>
+      ),
+      size: 120,
+      minSize: 80,
+      maxSize: 200,
+      enableHiding: true,
+    },
+    {
+      id: "state",
+      accessorKey: "state",
+      header: "State",
+      cell: ({ row }) => (
+        <div className="truncate">{row.getValue("state") || "-"}</div>
+      ),
+      size: 120,
+      minSize: 80,
+      maxSize: 200,
+      enableHiding: true,
+    },
+    {
+      id: "status",
+      accessorKey: "status",
       header: "Status",
-      accessor: "status",
-      render: (row) => <StatusBadge status={row.status} />,
+      cell: ({ row }) => <StatusBadge status={row.getValue("status")} />,
+      size: 120,
+      minSize: 100,
+      maxSize: 150,
+      enableHiding: true,
     },
-    ...(isAdmin
-      ? [
-          {
-            header: "Approval",
-            accessor: "approval_status",
-            render: (row) => <StatusBadge status={row.approval_status} />,
-          },
-        ]
-      : []),
-    ...(isAdmin
-      ? [
-          {
-            header: "Actions",
-            accessor: "actions",
-            width: "15%",
-            render: (row) => (
-              <div
-                className="flex items-center gap-2"
-                onClick={(e) => e.stopPropagation()}
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <div
+          className="flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {isAdmin && row.original.approval_status === "pending" && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleApprovePartner(row.original.id);
+                }}
+                className="text-green-600 hover:text-green-800"
+                title="Approve"
               >
-                {row.approval_status === "pending" && (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleApprovePartner(row.id);
-                      }}
-                      className="text-green-600 hover:text-green-800"
-                      title="Approve"
-                    >
-                      <CheckIcon className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRejectPartner(row.id);
-                      }}
-                      className="text-red-600 hover:text-red-800"
-                      title="Reject"
-                    >
-                      <XMarkIcon className="h-5 w-5" />
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={(e) => handleEditClick(e, row)}
-                  className="text-blue-600 hover:text-blue-800"
-                  title="Edit"
-                >
-                  <PencilIcon className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeletePartner(row.id);
-                  }}
-                  className="text-red-600 hover:text-red-800"
-                  title="Delete"
-                >
-                  <TrashIcon className="h-5 w-5" />
-                </button>
-              </div>
-            ),
-          },
-        ]
-      : []),
+                <CheckIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRejectPartner(row.original.id);
+                }}
+                className="text-red-600 hover:text-red-800"
+                title="Reject"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </>
+          )}
+          {isAdmin && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResetPassword(row.original);
+                }}
+                className="text-orange-600 hover:text-orange-800"
+                title="Reset Password"
+              >
+                <KeyIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResendWelcomeEmail(row.original.id);
+                }}
+                className="text-purple-600 hover:text-purple-800"
+                title="Resend Welcome Email"
+              >
+                <EnvelopeIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => handleEditClick(row.original)}
+                className="text-blue-600 hover:text-blue-800"
+                title="Edit"
+              >
+                <PencilIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeletePartner(row.original.id);
+                }}
+                className="text-red-600 hover:text-red-800"
+                title="Delete"
+              >
+                <TrashIcon className="h-5 w-5" />
+              </button>
+            </>
+          )}
+        </div>
+      ),
+      size: 180,
+      minSize: 150,
+      maxSize: 250,
+      enableHiding: false,
+      enableResizing: false,
+    },
   ];
 
-  return (
-    <MainLayout>
+  const content = (
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -375,11 +584,25 @@ const PartnersPage = () => {
               Manage and view all partner organizations
             </p>
           </div>
-          {isAdmin && !showForm && (
-            <Button onClick={() => setShowForm(true)} className="gap-2">
-              <PlusIcon className="h-5 w-5" />
-              Create Partner
-            </Button>
+          {isAdmin && !showForm && !showBulkUpload && (
+            <div className="flex gap-3">
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setShowBulkUpload(true)}
+                  className="px-6 py-3 bg-blue-500 text-white rounded-full font-semibold hover:bg-blue-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                >
+                  <ArrowDownTrayIcon className="h-5 w-5" />
+                  <span>📤 Bulk Upload</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowForm(true)}
+                className="px-8 py-3 bg-primary-500 text-white rounded-full font-semibold hover:bg-primary-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Create Partner
+              </button>
+            </div>
           )}
         </div>
 
@@ -398,39 +621,120 @@ const PartnersPage = () => {
           />
         )}
 
-        {/* Search with Filters and Sort */}
-        {!showForm && (
-          <SearchBar
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search partners by name, email, or phone..."
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            sortOptions={[
-              { label: "Partner Name (A-Z)", value: "name" },
-              { label: "Email", value: "email" },
-              { label: "Phone", value: "phone" },
-              { label: "Total Centers", value: "centers" },
-              { label: "Status", value: "status" },
-            ]}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={handleSortChange}
+        {/* Bulk Upload */}
+        {showBulkUpload && (
+          <BulkPartnerUpload
+            onSuccess={() => {
+              setShowBulkUpload(false);
+              fetchPartners();
+            }}
+            onCancel={() => setShowBulkUpload(false)}
           />
+        )}
+
+        {/* Search with Filters and Export */}
+        {!showForm && !showBulkUpload && (
+          <div className="space-y-4">
+            {/* Bulk Delete Button */}
+            {isAdmin && selectedRows.length > 0 && (
+              <div className="flex justify-end">
+                <BulkDeleteButton
+                  selectedCount={selectedRows.length}
+                  onDelete={() => setShowBulkDeleteModal(true)}
+                  loading={bulkDeleteLoading}
+                />
+              </div>
+            )}
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <AdvancedSearchBar
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                  placeholder="Search partners by name, ID, or type..."
+                  filterGroups={[
+                    {
+                      label: "Partner Type",
+                      key: "type",
+                      options: filterOptions.types,
+                    },
+                    {
+                      label: "City",
+                      key: "city",
+                      options: filterOptions.cities,
+                    },
+                    {
+                      label: "State",
+                      key: "state",
+                      options: filterOptions.states,
+                    },
+                    {
+                      label: "Status",
+                      key: "status",
+                      options: filterOptions.statuses,
+                    },
+                    ...(isAdmin && filterOptions.approvalStatuses.length > 0
+                      ? [
+                          {
+                            label: "Approval Status",
+                            key: "approval_status",
+                            options: filterOptions.approvalStatuses,
+                          },
+                        ]
+                      : []),
+                  ]}
+                  activeFilters={activeFilters}
+                  onFilterChange={handleFilterChange}
+                  onClearFilters={handleClearFilters}
+                  sortOptions={[
+                    { label: "Partner Name", value: "name" },
+                    { label: "Partner ID", value: "partner_id" },
+                    { label: "Partner Type", value: "organization_type" },
+                    { label: "City", value: "city" },
+                    { label: "State", value: "state" },
+                    { label: "Status", value: "status" },
+                    { label: "Created Date", value: "created_at" },
+                  ]}
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onSortChange={handleSortChange}
+                  table={table}
+                  storageKey="partners"
+                />
+              </div>
+              {canExport && (
+                <Button
+                  onClick={handleExport}
+                  variant="outline"
+                  size="default"
+                  className="gap-2 whitespace-nowrap"
+                >
+                  <ArrowDownTrayIcon className="h-4 w-4" />
+                  Export CSV
+                </Button>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Table */}
         {!showForm && (
-          <DataTable
+          <EnhancedDataTable
             columns={columns}
             data={partners}
             pagination={pagination}
             onPageChange={handlePageChange}
-            onExport={canExport ? handleExport : null}
-            onRowClick={handleRowClick}
             isLoading={isLoading}
             emptyMessage="No partners found"
-            showExport={canExport}
+            showSerialNumber={true}
+            storageKey="partners"
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+            onTableReady={setTable}
+            enableRowSelection={isAdmin}
+            selectedRows={selectedRows}
+            onSelectionChange={setSelectedRows}
+            getRowId={(row) => row.id}
           />
         )}
       </div>
@@ -489,8 +793,37 @@ const PartnersPage = () => {
         remarksPlaceholder="Any additional comments..."
         minReasonLength={10}
       />
-    </MainLayout>
+
+      {/* Reset Password Modal */}
+      <ResetPartnerPasswordModal
+        isOpen={showResetPasswordModal}
+        onClose={() => {
+          setShowResetPasswordModal(false);
+          setSelectedPartner(null);
+        }}
+        partner={selectedPartner}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        open={showBulkDeleteModal}
+        onClose={() => {
+          setShowBulkDeleteModal(false);
+          setBulkDeleteResults(null);
+        }}
+        onConfirm={handleBulkDelete}
+        title="Delete Partners"
+        message={`Are you sure you want to delete ${selectedRows.length} partner(s)?`}
+        itemCount={selectedRows.length}
+        items={partners.filter((p) => selectedRows.includes(p.id))}
+        loading={bulkDeleteLoading}
+        results={bulkDeleteResults}
+        itemType="partners"
+      />
+    </>
   );
+
+  return embedded ? content : <MainLayout>{content}</MainLayout>;
 };
 
 export default PartnersPage;

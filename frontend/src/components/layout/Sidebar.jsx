@@ -158,11 +158,26 @@ const Sidebar = () => {
                       className={cn(
                         "flex items-center gap-3 px-3 py-2.5 transition-colors border-r-2 border-r-transparent",
                         "hover:border-r-2 hover:border-r-gray-300",
-                        active && "border-r-2 border-[#000000]"
+                        active &&
+                          "border-r-2 border-[#000000] bg-[#3DCD58]/10 text-[#009530]"
                       )}
                     >
-                      <Icon className="p-2 h-9 w-9 flex-shrink-0 text-black bg-[#D9D9D9] rounded-full" />
-                      <span className="text-sm text-black">{item.name}</span>
+                      <Icon
+                        className={cn(
+                          "p-2 h-9 w-9 flex-shrink-0 bg-[#D9D9D9] rounded-full",
+                          active
+                            ? "text-[#009530] bg-transparent"
+                            : "text-black"
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "text-sm",
+                          active ? "text-[#009530]" : "text-black"
+                        )}
+                      >
+                        {item.name}
+                      </span>
                     </Link>
                   )}
                 </li>

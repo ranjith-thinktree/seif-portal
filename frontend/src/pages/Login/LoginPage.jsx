@@ -100,8 +100,15 @@ const LoginPage = () => {
 
     // Dispatch login action - don't clear errors manually, let Redux handle it
     try {
-      await dispatch(login(formData)).unwrap();
-      // Navigate to dashboard on success (will be handled by useEffect)
+      const result = await dispatch(login(formData)).unwrap();
+
+      // Check if user must change password
+      if (result.mustChangePassword || result.user?.must_change_password) {
+        // Redirect to change password page (forced)
+        navigate(ROUTES.CHANGE_PASSWORD, { replace: true });
+      } else {
+        // Navigate to dashboard on success (will be handled by useEffect)
+      }
     } catch (err) {
       // Error is now in Redux state (error variable from useAuth)
       console.error("Login failed:", err);
@@ -122,7 +129,68 @@ const LoginPage = () => {
             {/* Global Error */}
             {error && (
               <div className="mb-6 p-4 rounded-md bg-destructive/10 border border-destructive/20">
-                <p className="text-sm text-destructive">{error}</p>
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-semibold text-destructive">
+                    Login Failed
+                  </p>
+                  <p className="text-sm text-destructive">{error}</p>
+
+                  {/* Rate Limit Specific Help */}
+                  {error.toLowerCase().includes("too many requests") && (
+                    <div className="mt-2 pt-2 border-t border-destructive/20">
+                      <p className="text-xs text-destructive font-medium mb-1">
+                        ⏱️ Rate Limit Exceeded
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        You've made too many login attempts. This is a security
+                        measure to protect your account.
+                      </p>
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mb-2">
+                        <p className="text-xs font-medium text-yellow-800 mb-1">
+                          ⚠️ Cooling Period: 15 Minutes
+                        </p>
+                        <p className="text-xs text-yellow-700">
+                          Maximum allowed: 100 requests per 15 minutes
+                        </p>
+                      </div>
+                      <p className="text-xs text-destructive font-medium mb-1">
+                        What you can do:
+                      </p>
+                      <ul className="text-xs text-muted-foreground space-y-1 ml-4">
+                        <li>✓ Wait for 15 minutes before trying again</li>
+                        <li>
+                          ✓ Make sure you're using the correct credentials
+                        </li>
+                        <li>✓ Clear browser cache and try again later</li>
+                        <li>✓ Contact support if you need immediate access</li>
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Invalid Credentials Help */}
+                  {(error.toLowerCase().includes("invalid") ||
+                    error.toLowerCase().includes("incorrect") ||
+                    error.toLowerCase().includes("not found")) && (
+                    <div className="mt-2 pt-2 border-t border-destructive/20">
+                      <p className="text-xs text-muted-foreground">
+                        Please check your email and password, or contact your
+                        administrator if you've forgotten your credentials.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Account Suspended Help */}
+                  {(error.toLowerCase().includes("suspended") ||
+                    error.toLowerCase().includes("disabled") ||
+                    error.toLowerCase().includes("inactive")) && (
+                    <div className="mt-2 pt-2 border-t border-destructive/20">
+                      <p className="text-xs text-muted-foreground">
+                        Your account has been suspended. Please contact your
+                        administrator for assistance.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

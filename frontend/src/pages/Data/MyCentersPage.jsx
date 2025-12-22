@@ -20,9 +20,13 @@ import {
   getCenterFilterOptions,
 } from "../../services/data.service";
 import { toast } from "react-toastify";
+import { useAuth } from "../../hooks";
 
 const MyCentersPage = () => {
   const navigate = useNavigate();
+  const { role, partnerId } = useAuth();
+
+  const isPartner = role === "PARTNER";
 
   const [centers, setCenters] = useState([]);
   const [pagination, setPagination] = useState({
@@ -217,7 +221,9 @@ const MyCentersPage = () => {
 
   // Handle row click
   const handleRowClick = (center) => {
-    navigate(`/data/centers/${center.id}/students`);
+    navigate(`/data/centers/${center.id}/students`, {
+      state: { centerName: center.center_name },
+    });
   };
 
   // Handle edit click
@@ -311,11 +317,14 @@ const MyCentersPage = () => {
             <h1 className="text-2xl font-bold text-gray-900">Centers</h1>
             <p className="text-gray-600 mt-1">Manage your training centers</p>
           </div>
-          {!showForm && (
-            <Button onClick={() => setShowForm(true)} className="gap-2">
+          {isPartner && !showForm && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="px-8 py-3 bg-primary-500 text-white rounded-full font-semibold hover:bg-primary-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+            >
               <PlusIcon className="h-5 w-5" />
               Create Center
-            </Button>
+            </button>
           )}
         </div>
 
@@ -329,6 +338,7 @@ const MyCentersPage = () => {
               setEditingCenter(null);
             }}
             isLoading={isSubmitting}
+            preselectedPartnerId={partnerId}
           />
         )}
 

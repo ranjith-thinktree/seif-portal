@@ -1,619 +1,662 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowPathIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
   CheckCircleIcon,
   XCircleIcon,
+  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
-import {
-  getUploadDetailsForAdmin,
-  getBatchStudents,
-  approveUpload,
-  rejectUpload,
-} from "../../services/upload.service";
+import reviewService from "../../services/review.service";
 import { MainLayout } from "../../components/layout";
 import SuccessModal from "../../components/common/SuccessModal";
 import RejectionModal from "../../components/common/RejectionModal";
 
 /**
- * Review Page
- * Admin page for reviewing and approving/rejecting uploads
+ * Review Page - Two Tab System
+ * Tab 1: Pending Centers (from centers table - center approval)
+ * Tab 2: Pending Data Uploads (from uploaded_batches/students - data approval)
  */
 const ReviewPage = () => {
-  const { id } = useParams();
   const navigate = useNavigate();
-  const [upload, setUpload] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [expandedCenters, setExpandedCenters] = useState(new Set());
-  const [expandedBatches, setExpandedBatches] = useState(new Set());
-  const [batchStudents, setBatchStudents] = useState({});
-  const [loadingBatches, setLoadingBatches] = useState(new Set());
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState("centers");
+
+  // Tab 1: Pending Centers state
+  const [centers, setCenters] = useState([]);
+  const [centersLoading, setCentersLoading] = useState(false);
+  const [centersError, setCentersError] = useState(null);
+  const [centersPagination, setCentersPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const [centersSearch, setCentersSearch] = useState("");
+
+  // Tab 2: Pending Uploads state
+  const [uploads, setUploads] = useState([]);
+  const [uploadsLoading, setUploadsLoading] = useState(false);
+  const [uploadsError, setUploadsError] = useState(null);
+  const [uploadsPagination, setUploadsPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const [uploadsSearch, setUploadsSearch] = useState("");
+
+  // Modal state
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState("");
-  const [remarks, setRemarks] = useState("");
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [modalType, setModalType] = useState(""); // "center" or "upload"
   const [isProcessing, setIsProcessing] = useState(false);
 
   /**
-   * Fetch upload details
+   * Fetch pending centers (Tab 1)
    */
-  const fetchUploadDetails = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchPendingCenters = useCallback(async () => {
+    setCentersLoading(true);
+    setCentersError(null);
 
     try {
-      const result = await getUploadDetailsForAdmin(id);
-      setUpload(result.data);
+      const result = await reviewService.getPendingCentersForApproval({
+        page: centersPagination.page,
+        limit: centersPagination.limit,
+        search: centersSearch,
+      });
 
-      // Auto-expand first center
-      if (result.data.centers.length > 0) {
-        setExpandedCenters(new Set([result.data.centers[0].id]));
-      }
+      setCenters(result.data || []);
+      setCentersPagination(result.pagination);
     } catch (err) {
-      console.error("Failed to fetch upload details:", err);
-      setError("Failed to load upload details. Please try again.");
+      console.error("Failed to fetch pending centers:", err);
+      setCentersError("Failed to load pending centers. Please try again.");
     } finally {
-      setLoading(false);
+      setCentersLoading(false);
     }
-  }, [id]);
+  }, [centersPagination.page, centersPagination.limit, centersSearch]);
 
+  /**
+   * Fetch pending data uploads (Tab 2)
+   */
+  const fetchPendingUploads = useCallback(async () => {
+    setUploadsLoading(true);
+    setUploadsError(null);
+
+    try {
+      const result = await reviewService.getPendingDataUploads({
+        page: uploadsPagination.page,
+        limit: uploadsPagination.limit,
+        search: uploadsSearch,
+      });
+
+      setUploads(result.data || []);
+      setUploadsPagination(result.pagination);
+    } catch (err) {
+      console.error("Failed to fetch pending uploads:", err);
+      setUploadsError("Failed to load pending uploads. Please try again.");
+    } finally {
+      setUploadsLoading(false);
+    }
+  }, [uploadsPagination.page, uploadsPagination.limit, uploadsSearch]);
+
+  // Load data when tab changes
   useEffect(() => {
-    fetchUploadDetails();
-  }, [fetchUploadDetails]);
-
-  /**
-   * Toggle center expansion
-   */
-  const toggleCenter = (centerId) => {
-    const newSet = new Set(expandedCenters);
-    if (newSet.has(centerId)) {
-      newSet.delete(centerId);
+    if (activeTab === "centers") {
+      fetchPendingCenters();
     } else {
-      newSet.add(centerId);
+      fetchPendingUploads();
     }
-    setExpandedCenters(newSet);
-  };
+  }, [activeTab, fetchPendingCenters, fetchPendingUploads]);
 
   /**
-   * Load students for a batch (on-demand)
+   * Handle approve center (Tab 1)
    */
-  const loadBatchStudents = async (batchId, page = 1) => {
-    if (loadingBatches.has(batchId)) return;
+  const handleApproveCenter = async () => {
+    if (!selectedItem) return;
 
-    const newLoadingSet = new Set(loadingBatches);
-    newLoadingSet.add(batchId);
-    setLoadingBatches(newLoadingSet);
-
-    try {
-      const result = await getBatchStudents(batchId, page, 50);
-      setBatchStudents((prev) => ({
-        ...prev,
-        [batchId]: {
-          students: result.data,
-          pagination: result.pagination,
-        },
-      }));
-    } catch (err) {
-      console.error("Failed to load batch students:", err);
-    } finally {
-      const newLoadingSet = new Set(loadingBatches);
-      newLoadingSet.delete(batchId);
-      setLoadingBatches(newLoadingSet);
-    }
-  };
-
-  /**
-   * Toggle batch expansion (loads students on first expand)
-   */
-  const toggleBatch = (batchId) => {
-    const newSet = new Set(expandedBatches);
-    if (newSet.has(batchId)) {
-      newSet.delete(batchId);
-    } else {
-      // Load students when expanding for the first time
-      if (!batchStudents[batchId]) {
-        loadBatchStudents(batchId);
-      }
-      newSet.add(batchId);
-    }
-    setExpandedBatches(newSet);
-  };
-
-  /**
-   * Handle approve
-   */
-  const handleApprove = () => {
-    setShowApproveModal(true);
-  };
-
-  const handleApproveConfirm = async () => {
     setIsProcessing(true);
     try {
-      await approveUpload(id, remarks || null);
+      await reviewService.approveCenterDirect(selectedItem.id);
       setShowApproveModal(false);
-      setTimeout(() => {
-        navigate("/inbox");
-      }, 1500);
+      setSelectedItem(null);
+      fetchPendingCenters();
     } catch (err) {
-      console.error("Failed to approve:", err);
-      setShowApproveModal(false);
+      console.error("Failed to approve center:", err);
+      alert(err.response?.data?.message || "Failed to approve center");
     } finally {
       setIsProcessing(false);
     }
   };
 
   /**
-   * Handle reject - now handled in RejectionModal onSubmit
+   * Handle reject center (Tab 1)
    */
+  const handleRejectCenter = async (reason, remarks) => {
+    if (!selectedItem) return;
 
-  if (loading) {
-    return (
-      <div className="h-full bg-background-secondary flex items-center justify-center">
-        <ArrowPathIcon className="h-8 w-8 text-primary-500 animate-spin" />
-      </div>
-    );
-  }
+    setIsProcessing(true);
+    try {
+      await reviewService.rejectCenterDirect(selectedItem.id, reason, remarks);
+      setShowRejectModal(false);
+      setSelectedItem(null);
+      fetchPendingCenters();
+    } catch (err) {
+      console.error("Failed to reject center:", err);
+      alert(err.response?.data?.message || "Failed to reject center");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-  if (error || !upload) {
+  /**
+   * Handle approve upload (Tab 2)
+   */
+  const handleViewUploadDetails = (uploadId) => {
+    navigate(`/review-centers/${uploadId}`);
+  };
+
+  /**
+   * Get status badge
+   */
+  const getStatusBadge = (status) => {
+    const styles = {
+      pending: "bg-yellow-100 text-yellow-800",
+      approved: "bg-green-100 text-green-800",
+      rejected: "bg-red-100 text-red-800",
+      partial: "bg-blue-100 text-blue-800",
+    };
+
     return (
-      <div className="h-full bg-background-secondary flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-destructive">{error || "Upload not found"}</p>
-          <button
-            onClick={() => navigate("/inbox")}
-            className="mt-4 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
-          >
-            Back to Inbox
-          </button>
-        </div>
-      </div>
+      <span
+        className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
+          styles[status] || "bg-muted text-muted-foreground"
+        }`}
+      >
+        {status?.charAt(0).toUpperCase() + status?.slice(1)}
+      </span>
     );
-  }
+  };
+
+  /**
+   * Format date
+   */
+  const formatDate = (dateString) => {
+    if (!dateString) return "-";
+    return new Date(dateString).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   return (
     <MainLayout>
-      <div className="h-[calc(100vh-8rem)] flex flex-col">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white border-b border-border px-6 py-4 -mx-6 -mt-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">
-                  Review Upload
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  Partner:{" "}
-                  <span className="font-medium">{upload.partner_name}</span> •
-                  File: <span className="font-medium">{upload.file_name}</span>
-                </p>
-              </div>
-
-              {upload.status === "pending" && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowRejectModal(true)}
-                    disabled={isProcessing}
-                    className="px-6 py-2 bg-white border border-destructive text-destructive rounded-lg hover:bg-destructive/10 font-medium transition-colors disabled:opacity-50"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    onClick={handleApprove}
-                    disabled={isProcessing}
-                    className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium transition-colors disabled:opacity-50"
-                  >
-                    {isProcessing ? "Processing..." : "Approve All"}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-foreground">
+            Review & Approval
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Review and approve pending centers and data uploads
+          </p>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
-                <p className="text-sm text-muted-foreground font-medium">
-                  Total Records
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {upload.total_records}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
-                <p className="text-sm text-muted-foreground font-medium">
-                  Centers
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {upload.centers.length}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
-                <p className="text-sm text-muted-foreground font-medium">
-                  Batches
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {upload.centers.reduce((sum, c) => sum + c.batch_count, 0)}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg shadow-card p-4 border border-border">
-                <p className="text-sm text-muted-foreground font-medium">
-                  Version
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  v{upload.version}
-                </p>
+        {/* Tabs */}
+        <div className="flex gap-4 mb-6 border-b border-border">
+          <button
+            onClick={() => setActiveTab("centers")}
+            className={`pb-3 px-2 font-medium transition-colors relative ${
+              activeTab === "centers"
+                ? "text-primary-600 border-b-2 border-primary-600"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Pending Centers
+            {centers.length > 0 && activeTab === "centers" && (
+              <span className="ml-2 px-2 py-0.5 bg-primary-500 text-white text-xs rounded-full">
+                {centersPagination.total}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("uploads")}
+            className={`pb-3 px-2 font-medium transition-colors relative ${
+              activeTab === "uploads"
+                ? "text-primary-600 border-b-2 border-primary-600"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Pending Data Uploads
+            {uploads.length > 0 && activeTab === "uploads" && (
+              <span className="ml-2 px-2 py-0.5 bg-primary-500 text-white text-xs rounded-full">
+                {uploadsPagination.total}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === "centers" ? (
+          /* Tab 1: Pending Centers */
+          <div className="space-y-6">
+            {/* Search Bar */}
+            <div className="bg-white p-4 rounded-lg shadow-card">
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search by center name, city, or state..."
+                  value={centersSearch}
+                  onChange={(e) => setCentersSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
               </div>
             </div>
 
-            {/* Centers List */}
-            <div className="space-y-4">
-              {upload.centers.map((center) => (
-                <div
-                  key={center.id}
-                  className="bg-white rounded-lg shadow-card overflow-hidden"
-                >
-                  {/* Center Header */}
+            {/* Centers Table */}
+            <div className="bg-white rounded-lg shadow-card overflow-hidden">
+              {centersLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <ArrowPathIcon className="h-8 w-8 text-primary-500 animate-spin" />
+                </div>
+              ) : centersError ? (
+                <div className="text-center py-12">
+                  <p className="text-destructive">{centersError}</p>
                   <button
-                    onClick={() => toggleCenter(center.id)}
-                    className="w-full px-6 py-4 flex items-center justify-between hover:bg-background-secondary transition-colors"
+                    onClick={fetchPendingCenters}
+                    className="mt-4 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
                   >
-                    <div className="flex items-center gap-3">
-                      {expandedCenters.has(center.id) ? (
-                        <ChevronDownIcon className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
-                      )}
-                      <div className="text-left">
-                        <h3 className="font-semibold text-foreground">
-                          {center.center_name}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {center.csv_center_id} • {center.center_type} •{" "}
-                          {center.city}, {center.state}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                      <span>{center.batch_count} batches</span>
-                      <span>{center.student_count} students</span>
-                    </div>
+                    Try Again
                   </button>
-
-                  {/* Center Details */}
-                  {expandedCenters.has(center.id) && (
-                    <div className="border-t border-border">
-                      {/* Center Info */}
-                      <div className="px-6 py-4 bg-background-secondary">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">Region</p>
-                            <p className="font-medium text-foreground">
-                              {center.region}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Established</p>
-                            <p className="font-medium text-foreground">
-                              {center.year_of_establishment || "N/A"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Center Head</p>
-                            <p className="font-medium text-foreground">
-                              {center.center_head || "N/A"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Contact</p>
-                            <p className="font-medium text-foreground">
-                              {center.mobile_number || "N/A"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Batches */}
-                      <div className="divide-y divide-border">
-                        {center.batches.map((batch) => (
-                          <div key={batch.id}>
-                            {/* Batch Header */}
-                            <button
-                              onClick={() => toggleBatch(batch.id)}
-                              className="w-full px-6 py-3 flex items-center justify-between hover:bg-background-secondary transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                {expandedBatches.has(batch.id) ? (
-                                  <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
-                                )}
-                                <div className="text-left">
-                                  <h4 className="font-medium text-foreground">
-                                    {batch.batch_number}
-                                  </h4>
-                                  <p className="text-xs text-muted-foreground">
-                                    {batch.batch_start_date} to{" "}
-                                    {batch.batch_complete_date || "Ongoing"}
-                                  </p>
-                                </div>
+                </div>
+              ) : centers.length === 0 ? (
+                <div className="text-center py-12">
+                  <CheckCircleIcon className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <p className="text-muted-foreground">
+                    No pending centers to review
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-muted">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Center Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Partner
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Location
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Type
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Created
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {centers.map((center) => (
+                          <tr
+                            key={center.id}
+                            className="hover:bg-background-secondary"
+                          >
+                            <td className="px-6 py-4">
+                              <div className="text-sm font-medium text-foreground">
+                                {center.center_name}
                               </div>
-                              <div className="flex items-center gap-4 text-sm">
-                                <span className="text-muted-foreground">
-                                  {batch.student_count} students (
-                                  {batch.male_students}M /{" "}
-                                  {batch.female_students}F)
-                                </span>
-                                <span
-                                  className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                    batch.status === "active"
-                                      ? "bg-primary-100 text-primary-700"
-                                      : "bg-muted text-muted-foreground"
-                                  }`}
+                              <div className="text-xs text-muted-foreground">
+                                {center.center_id || "ID pending"}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-foreground">
+                                {center.partner_name}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-foreground">
+                                {center.city}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {center.state}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-foreground">
+                                {center.center_type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-muted-foreground">
+                                {formatDate(center.created_at)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedItem(center);
+                                    setModalType("center");
+                                    setShowApproveModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600"
                                 >
-                                  {batch.status}
-                                </span>
+                                  <CheckCircleIcon className="h-4 w-4" />
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedItem(center);
+                                    setModalType("center");
+                                    setShowRejectModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600"
+                                >
+                                  <XCircleIcon className="h-4 w-4" />
+                                  Reject
+                                </button>
                               </div>
-                            </button>
-
-                            {/* Students Table */}
-                            {expandedBatches.has(batch.id) && (
-                              <div className="px-6 pb-4">
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="bg-muted">
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                                          Student ID
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                                          Name
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                                          Gender
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                                          Course
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                                          Duration
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                                          Status
-                                        </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                                          Contact
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border bg-white">
-                                      {loadingBatches.has(batch.id) ? (
-                                        <tr>
-                                          <td
-                                            colSpan="7"
-                                            className="px-3 py-8 text-center"
-                                          >
-                                            <ArrowPathIcon className="h-6 w-6 text-primary-500 animate-spin mx-auto mb-2" />
-                                            <p className="text-muted-foreground text-sm">
-                                              Loading students...
-                                            </p>
-                                          </td>
-                                        </tr>
-                                      ) : batchStudents[batch.id]?.students
-                                          ?.length > 0 ? (
-                                        <>
-                                          {batchStudents[batch.id].students.map(
-                                            (student) => (
-                                              <tr
-                                                key={student.id}
-                                                className="hover:bg-background-secondary"
-                                              >
-                                                <td className="px-3 py-2 text-foreground">
-                                                  {student.student_id}
-                                                </td>
-                                                <td className="px-3 py-2 text-foreground font-medium">
-                                                  {student.student_name}
-                                                </td>
-                                                <td className="px-3 py-2 text-muted-foreground">
-                                                  {student.gender}
-                                                </td>
-                                                <td className="px-3 py-2 text-foreground">
-                                                  {student.course_name}
-                                                </td>
-                                                <td className="px-3 py-2 text-muted-foreground">
-                                                  {student.course_duration_months
-                                                    ? `${student.course_duration_months} months`
-                                                    : "N/A"}
-                                                </td>
-                                                <td className="px-3 py-2">
-                                                  <span
-                                                    className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                                                      student.training_status ===
-                                                      "in_progress"
-                                                        ? "bg-blue-100 text-blue-700"
-                                                        : student.training_status ===
-                                                          "completed"
-                                                        ? "bg-primary-100 text-primary-700"
-                                                        : student.training_status ===
-                                                          "enrolled"
-                                                        ? "bg-secondary-100 text-secondary-700"
-                                                        : "bg-muted text-muted-foreground"
-                                                    }`}
-                                                  >
-                                                    {student.training_status}
-                                                  </span>
-                                                </td>
-                                                <td className="px-3 py-2 text-muted-foreground text-xs">
-                                                  {student.mobile_number ||
-                                                    student.email ||
-                                                    "N/A"}
-                                                </td>
-                                              </tr>
-                                            )
-                                          )}
-                                          {/* Pagination Controls */}
-                                          {batchStudents[batch.id].pagination
-                                            .totalPages > 1 && (
-                                            <tr>
-                                              <td
-                                                colSpan="7"
-                                                className="px-3 py-3 bg-background-secondary"
-                                              >
-                                                <div className="flex items-center justify-between">
-                                                  <div className="text-sm text-muted-foreground">
-                                                    Showing{" "}
-                                                    {(batchStudents[batch.id]
-                                                      .pagination.page -
-                                                      1) *
-                                                      50 +
-                                                      1}{" "}
-                                                    to{" "}
-                                                    {Math.min(
-                                                      batchStudents[batch.id]
-                                                        .pagination.page * 50,
-                                                      batchStudents[batch.id]
-                                                        .pagination.total
-                                                    )}{" "}
-                                                    of{" "}
-                                                    {
-                                                      batchStudents[batch.id]
-                                                        .pagination.total
-                                                    }{" "}
-                                                    students
-                                                  </div>
-                                                  <div className="flex gap-2">
-                                                    <button
-                                                      onClick={() =>
-                                                        loadBatchStudents(
-                                                          batch.id,
-                                                          batchStudents[
-                                                            batch.id
-                                                          ].pagination.page - 1
-                                                        )
-                                                      }
-                                                      disabled={
-                                                        batchStudents[batch.id]
-                                                          .pagination.page === 1
-                                                      }
-                                                      className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
-                                                    >
-                                                      Previous
-                                                    </button>
-                                                    <span className="px-3 py-1 text-sm text-foreground">
-                                                      Page{" "}
-                                                      {
-                                                        batchStudents[batch.id]
-                                                          .pagination.page
-                                                      }{" "}
-                                                      of{" "}
-                                                      {
-                                                        batchStudents[batch.id]
-                                                          .pagination.totalPages
-                                                      }
-                                                    </span>
-                                                    <button
-                                                      onClick={() =>
-                                                        loadBatchStudents(
-                                                          batch.id,
-                                                          batchStudents[
-                                                            batch.id
-                                                          ].pagination.page + 1
-                                                        )
-                                                      }
-                                                      disabled={
-                                                        batchStudents[batch.id]
-                                                          .pagination.page ===
-                                                        batchStudents[batch.id]
-                                                          .pagination.totalPages
-                                                      }
-                                                      className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
-                                                    >
-                                                      Next
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              </td>
-                                            </tr>
-                                          )}
-                                        </>
-                                      ) : (
-                                        <tr>
-                                          <td
-                                            colSpan="7"
-                                            className="px-3 py-8 text-center text-muted-foreground"
-                                          >
-                                            No students found
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                            </td>
+                          </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {centersPagination.totalPages > 1 && (
+                    <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Showing{" "}
+                        {(centersPagination.page - 1) *
+                          centersPagination.limit +
+                          1}{" "}
+                        to{" "}
+                        {Math.min(
+                          centersPagination.page * centersPagination.limit,
+                          centersPagination.total
+                        )}{" "}
+                        of {centersPagination.total} results
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() =>
+                            setCentersPagination((prev) => ({
+                              ...prev,
+                              page: prev.page - 1,
+                            }))
+                          }
+                          disabled={centersPagination.page === 1}
+                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() =>
+                            setCentersPagination((prev) => ({
+                              ...prev,
+                              page: prev.page + 1,
+                            }))
+                          }
+                          disabled={
+                            centersPagination.page ===
+                            centersPagination.totalPages
+                          }
+                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                        >
+                          Next
+                        </button>
                       </div>
                     </div>
                   )}
-                </div>
-              ))}
+                </>
+              )}
             </div>
           </div>
-        </div>
-      </div>
+        ) : (
+          /* Tab 2: Pending Data Uploads */
+          <div className="space-y-6">
+            {/* Search Bar */}
+            <div className="bg-white p-4 rounded-lg shadow-card">
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search by file name or partner..."
+                  value={uploadsSearch}
+                  onChange={(e) => setUploadsSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+            </div>
 
-      {/* Reject Modal */}
-      <RejectionModal
-        isOpen={showRejectModal}
-        onClose={() => {
-          setShowRejectModal(false);
-          setRejectionReason("");
-          setRemarks("");
-        }}
-        title="Reject Upload"
-        description="Please provide a reason for rejecting this upload. This will be sent to the partner for review."
-        onSubmit={async ({ reason, remarks }) => {
-          try {
-            setIsProcessing(true);
-            await rejectUpload(id, reason, remarks);
-            setShowRejectModal(false);
-            setTimeout(() => {
-              navigate("/inbox");
-            }, 1500);
-          } catch (error) {
-            console.error("Error rejecting upload:", error);
-          } finally {
-            setIsProcessing(false);
+            {/* Uploads Table */}
+            <div className="bg-white rounded-lg shadow-card overflow-hidden">
+              {uploadsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <ArrowPathIcon className="h-8 w-8 text-primary-500 animate-spin" />
+                </div>
+              ) : uploadsError ? (
+                <div className="text-center py-12">
+                  <p className="text-destructive">{uploadsError}</p>
+                  <button
+                    onClick={fetchPendingUploads}
+                    className="mt-4 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : uploads.length === 0 ? (
+                <div className="text-center py-12">
+                  <CheckCircleIcon className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <p className="text-muted-foreground">
+                    No pending data uploads to review
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-muted">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            File Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Partner
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Batches
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Students
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Uploaded
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {uploads.map((upload) => (
+                          <tr
+                            key={upload.id}
+                            className="hover:bg-background-secondary"
+                          >
+                            <td className="px-6 py-4">
+                              <div className="text-sm font-medium text-foreground">
+                                {upload.file_name}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-foreground">
+                                {upload.partner_name}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm font-medium text-foreground">
+                                {upload.total_batches_uploaded || 0}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm font-medium text-foreground">
+                                {upload.total_students_uploaded || 0}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-muted-foreground">
+                                {formatDate(upload.created_at)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                by {upload.uploaded_by_name}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              {getStatusBadge(upload.status)}
+                            </td>
+                            <td className="px-6 py-4">
+                              <button
+                                onClick={() =>
+                                  handleViewUploadDetails(upload.id)
+                                }
+                                className="text-primary-600 hover:text-primary-700 font-medium text-sm"
+                              >
+                                Review Details →
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {uploadsPagination.totalPages > 1 && (
+                    <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Showing{" "}
+                        {(uploadsPagination.page - 1) *
+                          uploadsPagination.limit +
+                          1}{" "}
+                        to{" "}
+                        {Math.min(
+                          uploadsPagination.page * uploadsPagination.limit,
+                          uploadsPagination.total
+                        )}{" "}
+                        of {uploadsPagination.total} results
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() =>
+                            setUploadsPagination((prev) => ({
+                              ...prev,
+                              page: prev.page - 1,
+                            }))
+                          }
+                          disabled={uploadsPagination.page === 1}
+                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() =>
+                            setUploadsPagination((prev) => ({
+                              ...prev,
+                              page: prev.page + 1,
+                            }))
+                          }
+                          disabled={
+                            uploadsPagination.page ===
+                            uploadsPagination.totalPages
+                          }
+                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Approve Modal */}
+        <SuccessModal
+          isOpen={showApproveModal}
+          onClose={() => {
+            setShowApproveModal(false);
+            setSelectedItem(null);
+          }}
+          title={
+            modalType === "center" ? "Approve Center" : "Approve Data Upload"
           }
-        }}
-        isLoading={isProcessing}
-        reasonLabel="Rejection Reason"
-        remarksLabel="Additional Remarks"
-        reasonPlaceholder="Explain why this upload is being rejected..."
-        remarksPlaceholder="Any additional comments..."
-        minReasonLength={1}
-      />
+          description={
+            modalType === "center"
+              ? `Are you sure you want to approve "${selectedItem?.center_name}"? This center will become active and partners can upload student data for it.`
+              : `Are you sure you want to approve this data upload? Students and batches will be moved to production.`
+          }
+          partnerName={selectedItem?.partner_name || ""}
+          centerName={
+            selectedItem?.center_name || selectedItem?.file_name || ""
+          }
+          onConfirm={
+            modalType === "center" ? handleApproveCenter : () => {} // Upload approval goes to detail page
+          }
+          isLoading={isProcessing}
+          showCancel={true}
+          buttonText="Confirm Approval"
+        />
 
-      {/* Approve Modal */}
-      <SuccessModal
-        isOpen={showApproveModal}
-        onClose={() => setShowApproveModal(false)}
-        title="Approve Upload"
-        description="Are you sure you want to approve this upload? This will move all data to production."
-        partnerName={upload?.partner_name || ""}
-        centerName={`${upload?.centers?.length || 0} Centers`}
-        onConfirm={handleApproveConfirm}
-        isLoading={isProcessing}
-        showCancel={true}
-        buttonText="Confirm Approval"
-      />
+        {/* Reject Modal */}
+        <RejectionModal
+          isOpen={showRejectModal}
+          onClose={() => {
+            setShowRejectModal(false);
+            setSelectedItem(null);
+          }}
+          title={
+            modalType === "center"
+              ? `Reject Center: ${selectedItem?.center_name || ""}`
+              : `Reject Upload: ${selectedItem?.file_name || ""}`
+          }
+          description={
+            modalType === "center"
+              ? "Please provide a reason for rejecting this center. This will be sent to the partner for review."
+              : "Please provide a reason for rejecting this data upload."
+          }
+          onSubmit={
+            modalType === "center"
+              ? (data) => handleRejectCenter(data.reason, data.remarks)
+              : () => {} // Upload rejection goes to detail page
+          }
+          isLoading={isProcessing}
+          reasonLabel="Reason for Rejection"
+          remarksLabel="Additional Remarks"
+          reasonPlaceholder="Enter the reason for rejection (10-500 characters)"
+          remarksPlaceholder="Any additional comments..."
+          minReasonLength={10}
+        />
+      </div>
     </MainLayout>
   );
 };

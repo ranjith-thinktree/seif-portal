@@ -1,6 +1,8 @@
 const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
 const { convertToUUID } = require('../../../utils/uuid.util');
+const bcrypt = require('bcryptjs');
+const emailService = require('../../../utils/email.util');
 
 /**
  * Partner Service
@@ -25,6 +27,11 @@ class PartnerService {
     status = '',
     approval_status = '',
     role = '',
+    type = '',
+    city = '',
+    state = '',
+    sort_by = 'created_at',
+    sort_order = 'desc',
   }) {
     try {
       const offset = (page - 1) * limit;
@@ -34,34 +41,73 @@ class PartnerService {
       // Role-based filtering
       // Only ADMIN and SUPER_ADMIN can see pending partners
       if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
-        whereConditions.push('approval_status = ?');
+        whereConditions.push('p.approval_status = ?');
         queryParams.push('approved');
       } else if (approval_status) {
-        whereConditions.push('approval_status = ?');
+        whereConditions.push('p.approval_status = ?');
         queryParams.push(approval_status);
       }
 
       // Status filter
       if (status) {
-        whereConditions.push('status = ?');
+        whereConditions.push('p.status = ?');
         queryParams.push(status);
+      }
+
+      // Type filter
+      if (type) {
+        whereConditions.push('p.organization_type = ?');
+        queryParams.push(type);
+      }
+
+      // City filter
+      if (city) {
+        whereConditions.push('p.city = ?');
+        queryParams.push(city);
+      }
+
+      // State filter
+      if (state) {
+        whereConditions.push('p.state = ?');
+        queryParams.push(state);
       }
 
       // Search filter
       if (search) {
         whereConditions.push(
-          '(name LIKE ? OR contact_person LIKE ? OR contact_email LIKE ? OR city LIKE ? OR state LIKE ?)'
+          '(p.name LIKE ? OR p.id LIKE ? OR p.organization_type LIKE ? OR p.contact_person LIKE ? OR p.contact_email LIKE ? OR p.city LIKE ? OR p.state LIKE ?)'
         );
         const searchPattern = `%${search}%`;
-        queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+        queryParams.push(
+          searchPattern,
+          searchPattern,
+          searchPattern,
+          searchPattern,
+          searchPattern,
+          searchPattern,
+          searchPattern
+        );
       }
 
       const whereClause =
         whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
+      // Validate sort field
+      const allowedSortFields = [
+        'name',
+        'partner_id',
+        'organization_type',
+        'city',
+        'state',
+        'status',
+        'created_at',
+      ];
+      const sortField = allowedSortFields.includes(sort_by) ? `p.${sort_by}` : 'p.created_at';
+      const sortDirection = sort_order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
       // Get total count
       const countResult = await db.query(
-        `SELECT COUNT(*) as total FROM partners ${whereClause}`,
+        `SELECT COUNT(*) as total FROM partners p ${whereClause}`,
         queryParams
       );
       const total = countResult[0].total;
@@ -78,7 +124,7 @@ class PartnerService {
         FROM partners p
         LEFT JOIN users u ON p.approved_by = u.id
         ${whereClause}
-        ORDER BY p.created_at DESC
+        ORDER BY ${sortField} ${sortDirection}
         LIMIT ? OFFSET ?`,
         [...queryParams, limit, offset]
       );
@@ -131,58 +177,210 @@ class PartnerService {
   }
 
   /**
-   * Create new partner
+   * Create new partner with comprehensive onboarding
    * @param {Object} partnerData - Partner data
-   * @returns {Promise<Object>} Created partner
+   * @returns {Promise<Object>} Created partner with user account
    */
   async createPartner(partnerData) {
+    const connection = await db.getConnection();
+
     try {
+      await connection.beginTransaction();
+
       const partnerId = uuidv4();
+      const userId = uuidv4();
 
       const {
+        // Basic Information
         name,
         organization_type,
-        contact_person,
-        contact_email,
-        contact_phone,
+        partner_email, // Email for login
+
+        // Location Information
+        country_id,
+        state_id,
+        city_id,
+        region,
         address_line1,
         address_line2,
-        city,
-        state,
-        country = 'India',
         postal_code,
+
+        // Contact Information
+        contact_person,
+        contact_phone,
+        contact_person_2_name,
+        contact_person_2_mobile,
+
+        // Legal Information
+        date_of_incorporation,
+        legal_status,
+        registered_as,
+        fcra_registration_number,
+        years_of_experience,
+
+        // Presence in States (array of state IDs)
+        state_presence = [],
+
+        // System fields
         status = 'active',
-        approval_status = 'approved', // Auto-approved when admin creates
         registration_date,
       } = partnerData;
 
-      await db.query(
+      // Get country, state, city names for storing in partners table
+      let countryName = 'India';
+      let stateName = null;
+      let cityName = null;
+
+      if (country_id) {
+        const countryResult = await connection.query('SELECT name FROM countries WHERE id = ?', [
+          country_id,
+        ]);
+        if (countryResult[0] && countryResult[0].length > 0) {
+          countryName = countryResult[0][0].name;
+        }
+      }
+
+      if (state_id) {
+        const stateResult = await connection.query('SELECT name FROM states WHERE id = ?', [
+          state_id,
+        ]);
+        if (stateResult[0] && stateResult[0].length > 0) {
+          stateName = stateResult[0][0].name;
+        }
+      }
+
+      if (city_id) {
+        const cityResult = await connection.query('SELECT name FROM cities WHERE id = ?', [
+          city_id,
+        ]);
+        if (cityResult[0] && cityResult[0].length > 0) {
+          cityName = cityResult[0][0].name;
+        }
+      }
+
+      // Generate readable partner_id
+      const countResult = await connection.query(
+        'SELECT COALESCE(MAX(CAST(SUBSTRING(partner_id, 6) AS UNSIGNED)), 0) + 1 as next_id FROM partners'
+      );
+
+      // Debug log
+      console.log('Count result:', countResult);
+
+      // Extract next_id from query result
+      // Result format: [ [ { next_id: '2' } ], metadata ]
+      let nextNumber = 1; // Default to 1 if no partners exist
+
+      if (countResult && countResult.length > 0 && countResult[0].length > 0) {
+        const result = countResult[0][0];
+        nextNumber = result?.next_id;
+
+        // Convert to number and validate
+        if (nextNumber !== undefined && nextNumber !== null) {
+          nextNumber = parseInt(nextNumber, 10);
+          if (isNaN(nextNumber) || nextNumber < 1) {
+            nextNumber = 1;
+          }
+        } else {
+          nextNumber = 1;
+        }
+      }
+
+      console.log('Next partner number:', nextNumber);
+      const readablePartnerId = `ORG-${String(nextNumber).padStart(4, '0')}`;
+
+      // Insert partner record with BOTH text names AND reference IDs
+      await connection.query(
         `INSERT INTO partners (
-          id, name, organization_type, contact_person, contact_email, contact_phone,
-          address_line1, address_line2, city, state, country, postal_code,
-          status, approval_status, registration_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, partner_id, name, organization_type, contact_person, contact_email, contact_phone,
+          contact_person_2_name, contact_person_2_mobile,
+          address_line1, address_line2, city, state, country, postal_code, region,
+          country_ref_id, state_ref_id, city_ref_id,
+          date_of_incorporation, legal_status, registered_as, fcra_registration_number,
+          years_of_experience, status, approval_status, registration_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           partnerId,
+          readablePartnerId,
           name,
           organization_type,
           contact_person,
-          contact_email,
+          partner_email,
           contact_phone,
+          contact_person_2_name || null,
+          contact_person_2_mobile || null,
           address_line1,
-          address_line2,
-          city,
-          state,
-          country,
-          postal_code,
+          address_line2 || null,
+          cityName,
+          stateName,
+          countryName,
+          postal_code || null,
+          region || null,
+          country_id || null,
+          state_id || null,
+          city_id || null,
+          date_of_incorporation || null,
+          legal_status || null,
+          registered_as || null,
+          fcra_registration_number || null,
+          years_of_experience || null,
           status,
-          approval_status,
-          registration_date,
+          'approved', // Auto-approved when admin creates
+          registration_date || null,
         ]
       );
 
+      // Insert partner state presence (if provided)
+      if (state_presence && state_presence.length > 0) {
+        const presenceValues = state_presence.map((stateId) => [partnerId, stateId]);
+        await connection.query(
+          'INSERT INTO partner_state_presence (partner_id, state_id) VALUES ?',
+          [presenceValues]
+        );
+      }
+
+      // Generate temporary password
+      const tempPassword = emailService.generatePassword(12);
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      // Create user account for partner login
+      await connection.query(
+        `INSERT INTO users (
+          id, email, password_hash, full_name, mobile_number, 
+          role, partner_id, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          userId,
+          partner_email,
+          passwordHash,
+          contact_person, // Use primary contact person as full name
+          contact_phone,
+          'PARTNER', // Role for partner login
+          partnerId,
+          'active',
+        ]
+      );
+
+      await connection.commit();
+
+      // Send welcome email with credentials (async, don't wait)
+      emailService
+        .sendPartnerWelcomeEmail({
+          email: partner_email,
+          name: name,
+          partnerId: readablePartnerId,
+          tempPassword: tempPassword,
+        })
+        .catch((err) => {
+          console.error('Failed to send welcome email:', err);
+          // Don't throw error - partner creation succeeded
+        });
+
+      // Return created partner
+      connection.release();
       return await this.getPartnerById(partnerId);
     } catch (error) {
+      await connection.rollback();
+      connection.release();
       console.error('Error in createPartner:', error);
       throw error;
     }
@@ -195,7 +393,11 @@ class PartnerService {
    * @returns {Promise<Object>} Updated partner
    */
   async updatePartner(id, updateData) {
+    const connection = await db.getConnection();
+
     try {
+      await connection.beginTransaction();
+
       const partnerId = convertToUUID(id);
 
       // Check if partner exists
@@ -205,17 +407,37 @@ class PartnerService {
       }
 
       const {
+        // Basic Information
         name,
         organization_type,
-        contact_person,
-        contact_email,
-        contact_phone,
+        partner_email,
+
+        // Location Information
+        country_id,
+        state_id,
+        city_id,
+        region,
         address_line1,
         address_line2,
-        city,
-        state,
-        country,
         postal_code,
+
+        // Contact Information
+        contact_person,
+        contact_phone,
+        contact_person_2_name,
+        contact_person_2_mobile,
+
+        // Legal Information
+        date_of_incorporation,
+        legal_status,
+        registered_as,
+        fcra_registration_number,
+        years_of_experience,
+
+        // Presence in States
+        state_presence,
+
+        // System fields
         status,
         registration_date,
       } = updateData;
@@ -223,6 +445,7 @@ class PartnerService {
       const updates = [];
       const values = [];
 
+      // Basic fields
       if (name !== undefined) {
         updates.push('name = ?');
         values.push(name);
@@ -231,61 +454,171 @@ class PartnerService {
         updates.push('organization_type = ?');
         values.push(organization_type);
       }
+      if (partner_email !== undefined) {
+        updates.push('contact_email = ?');
+        values.push(partner_email);
+      }
+
+      // Contact Information
       if (contact_person !== undefined) {
         updates.push('contact_person = ?');
         values.push(contact_person);
-      }
-      if (contact_email !== undefined) {
-        updates.push('contact_email = ?');
-        values.push(contact_email);
       }
       if (contact_phone !== undefined) {
         updates.push('contact_phone = ?');
         values.push(contact_phone);
       }
+      if (contact_person_2_name !== undefined) {
+        updates.push('contact_person_2_name = ?');
+        values.push(contact_person_2_name || null);
+      }
+      if (contact_person_2_mobile !== undefined) {
+        updates.push('contact_person_2_mobile = ?');
+        values.push(contact_person_2_mobile || null);
+      }
+
+      // Address fields
       if (address_line1 !== undefined) {
         updates.push('address_line1 = ?');
         values.push(address_line1);
       }
       if (address_line2 !== undefined) {
         updates.push('address_line2 = ?');
-        values.push(address_line2);
-      }
-      if (city !== undefined) {
-        updates.push('city = ?');
-        values.push(city);
-      }
-      if (state !== undefined) {
-        updates.push('state = ?');
-        values.push(state);
-      }
-      if (country !== undefined) {
-        updates.push('country = ?');
-        values.push(country);
+        values.push(address_line2 || null);
       }
       if (postal_code !== undefined) {
         updates.push('postal_code = ?');
-        values.push(postal_code);
+        values.push(postal_code || null);
       }
+      if (region !== undefined) {
+        updates.push('region = ?');
+        values.push(region || null);
+      }
+
+      // Location - handle both reference IDs AND text names
+      if (country_id !== undefined) {
+        updates.push('country_ref_id = ?');
+        values.push(country_id || null);
+
+        // Get country name
+        if (country_id) {
+          const countryResult = await connection.query('SELECT name FROM countries WHERE id = ?', [
+            country_id,
+          ]);
+          if (countryResult[0].length > 0) {
+            updates.push('country = ?');
+            values.push(countryResult[0][0].name);
+          }
+        } else {
+          updates.push('country = ?');
+          values.push(null);
+        }
+      }
+
+      if (state_id !== undefined) {
+        updates.push('state_ref_id = ?');
+        values.push(state_id || null);
+
+        // Get state name
+        if (state_id) {
+          const stateResult = await connection.query('SELECT name FROM states WHERE id = ?', [
+            state_id,
+          ]);
+          if (stateResult[0].length > 0) {
+            updates.push('state = ?');
+            values.push(stateResult[0][0].name);
+          }
+        } else {
+          updates.push('state = ?');
+          values.push(null);
+        }
+      }
+
+      if (city_id !== undefined) {
+        updates.push('city_ref_id = ?');
+        values.push(city_id || null);
+
+        // Get city name
+        if (city_id) {
+          const cityResult = await connection.query('SELECT name FROM cities WHERE id = ?', [
+            city_id,
+          ]);
+          if (cityResult[0].length > 0) {
+            updates.push('city = ?');
+            values.push(cityResult[0][0].name);
+          }
+        } else {
+          updates.push('city = ?');
+          values.push(null);
+        }
+      }
+
+      // Legal Information
+      if (date_of_incorporation !== undefined) {
+        updates.push('date_of_incorporation = ?');
+        values.push(date_of_incorporation || null);
+      }
+      if (legal_status !== undefined) {
+        updates.push('legal_status = ?');
+        values.push(legal_status || null);
+      }
+      if (registered_as !== undefined) {
+        updates.push('registered_as = ?');
+        values.push(registered_as || null);
+      }
+      if (fcra_registration_number !== undefined) {
+        updates.push('fcra_registration_number = ?');
+        values.push(fcra_registration_number || null);
+      }
+      if (years_of_experience !== undefined) {
+        updates.push('years_of_experience = ?');
+        values.push(years_of_experience || null);
+      }
+
+      // System fields
       if (status !== undefined) {
         updates.push('status = ?');
         values.push(status);
       }
       if (registration_date !== undefined) {
         updates.push('registration_date = ?');
-        values.push(registration_date);
+        values.push(registration_date || null);
+      }
+
+      // Update state presence if provided
+      if (state_presence !== undefined) {
+        // Delete existing state presence
+        await connection.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [
+          partnerId,
+        ]);
+
+        // Insert new state presence
+        if (state_presence && state_presence.length > 0) {
+          const presenceValues = state_presence.map((stateId) => [partnerId, stateId]);
+          await connection.query(
+            'INSERT INTO partner_state_presence (partner_id, state_id) VALUES ?',
+            [presenceValues]
+          );
+        }
       }
 
       if (updates.length === 0) {
+        await connection.commit();
+        connection.release();
         return existingPartner;
       }
 
       values.push(partnerId);
 
-      await db.query(`UPDATE partners SET ${updates.join(', ')} WHERE id = ?`, values);
+      await connection.query(`UPDATE partners SET ${updates.join(', ')} WHERE id = ?`, values);
+
+      await connection.commit();
+      connection.release();
 
       return await this.getPartnerById(partnerId);
     } catch (error) {
+      await connection.rollback();
+      connection.release();
       console.error('Error in updatePartner:', error);
       throw error;
     }
@@ -317,6 +650,11 @@ class PartnerService {
         );
       }
 
+      // Delete associated user accounts (partner login accounts are automatically created)
+      // This only deletes users with role='PARTNER' linked to this partner
+      await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [partnerId]);
+
+      // Delete the partner
       await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
 
       return true;
@@ -473,7 +811,7 @@ class PartnerService {
       const partnerUuid = convertToUUID(partnerId);
       const offset = (page - 1) * limit;
 
-      let whereConditions = ['du.partner_id = ?'];
+      let whereConditions = ['du.partner_id = ?', 'du.deleted_at IS NULL'];
       let queryParams = [partnerUuid];
 
       // Search filter
@@ -549,7 +887,7 @@ class PartnerService {
           u.full_name as uploaded_by_name
         FROM data_uploads du
         LEFT JOIN users u ON du.uploaded_by = u.id
-        WHERE du.id = ? AND du.partner_id = ?`,
+        WHERE du.id = ? AND du.partner_id = ? AND du.deleted_at IS NULL`,
         [uploadUuid, partnerUuid]
       );
 
@@ -626,7 +964,9 @@ class PartnerService {
 
       // Search filter
       if (search) {
-        whereConditions.push('(us.student_name LIKE ? OR us.student_id LIKE ? OR us.email LIKE ?)');
+        whereConditions.push(
+          '(us.student_name LIKE ? OR us.partner_student_id LIKE ? OR us.email LIKE ?)'
+        );
         const searchPattern = `%${search}%`;
         queryParams.push(searchPattern, searchPattern, searchPattern);
       }
@@ -1029,7 +1369,7 @@ class PartnerService {
           const newStudentId = uuidv4();
           await connection.query(
             `INSERT INTO uploaded_students 
-            (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, partner_id, student_id, student_name, date_of_birth, gender, mobile_number, email, address, city, state, enrollment_date, course_name, course_duration_months, training_status, is_edited, created_at)
+            (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, partner_id, partner_student_id, student_name, date_of_birth, gender, mobile_number, email, address, city, state, enrollment_date, course_name, course_duration_months, training_status, is_edited, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())`,
             [
               newStudentId,
@@ -1038,7 +1378,7 @@ class PartnerService {
               batchId,
               centerUuid,
               partnerUuid,
-              csvStudent.student_id,
+              csvStudent.partner_student_id,
               csvStudent.student_name,
               csvStudent.date_of_birth,
               csvStudent.gender,
@@ -1268,7 +1608,7 @@ class PartnerService {
 
             await connection.query(
               `INSERT INTO uploaded_students 
-              (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, partner_id, student_id, student_name, date_of_birth, gender, mobile_number, email, address, city, state, enrollment_date, course_name, course_duration_months, training_status, review_status, is_edited, created_at)
+              (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, partner_id, partner_student_id, student_name, date_of_birth, gender, mobile_number, email, address, city, state, enrollment_date, course_name, course_duration_months, training_status, review_status, is_edited, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, NOW())`,
               [
                 newStudentId,
@@ -1277,7 +1617,7 @@ class PartnerService {
                 newBatchId,
                 newCenterId,
                 partnerUuid,
-                student.student_id,
+                student.partner_student_id,
                 student.student_name,
                 student.date_of_birth,
                 student.gender,
@@ -1382,7 +1722,7 @@ class PartnerService {
         `SELECT 
           del.*,
           us.student_name,
-          us.student_id,
+          us.partner_student_id,
           u.full_name as edited_by_name
         FROM data_edit_logs del
         INNER JOIN uploaded_students us ON del.record_id = us.id
@@ -1397,7 +1737,7 @@ class PartnerService {
       editLogs.forEach((log) => {
         if (!changesByStudent[log.record_id]) {
           changesByStudent[log.record_id] = {
-            student_id: log.student_id,
+            partner_student_id: log.partner_student_id,
             student_name: log.student_name,
             changes: [],
           };
@@ -1414,6 +1754,360 @@ class PartnerService {
       return Object.values(changesByStudent);
     } catch (error) {
       console.error('Error in getUploadChanges:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get filter options for partners
+   * @param {Object} options - Filter options
+   * @param {string} options.role - User role
+   * @returns {Promise<Object>} Filter options
+   */
+  async getFilterOptions({ role }) {
+    try {
+      let whereCondition = '';
+      let queryParams = [];
+
+      // Role-based filtering - same as getAllPartners
+      if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+        whereCondition = 'WHERE approval_status = ?';
+        queryParams = ['approved'];
+      }
+
+      // Get unique values for each filterable field
+      const [types, cities, states, statuses, approvalStatuses] = await Promise.all([
+        // Partner Types (organization_type column)
+        db.query(
+          `SELECT DISTINCT organization_type as value, organization_type as label 
+           FROM partners 
+           ${whereCondition}
+           ${whereCondition ? 'AND' : 'WHERE'} organization_type IS NOT NULL AND organization_type != ''
+           ORDER BY organization_type ASC`,
+          queryParams
+        ),
+        // Cities
+        db.query(
+          `SELECT DISTINCT city as value, city as label 
+           FROM partners 
+           ${whereCondition}
+           ${whereCondition ? 'AND' : 'WHERE'} city IS NOT NULL AND city != ''
+           ORDER BY city ASC`,
+          queryParams
+        ),
+        // States
+        db.query(
+          `SELECT DISTINCT state as value, state as label 
+           FROM partners 
+           ${whereCondition}
+           ${whereCondition ? 'AND' : 'WHERE'} state IS NOT NULL AND state != ''
+           ORDER BY state ASC`,
+          queryParams
+        ),
+        // Status
+        db.query(
+          `SELECT DISTINCT status as value, 
+           CONCAT(UPPER(SUBSTRING(status, 1, 1)), SUBSTRING(status, 2)) as label 
+           FROM partners 
+           ${whereCondition}
+           ${whereCondition ? 'AND' : 'WHERE'} status IS NOT NULL
+           ORDER BY status ASC`,
+          queryParams
+        ),
+        // Approval Status (only for admins)
+        role === 'ADMIN' || role === 'SUPER_ADMIN'
+          ? db.query(
+              `SELECT DISTINCT approval_status as value, 
+               CONCAT(UPPER(SUBSTRING(approval_status, 1, 1)), SUBSTRING(approval_status, 2)) as label 
+               FROM partners 
+               WHERE approval_status IS NOT NULL
+               ORDER BY approval_status ASC`
+            )
+          : Promise.resolve([]),
+      ]);
+
+      return {
+        types: types.map((t) => ({ value: t.value, label: t.label })),
+        cities: cities.map((c) => ({ value: c.value, label: c.label })),
+        states: states.map((s) => ({ value: s.value, label: s.label })),
+        statuses: statuses.map((st) => ({ value: st.value, label: st.label })),
+        approvalStatuses: approvalStatuses.map((as) => ({ value: as.value, label: as.label })),
+      };
+    } catch (error) {
+      console.error('Error in getFilterOptions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all countries for dropdown
+   * @returns {Promise<Array>} List of countries
+   */
+  async getCountries() {
+    try {
+      const countries = await db.query(
+        `SELECT id, name, code FROM countries WHERE is_active = 1 ORDER BY name ASC`
+      );
+      return countries;
+    } catch (error) {
+      console.error('Error in getCountries:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get states by country ID
+   * @param {number} countryId - Country ID
+   * @returns {Promise<Array>} List of states
+   */
+  async getStatesByCountry(countryId) {
+    try {
+      const states = await db.query(
+        `SELECT id, name, code FROM states WHERE country_id = ? AND is_active = 1 ORDER BY name ASC`,
+        [countryId]
+      );
+      return states;
+    } catch (error) {
+      console.error('Error in getStatesByCountry:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get cities by state ID and country ID
+   * Handles both countries with states and countries without states
+   * @param {number} stateId - State ID (optional)
+   * @param {number} countryId - Country ID
+   * @returns {Promise<Array>} List of cities
+   */
+  async getCitiesByStateAndCountry(stateId, countryId) {
+    try {
+      let query =
+        'SELECT id, name, latitude, longitude FROM cities WHERE country_id = ? AND is_active = 1';
+      let params = [countryId];
+
+      if (stateId) {
+        // Country has states - filter by specific state
+        query += ' AND state_id = ?';
+        params.push(stateId);
+      } else {
+        // Check if country has any states
+        const stateCount = await db.query(
+          'SELECT COUNT(*) as count FROM states WHERE country_id = ? AND is_active = 1',
+          [countryId]
+        );
+
+        if (stateCount[0].count === 0) {
+          // Country has no states - show all cities
+          // No additional filter needed
+        } else {
+          // Country has states but none selected - show cities without state assignment
+          query += ' AND state_id IS NULL';
+        }
+      }
+
+      query += ' ORDER BY name ASC LIMIT 1000'; // Limit for performance
+
+      const cities = await db.query(query, params);
+      return cities;
+    } catch (error) {
+      console.error('Error in getCitiesByStateAndCountry:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all regions for dropdown
+   * @returns {Promise<Array>} List of regions
+   */
+  async getRegions() {
+    try {
+      const regions = await db.query(
+        `SELECT id, code, name FROM regions WHERE is_active = 1 ORDER BY code ASC`
+      );
+      return regions;
+    } catch (error) {
+      console.error('Error in getRegions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get registered_as dropdown options
+   * @returns {Array} List of registration types
+   */
+  getRegisteredAsOptions() {
+    return [
+      { value: 'Trust', label: 'Trust' },
+      { value: 'Foundation', label: 'Foundation' },
+      { value: 'Section 25 Company', label: 'Section 25 Company' },
+    ];
+  }
+
+  /**
+   * Get organization type dropdown options
+   * @returns {Array} List of organization types
+   */
+  getOrganizationTypeOptions() {
+    return [
+      { value: 'NGO', label: 'NGO' },
+      { value: 'Trust', label: 'Trust' },
+      { value: 'Private Company', label: 'Private Company' },
+      { value: 'Government', label: 'Government' },
+      { value: 'Educational Institute', label: 'Educational Institute' },
+    ];
+  }
+
+  /**
+   * Resend welcome email to partner
+   * @param {string} partnerId - Partner UUID
+   * @returns {Promise<void>}
+   */
+  async resendWelcomeEmail(partnerId) {
+    try {
+      // Get partner details
+      const partnerRows = await db.query(
+        `SELECT id, partner_id, name, contact_email 
+         FROM partners 
+         WHERE id = ?`,
+        [partnerId]
+      );
+
+      if (!partnerRows || partnerRows.length === 0) {
+        throw new Error('Partner not found');
+      }
+
+      const partner = partnerRows[0];
+
+      // Get user account details
+      const userRows = await db.query(
+        `SELECT email, password_hash 
+         FROM users 
+         WHERE partner_id = ? AND role = 'PARTNER'`,
+        [partnerId]
+      );
+
+      if (!userRows || userRows.length === 0) {
+        throw new Error('No user account found for this partner');
+      }
+
+      // Generate new temporary password
+      const tempPassword = emailService.generatePassword(12);
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      // Update user password
+      await db.query(
+        `UPDATE users 
+         SET password_hash = ?, updated_at = NOW()
+         WHERE partner_id = ? AND role = 'PARTNER'`,
+        [passwordHash, partnerId]
+      );
+
+      // Send welcome email with new credentials
+      await emailService.sendPartnerWelcomeEmail({
+        email: partner.contact_email,
+        name: partner.name,
+        partnerId: partner.partner_id,
+        tempPassword: tempPassword,
+      });
+
+      console.log(`Welcome email resent to partner: ${partner.partner_id}`);
+    } catch (error) {
+      console.error('Error in resendWelcomeEmail:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk delete partners with dependency checking
+   * @param {Array<string>} ids - Array of partner IDs to delete
+   * @param {string} role - User role
+   * @param {string} userPartnerId - Partner ID of the user (for PARTNER role)
+   * @returns {Promise<Object>} Deletion results with success/failure details
+   */
+  async bulkDeletePartners(ids, role, userPartnerId = null) {
+    try {
+      const results = {
+        success: [],
+        failed: [],
+        summary: {
+          total: ids.length,
+          successful: 0,
+          failed: 0,
+        },
+      };
+
+      // Convert all IDs to UUIDs
+      const partnerUUIDs = ids.map((id) => convertToUUID(id));
+
+      // Authorization check for PARTNER role
+      if (role === 'PARTNER') {
+        throw new Error('Partners are not authorized to delete partner organizations');
+      }
+
+      // Validate all partners exist first
+      for (const partnerId of partnerUUIDs) {
+        try {
+          const partner = await this.getPartnerById(partnerId);
+          if (!partner) {
+            results.failed.push({
+              id: partnerId,
+              readable_id: partnerId,
+              name: 'Unknown',
+              reason: 'Partner not found',
+            });
+            continue;
+          }
+
+          // Check for dependencies
+          const centers = await db.query(
+            'SELECT COUNT(*) as count FROM centers WHERE partner_id = ?',
+            [partnerId]
+          );
+
+          if (centers[0].count > 0) {
+            results.failed.push({
+              id: partnerId,
+              readable_id: partner.partner_id,
+              name: partner.name,
+              reason: `Cannot delete partner with ${centers[0].count} existing center(s). Please delete all centers first.`,
+            });
+            continue;
+          }
+
+          // All checks passed - safe to delete
+          // Delete associated user accounts first
+          await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [
+            partnerId,
+          ]);
+
+          // Delete partner_state_presence records
+          await db.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
+
+          // Delete the partner
+          await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
+
+          results.success.push({
+            id: partnerId,
+            readable_id: partner.partner_id,
+            name: partner.name,
+          });
+        } catch (error) {
+          results.failed.push({
+            id: partnerId,
+            readable_id: partnerId,
+            name: 'Unknown',
+            reason: error.message,
+          });
+        }
+      }
+
+      results.summary.successful = results.success.length;
+      results.summary.failed = results.failed.length;
+
+      return results;
+    } catch (error) {
+      console.error('Error in bulkDeletePartners:', error);
       throw error;
     }
   }

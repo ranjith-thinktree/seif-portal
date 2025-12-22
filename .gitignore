@@ -2,10 +2,13 @@
 
 # Documents directory
 documents/
+*.md
+!README.md
 
 # Database files (you may want to exclude actual database files)
 *.sql
 !schema.sql
+db/
 
 # Environment variables
 .env
@@ -21,3 +24,28 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Temporary files
+tmp/
+*.tmp
+*.swp
+
+# Backup files
+*.bak
+*~
+
+# Compiled files
+*.class
+*.o
+*.so
+*.exe
+*.dll
+
+# Node modules
+node_modules/
+# Python cache
+__pycache__/
+
+#Unwanted files
+solo/
+*.pem

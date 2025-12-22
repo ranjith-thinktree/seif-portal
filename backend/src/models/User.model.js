@@ -16,6 +16,7 @@ class UserModel {
       SELECT 
         id, email, password_hash, full_name, mobile_number, 
         role, partner_id, status, last_login_at, 
+        must_change_password, first_login, password_changed_at,
         created_at, updated_at
       FROM users 
       WHERE email = ?
@@ -34,6 +35,7 @@ class UserModel {
       SELECT 
         id, email, password_hash, full_name, mobile_number, 
         role, partner_id, status, last_login_at, 
+        must_change_password, first_login, password_changed_at,
         created_at, updated_at
       FROM users 
       WHERE id = ?
@@ -253,6 +255,83 @@ class UserModel {
       ORDER BY full_name ASC
     `;
     return await query(sql, [partnerId]);
+  }
+
+  /**
+   * Update password and related fields
+   * @param {String} userId - User UUID
+   * @param {String} newPasswordHash - New hashed password
+   */
+  static async updatePassword(userId, newPasswordHash) {
+    const sql = `
+      UPDATE users 
+      SET 
+        password_hash = ?,
+        password_changed_at = NOW(),
+        must_change_password = FALSE,
+        first_login = FALSE,
+        updated_at = NOW()
+      WHERE id = ?
+    `;
+    await query(sql, [newPasswordHash, userId]);
+  }
+
+  /**
+   * Add password to history
+   * @param {String} userId - User UUID
+   * @param {String} passwordHash - Password hash to store
+   */
+  static async addPasswordToHistory(userId, passwordHash) {
+    const { v4: uuidv4 } = require('uuid');
+    const sql = `
+      INSERT INTO password_history (id, user_id, password_hash, created_at)
+      VALUES (?, ?, ?, NOW())
+    `;
+    await query(sql, [uuidv4(), userId, passwordHash]);
+  }
+
+  /**
+   * Get password history for user
+   * @param {String} userId - User UUID
+   * @param {Number} limit - Number of recent passwords to fetch
+   * @returns {Array} Array of password history records
+   */
+  static async getPasswordHistory(userId, limit = 3) {
+    const sql = `
+      SELECT password_hash, created_at
+      FROM password_history
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `;
+    return await query(sql, [userId, limit]);
+  }
+
+  /**
+   * Set must change password flag
+   * @param {String} userId - User UUID
+   * @param {Boolean} value - True to force password change
+   */
+  static async setMustChangePassword(userId, value = true) {
+    const sql = `
+      UPDATE users 
+      SET must_change_password = ?, updated_at = NOW()
+      WHERE id = ?
+    `;
+    await query(sql, [value, userId]);
+  }
+
+  /**
+   * Mark first login as complete
+   * @param {String} userId - User UUID
+   */
+  static async markFirstLoginComplete(userId) {
+    const sql = `
+      UPDATE users 
+      SET first_login = FALSE, updated_at = NOW()
+      WHERE id = ?
+    `;
+    await query(sql, [userId]);
   }
 }
 

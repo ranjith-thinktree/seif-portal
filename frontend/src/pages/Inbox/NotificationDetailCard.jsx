@@ -43,7 +43,7 @@ const NotificationDetailCard = ({
     payload?.partner_name || payload?.partnerName || "Partner";
 
   // Extract data type from notification payload
-  const dataType = payload?.data_type || payload?.recurrence_type || "N/A";
+  // const dataType = payload?.data_type || payload?.recurrence_type || "N/A";
 
   // Format submission date and time combined
   const submissionDateTime = new Date(notification.created_at).toLocaleString(
@@ -105,8 +105,11 @@ const NotificationDetailCard = ({
 
   const handleReviewClick = () => {
     if (notification.related_entity_id) {
-      // Check user role and notification type
-      if (user?.role === "PARTNER") {
+      // Check related entity type
+      if (notification.related_entity_type === "center") {
+        // Navigate to pending centers review page
+        navigate(ROUTES.REVIEW_PENDING_CENTERS);
+      } else if (user?.role === "PARTNER") {
         // Partners navigate directly to centers page (same flow as admin)
         navigate(
           ROUTES.PARTNER_REJECTED_CENTERS.replace(
@@ -134,7 +137,11 @@ const NotificationDetailCard = ({
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
           <h2 className="text-lg font-semibold text-gray-900">
-            New Data uploaded: {partnerName}
+            {notification.related_entity_type === "center"
+              ? `New Center Created: ${
+                  payload?.centerName || "Review Required"
+                }`
+              : `New Data uploaded: ${partnerName}`}
           </h2>
           <div className="flex items-center gap-3">
             <Badge
@@ -176,7 +183,7 @@ const NotificationDetailCard = ({
               />
             </div>
 
-            <div>
+            {/* <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Data Type
               </label>
@@ -185,10 +192,10 @@ const NotificationDetailCard = ({
                 readOnly
                 className="bg-gray-50 cursor-not-allowed rounded-[16px]"
               />
-            </div>
+            </div> */}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label class Name="block text-sm font-medium text-gray-700 mb-1">
                 Submission Date & Time
               </label>
               <Input

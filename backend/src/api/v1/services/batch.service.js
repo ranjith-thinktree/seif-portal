@@ -33,16 +33,22 @@ class BatchService {
         queryParams.push(user_partner_id);
       }
 
-      // Center filter
+      // Center filter (supports array for multi-select)
       if (center_id) {
-        whereConditions.push('b.center_id = ?');
-        queryParams.push(center_id);
+        const centerIds = Array.isArray(center_id) ? center_id : [center_id];
+        if (centerIds.length > 0) {
+          whereConditions.push(`b.center_id IN (${centerIds.map(() => '?').join(',')})`);
+          queryParams.push(...centerIds);
+        }
       }
 
-      // Partner filter
+      // Partner filter (supports array for multi-select)
       if (partner_id) {
-        whereConditions.push('b.partner_id = ?');
-        queryParams.push(partner_id);
+        const partnerIds = Array.isArray(partner_id) ? partner_id : [partner_id];
+        if (partnerIds.length > 0) {
+          whereConditions.push(`b.partner_id IN (${partnerIds.map(() => '?').join(',')})`);
+          queryParams.push(...partnerIds);
+        }
       }
 
       // Status filter
@@ -260,10 +266,9 @@ class BatchService {
       }
 
       // Check if batch has students
-      const students = await db.query(
-        'SELECT COUNT(*) as count FROM students WHERE batch_id = ?',
-        [batchId]
-      );
+      const students = await db.query('SELECT COUNT(*) as count FROM students WHERE batch_id = ?', [
+        batchId,
+      ]);
 
       if (students[0].count > 0) {
         throw new Error(
@@ -302,6 +307,227 @@ class BatchService {
       return batches;
     } catch (error) {
       console.error('Error in getBatchesByCenter:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get filter options for batches
+   * @param {Object} options - Filter constraints (role, partner_id)
+   * @returns {Promise<Object>} Filter options
+   */
+  async getBatchFilterOptions({ role, user_partner_id }) {
+    try {
+      const whereClause = role === 'PARTNER' ? 'WHERE id = ?' : '';
+      const queryParams = role === 'PARTNER' ? [user_partner_id] : [];
+
+      // Get all partners (not just those with batches)
+      const partners = await db.query(
+        `SELECT id, name 
+        FROM partners
+        ${whereClause}
+        ORDER BY name ASC`,
+        queryParams
+      );
+
+      // Get all centers (optionally filtered by partner for PARTNER role)
+      const centerWhereClause = role === 'PARTNER' ? 'WHERE partner_id = ?' : '';
+      const centers = await db.query(
+        `SELECT id, center_name 
+        FROM centers
+        ${centerWhereClause}
+        ORDER BY center_name ASC`,
+        queryParams
+      );
+
+      // Get unique statuses
+      const statuses = ['active', 'completed', 'cancelled'];
+
+      return {
+        partners: partners.map((p) => ({ value: p.id, label: p.name })),
+        centers: centers.map((c) => ({ value: c.id, label: c.center_name })),
+        statuses: statuses.map((s) => ({
+          value: s,
+          label: s.charAt(0).toUpperCase() + s.slice(1),
+        })),
+      };
+    } catch (error) {
+      console.error('Error in getBatchFilterOptions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Export batches to CSV
+   * @param {Object} options - Export options
+   * @returns {Promise<String>} CSV data
+   */
+  async exportBatches({
+    search = '',
+    status = '',
+    center_id = '',
+    partner_id = '',
+    role = '',
+    user_partner_id = '',
+  }) {
+    try {
+      let whereConditions = [];
+      let queryParams = [];
+
+      // Role-based filtering
+      if (role === 'PARTNER') {
+        whereConditions.push('b.partner_id = ?');
+        queryParams.push(user_partner_id);
+      }
+
+      // Center filter (supports array for multi-select)
+      if (center_id) {
+        const centerIds = Array.isArray(center_id) ? center_id : [center_id];
+        if (centerIds.length > 0) {
+          whereConditions.push(`b.center_id IN (${centerIds.map(() => '?').join(',')})`);
+          queryParams.push(...centerIds);
+        }
+      }
+
+      // Partner filter (supports array for multi-select)
+      if (partner_id) {
+        const partnerIds = Array.isArray(partner_id) ? partner_id : [partner_id];
+        if (partnerIds.length > 0) {
+          whereConditions.push(`b.partner_id IN (${partnerIds.map(() => '?').join(',')})`);
+          queryParams.push(...partnerIds);
+        }
+      }
+
+      // Status filter
+      if (status) {
+        whereConditions.push('b.status = ?');
+        queryParams.push(status);
+      }
+
+      // Search filter
+      if (search) {
+        whereConditions.push('(b.batch_number LIKE ? OR c.center_name LIKE ? OR p.name LIKE ?)');
+        const searchPattern = `%${search}%`;
+        queryParams.push(searchPattern, searchPattern, searchPattern);
+      }
+
+      const whereClause =
+        whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+      // Get all batches for export
+      const batches = await db.query(
+        `SELECT 
+          b.batch_number as 'Batch Number',
+          c.center_name as 'Center Name',
+          p.name as 'Partner Name',
+          DATE_FORMAT(b.batch_start_date, '%Y-%m-%d') as 'Start Date',
+          DATE_FORMAT(b.batch_complete_date, '%Y-%m-%d') as 'End Date',
+          b.total_students as 'Total Students',
+          b.male_students as 'Total Male',
+          b.female_students as 'Total Female',
+          b.status as 'Status'
+        FROM batches b
+        LEFT JOIN centers c ON b.center_id = c.id
+        LEFT JOIN partners p ON b.partner_id = p.id
+        ${whereClause}
+        ORDER BY b.batch_start_date DESC`,
+        queryParams
+      );
+
+      return batches;
+    } catch (error) {
+      console.error('Error in exportBatches:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk delete batches with dependency checking
+   * @param {Array<string>} ids - Array of batch IDs to delete
+   * @param {string} role - User role
+   * @param {string} userPartnerId - Partner ID of the user (for PARTNER role)
+   * @returns {Promise<Object>} Deletion results with success/failure details
+   */
+  async bulkDeleteBatches(ids, role, userPartnerId = null) {
+    try {
+      const results = {
+        success: [],
+        failed: [],
+        summary: {
+          total: ids.length,
+          successful: 0,
+          failed: 0,
+        },
+      };
+
+      // Convert all IDs to UUIDs
+      const batchUUIDs = ids.map((id) => convertToUUID(id));
+
+      // Validate all batches exist and check authorization
+      for (const batchId of batchUUIDs) {
+        try {
+          const batch = await this.getBatchById(batchId);
+          if (!batch) {
+            results.failed.push({
+              id: batchId,
+              readable_id: batchId,
+              name: 'Unknown',
+              reason: 'Batch not found',
+            });
+            continue;
+          }
+
+          // Authorization check for PARTNER role
+          if (role === 'PARTNER' && batch.partner_id !== userPartnerId) {
+            results.failed.push({
+              id: batchId,
+              readable_id: batch.batch_number,
+              name: batch.batch_number,
+              reason: 'Not authorized to delete this batch',
+            });
+            continue;
+          }
+
+          // Check for dependencies (students)
+          const students = await db.query(
+            'SELECT COUNT(*) as count FROM students WHERE batch_id = ?',
+            [batchId]
+          );
+
+          if (students[0].count > 0) {
+            results.failed.push({
+              id: batchId,
+              readable_id: batch.batch_number,
+              name: batch.batch_number,
+              reason: `Cannot delete batch with ${students[0].count} enrolled student(s). Please remove all students first.`,
+            });
+            continue;
+          }
+
+          // All checks passed - safe to delete
+          await db.query('DELETE FROM batches WHERE id = ?', [batchId]);
+
+          results.success.push({
+            id: batchId,
+            readable_id: batch.batch_number,
+            name: batch.batch_number,
+          });
+        } catch (error) {
+          results.failed.push({
+            id: batchId,
+            readable_id: batchId,
+            name: 'Unknown',
+            reason: error.message,
+          });
+        }
+      }
+
+      results.summary.successful = results.success.length;
+      results.summary.failed = results.failed.length;
+
+      return results;
+    } catch (error) {
+      console.error('Error in bulkDeleteBatches:', error);
       throw error;
     }
   }

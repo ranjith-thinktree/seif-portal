@@ -25,4 +25,20 @@ router.post(
   adminController.resetDatabase
 );
 
+// Get partner login details
+router.get(
+  '/partners/:partnerId/login-details',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  adminController.getPartnerLoginDetails
+);
+
+// Reset partner password
+router.post(
+  '/partners/:partnerId/reset-password',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  adminController.resetPartnerPassword
+);
+
 module.exports = router;

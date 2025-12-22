@@ -12,6 +12,8 @@ const NOTIFICATION_TYPES = {
   UPLOAD: 'upload',
   REVIEW: 'review',
   SYSTEM: 'system',
+  CENTER_CREATED: 'center_created',
+  CENTER_APPROVED: 'center_approved',
 };
 
 /**
@@ -457,8 +459,29 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       params.push(searchPattern, searchPattern);
     }
 
-    // Get grouped notifications
-    const query = `
+    // Get center notifications (individual, not grouped)
+    const centerQuery = `
+      SELECT 
+        n.id,
+        n.related_entity_id as center_id,
+        n.created_at,
+        n.type,
+        n.alert_type,
+        n.title,
+        n.message,
+        n.remark,
+        n.is_read,
+        n.payload,
+        'center' as notification_type
+      FROM notifications n
+      ${whereClause}
+        AND n.related_entity_type = 'center'
+        AND n.type IN ('center_created', 'center_approved')
+      ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
+    `;
+
+    // Get grouped upload notifications
+    const uploadQuery = `
       SELECT 
         n.related_entity_id as upload_id,
         MAX(n.id) as latest_notification_id,
@@ -470,7 +493,8 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
         MAX(n.is_read) as is_read,
         (SELECT n2.payload FROM notifications n2 WHERE n2.related_entity_id = n.related_entity_id LIMIT 1) as payload_json,
         du.version,
-        du.parent_upload_id
+        du.parent_upload_id,
+        'upload' as notification_type
       FROM notifications n
       LEFT JOIN uploaded_centers uc ON uc.data_upload_id = n.related_entity_id
       LEFT JOIN data_uploads du ON du.id = n.related_entity_id
@@ -479,25 +503,38 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
         AND n.type IN ('upload', 'review')
       GROUP BY n.related_entity_id, du.version, du.parent_upload_id
       ORDER BY latest_created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
-      LIMIT ? OFFSET ?
     `;
 
-    params.push(limit, offset);
-    const [groupedResults] = await pool.query(query, params);
+    // Execute both queries
+    const [centerNotifications] = await pool.query(centerQuery, params);
+    const [uploadGroupedResults] = await pool.query(uploadQuery, params);
 
-    // Get total count
-    const countQuery = `
-      SELECT COUNT(DISTINCT n.related_entity_id) as total
-      FROM notifications n
-      ${whereClause}
-        AND n.related_entity_type = 'data_upload'
-        AND n.type IN ('upload', 'review')
-    `;
-    const [countResult] = await pool.query(countQuery, params.slice(0, -2));
+    // Process center notifications (simple format)
+    const processedfCenterNotifications = centerNotifications.map((notif) => {
+      const payload = notif.payload ? JSON.parse(notif.payload) : {};
+      return {
+        id: notif.id,
+        center_id: notif.center_id,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        remark: notif.remark,
+        alert_type: notif.alert_type,
+        is_read: Boolean(notif.is_read),
+        created_at: notif.created_at,
+        related_entity_type: 'center',
+        related_entity_id: notif.center_id,
+        notification_type: 'center',
+        payload: {
+          ...payload,
+          actionUrl: payload.actionUrl || '/review/pending-centers',
+        },
+      };
+    });
 
-    // Process each grouped notification with actual status across versions
-    const processedNotifications = await Promise.all(
-      groupedResults.map(async (group) => {
+    // Process each grouped upload notification with actual status across versions
+    const processedUploadNotifications = await Promise.all(
+      uploadGroupedResults.map(async (group) => {
         // Get actual current status across all versions
         const actualStatus = await getActualCenterStatus(group.upload_id);
 
@@ -556,6 +593,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
           parent_upload_id: group.parent_upload_id,
           related_entity_type: 'data_upload',
           related_entity_id: group.upload_id,
+          notification_type: 'upload',
           payload: {
             ...payload,
             uploadId: group.upload_id,
@@ -568,21 +606,32 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       })
     );
 
+    // Merge center and upload notifications, sort by created_at
+    const allNotifications = [...processedfCenterNotifications, ...processedUploadNotifications];
+    allNotifications.sort((a, b) => {
+      const dateA = new Date(a.created_at);
+      const dateB = new Date(b.created_at);
+      return sortBy === 'oldest' ? dateA - dateB : dateB - dateA;
+    });
+
     // Apply status filter if provided
-    let filteredNotifications = processedNotifications;
+    let filteredNotifications = allNotifications;
     if (status && status !== 'all') {
-      filteredNotifications = processedNotifications.filter((notif) => {
-        return notif.aggregated_status === status;
+      filteredNotifications = allNotifications.filter((notif) => {
+        return notif.aggregated_status === status || notif.alert_type === status;
       });
     }
 
+    // Apply pagination
+    const paginatedNotifications = filteredNotifications.slice(offset, offset + limit);
+
     return {
-      notifications: filteredNotifications,
+      notifications: paginatedNotifications,
       pagination: {
         page,
         limit,
-        total: countResult[0].total,
-        totalPages: Math.ceil(countResult[0].total / limit),
+        total: filteredNotifications.length,
+        totalPages: Math.ceil(filteredNotifications.length / limit),
       },
     };
   } catch (error) {
@@ -760,6 +809,147 @@ const getUploadCenterDetails = async (uploadId, userId, role) => {
   }
 };
 
+/**
+ * Send notification to all admins
+ */
+const sendNotificationToAdmins = async (notificationData) => {
+  try {
+    // Get all admin and super admin users
+    const [admins] = await pool.query(
+      `SELECT id FROM users WHERE role IN ('ADMIN', 'SUPER_ADMIN') AND status = 'active'`
+    );
+
+    if (admins.length === 0) {
+      console.warn('No active admins found to send notification');
+      return [];
+    }
+
+    const adminIds = admins.map((admin) => admin.id);
+
+    // Create notifications for all admins
+    return await createBulkNotifications(adminIds, {
+      recipientRole: 'ADMIN',
+      ...notificationData,
+    });
+  } catch (error) {
+    throw new Error(`Failed to send notification to admins: ${error.message}`);
+  }
+};
+
+/**
+ * Notify admins when partner creates a new center
+ */
+const notifyAdminsAboutNewCenter = async (centerId, partnerId) => {
+  try {
+    console.log('🔔 Starting notification for center:', centerId, 'partner:', partnerId);
+
+    // Get center details
+    const [centers] = await pool.query(
+      `SELECT c.*, p.name as partner_name 
+       FROM centers c 
+       LEFT JOIN partners p ON c.partner_id = p.id 
+       WHERE c.id = ?`,
+      [centerId]
+    );
+
+    if (centers.length === 0) {
+      console.warn('⚠️ Center not found for notification:', centerId);
+      return { success: false, error: 'Center not found' };
+    }
+
+    const center = centers[0];
+    console.log('📋 Center details:', { name: center.center_name, partner: center.partner_name });
+
+    const result = await sendNotificationToAdmins({
+      type: NOTIFICATION_TYPES.CENTER_CREATED,
+      alertType: ALERT_TYPES.INFO,
+      title: '🏢 New Center Pending Approval',
+      message: `Partner "${center.partner_name}" created center "${center.center_name}" - Review Required`,
+      remark: `${center.center_name} | ${center.city}, ${center.state}`,
+      relatedEntityType: 'center',
+      relatedEntityId: centerId,
+      payload: {
+        centerId,
+        partnerId,
+        centerName: center.center_name,
+        partnerName: center.partner_name,
+        city: center.city,
+        state: center.state,
+        actionUrl: '/review/pending-centers',
+      },
+    });
+
+    console.log('✅ Notification result:', result);
+    return { success: true, count: result?.length || 0 };
+  } catch (error) {
+    console.error('❌ Error notifying admins about new center:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Notify partner when their center is approved
+ */
+const notifyPartnerAboutCenterApproval = async (centerId, partnerId) => {
+  try {
+    // Get center and partner details
+    const [centers] = await pool.query(
+      `SELECT c.*, p.name as partner_name, p.contact_email 
+       FROM centers c 
+       LEFT JOIN partners p ON c.partner_id = p.id 
+       WHERE c.id = ?`,
+      [centerId]
+    );
+
+    if (centers.length === 0) return;
+
+    const center = centers[0];
+
+    // Get partner user
+    const [users] = await pool.query(
+      'SELECT id FROM users WHERE partner_id = ? AND role = "PARTNER" LIMIT 1',
+      [partnerId]
+    );
+
+    if (users.length === 0) return;
+
+    const userId = users[0].id;
+
+    // Create in-app notification
+    await createNotification({
+      recipientId: userId,
+      recipientRole: 'PARTNER',
+      type: NOTIFICATION_TYPES.CENTER_APPROVED,
+      alertType: ALERT_TYPES.SUCCESS,
+      title: '✅ Center Approved',
+      message: `Your center "${center.center_name}" has been approved and is now active.`,
+      remark: `You can now upload student data for this center.`,
+      relatedEntityType: 'center',
+      relatedEntityId: centerId,
+      payload: {
+        centerId,
+        centerName: center.center_name,
+        city: center.city,
+        state: center.state,
+      },
+    });
+
+    // Send email notification
+    const emailService = require('../../../utils/email.util');
+    await emailService.sendCenterApprovalEmail({
+      email: center.contact_email,
+      name: center.partner_name,
+      centerName: center.center_name,
+      centerCode: center.center_code || center.id.substring(0, 8).toUpperCase(),
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error notifying partner about center approval:', error);
+    // Don't throw - notification failure shouldn't break approval
+  }
+};
+
 module.exports = {
   NOTIFICATION_TYPES,
   ALERT_TYPES,
@@ -776,4 +966,7 @@ module.exports = {
   getGroupedNotifications,
   getUploadCenterDetails,
   getActualCenterStatus,
+  sendNotificationToAdmins,
+  notifyAdminsAboutNewCenter,
+  notifyPartnerAboutCenterApproval,
 };

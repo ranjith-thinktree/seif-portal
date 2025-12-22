@@ -2,12 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const uploadService = require('../services/upload.service');
 const notificationService = require('../services/notification.service');
-const csvParser = require('../../../utils/csvParser');
+const csvParser = require('../../../utils/csvParser'); // Keep for backward compatibility
+const excelHandler = require('../../../utils/excelHandler'); // NEW: ExcelJS handler
 const { emitToRole } = require('../../../websocket/socket');
 
 /**
  * Upload Controller
  * Handles HTTP requests for data uploads
+ * Updated to support multiple formats (CSV, XLSX, XLS, XLSM) using ExcelJS
  */
 
 /**
@@ -43,48 +45,75 @@ const downloadTemplate = async (req, res, next) => {
 };
 
 /**
- * Download CSV template with dynamic partner name
+ * Download Excel template with dynamic partner centers
  * GET /api/v1/uploads/download-template
+ * Generates Excel template (.xlsx) with partner's active centers and sample data
+ * Updated to use ExcelJS for richer formatting
  */
 const downloadDynamicTemplate = async (req, res, next) => {
   try {
-    const templatePath = path.join(
-      __dirname,
-      '../../../../templates/SEIF_Data_Upload_Template.csv'
-    );
-
-    if (!fs.existsSync(templatePath)) {
-      return res.status(404).json({
+    // Only partners can download templates
+    if (!req.user || !req.user.partner_id) {
+      return res.status(403).json({
         success: false,
-        message: 'Template file not found',
+        message: 'Only partners can download templates',
       });
     }
 
-    // Read the template file
-    const templateContent = fs.readFileSync(templatePath, 'utf8');
+    const partnerId = req.user.partner_id;
 
-    // If user is authenticated, replace partner name
-    let finalContent = templateContent;
-    if (req.user && req.user.partner_id) {
-      const partnerData = await uploadService.getPartnerById(req.user.partner_id);
-      if (partnerData && partnerData.name) {
-        // Replace all instances of default partner name with actual partner name
-        finalContent = templateContent.replace(/Don Bosco Tech Society/g, partnerData.name);
-      }
+    // Get partner info
+    const partnerData = await uploadService.getPartnerById(partnerId);
+    if (!partnerData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Partner not found',
+      });
     }
 
-    // Send the modified content as download
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="SEIF_Data_Upload_Template.csv"');
-    res.send(finalContent);
+    // Get partner's active centers
+    const partnerCenters = await uploadService.getPartnerActiveCenters(partnerId);
+
+    if (!partnerCenters || partnerCenters.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active centers found. Please add centers before uploading data.',
+      });
+    }
+
+    // Get available courses for dropdown validation
+    const availableCourses = await uploadService.getAllCourses();
+
+    // Generate Excel template using ExcelJS
+    const workbook = await excelHandler.generateDynamicTemplate(
+      partnerCenters,
+      partnerData.name,
+      availableCourses
+    );
+
+    // Set response headers for Excel download
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="SEIF_Data_Upload_Template_${partnerData.name.replace(/\s+/g, '_')}.xlsx"`
+    );
+
+    // Write workbook to response
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (error) {
+    console.error('Error generating dynamic template:', error);
     next(error);
   }
 };
 
 /**
- * Upload and validate CSV file
+ * Upload and validate file (CSV, XLSX, XLS, XLSM)
  * POST /api/v1/uploads
+ * Updated to support multiple Excel formats using ExcelJS
  */
 const uploadCSV = async (req, res, next) => {
   try {
@@ -92,7 +121,7 @@ const uploadCSV = async (req, res, next) => {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: 'No file uploaded. Please select a CSV file.',
+        message: 'No file uploaded. Please select a file (CSV, XLSX, XLS, or XLSM).',
       });
     }
 
@@ -100,9 +129,39 @@ const uploadCSV = async (req, res, next) => {
     const userId = req.user.id;
     const filePath = req.file.path;
     const fileName = req.file.originalname;
+    const fileMimeType = req.file.mimetype;
 
-    // Step 1: Parse CSV file
-    const { rows, totalRows } = await csvParser.parseCSVFile(filePath);
+    // Validate file format before processing
+    const fileValidation = excelHandler.validateFile(filePath, fileMimeType, fileName);
+    if (!fileValidation.isValid) {
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+
+      return res.status(400).json({
+        success: false,
+        message: fileValidation.error,
+        supportedFormats: fileValidation.supportedFormats,
+      });
+    }
+
+    // Get partner data from authenticated user
+    const partnerData = await uploadService.getPartnerById(partnerId);
+    if (!partnerData) {
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+
+      return res.status(404).json({
+        success: false,
+        message: 'Partner not found. Please contact administrator.',
+      });
+    }
+
+    // Step 1: Parse file using ExcelJS (supports CSV, XLSX, XLS, XLSM)
+    console.log(`📁 Parsing ${fileValidation.format.toUpperCase()} file: ${fileName}`);
+    const { rows, totalRows, fileFormat, worksheetName } = await excelHandler.parseExcelFile(
+      filePath,
+      fileName
+    );
 
     if (totalRows === 0) {
       // Clean up uploaded file
@@ -110,14 +169,59 @@ const uploadCSV = async (req, res, next) => {
 
       return res.status(400).json({
         success: false,
-        message: 'CSV file is empty. Please upload a file with data.',
+        message: 'File is empty. Please upload a file with data.',
       });
     }
 
-    // Step 2: Get available courses for validation
+    console.log(`✅ Successfully parsed ${totalRows} rows from ${fileFormat} file`);
+
+    // Step 2: Get partner's active centers for validation
+    const partnerCenters = await uploadService.getPartnerActiveCenters(partnerId);
+
+    if (!partnerCenters || partnerCenters.length === 0) {
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+
+      return res.status(400).json({
+        success: false,
+        message:
+          'No active centers found for your account. Please add centers before uploading data.',
+      });
+    }
+
+    // Create a map of valid center IDs for quick lookup
+    const validCenterIds = new Set(partnerCenters.map((c) => c.center_id));
+    const invalidCenterIds = new Set();
+
+    // Step 3: Validate center IDs in file
+    for (const row of rows) {
+      const centerId = row.data['Center ID']?.trim();
+      if (centerId && !validCenterIds.has(centerId)) {
+        invalidCenterIds.add(centerId);
+      }
+    }
+
+    // If any center IDs are invalid, reject entire upload
+    if (invalidCenterIds.size > 0) {
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+
+      const invalidCenters = Array.from(invalidCenterIds).join(', ');
+      const validCenters = partnerCenters.map((c) => c.center_id).join(', ');
+
+      return res.status(400).json({
+        success: false,
+        message: `Invalid Center IDs found in upload. The following centers do not exist or are not active: ${invalidCenters}`,
+        validCenterIds: Array.from(validCenterIds),
+        invalidCenterIds: Array.from(invalidCenterIds),
+        helpText: `Valid Center IDs for your account: ${validCenters}`,
+      });
+    }
+
+    // Step 4: Get available courses for validation
     const availableCourses = await uploadService.getAllCourses();
 
-    // Step 3: Validate each row
+    // Step 5: Validate each row
     const validationErrors = [];
     const validatedRows = [];
 
@@ -138,23 +242,42 @@ const uploadCSV = async (req, res, next) => {
 
       return res.status(400).json({
         success: false,
-        message: 'CSV validation failed. Please fix the errors and re-upload.',
+        message: `File validation failed (${fileFormat.toUpperCase()} format). Please fix the errors and re-upload.`,
         errors: validationErrors.slice(0, 50), // Return first 50 errors
         totalErrors: validationErrors.length,
       });
     }
 
-    // Step 4: Group data by center and batch
+    // Step 6: Group data by center and batch
     const centerMap = csvParser.groupRowsByCenter(validatedRows);
 
-    // Step 5: Generate preview summary with gender breakdown
+    // Step 7: Check for duplicate batches (same batch number for same center)
+    const duplicateBatchErrors = await uploadService.checkDuplicateBatches(partnerId, centerMap);
+
+    if (duplicateBatchErrors.length > 0) {
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+
+      return res.status(400).json({
+        success: false,
+        message:
+          'Duplicate batch data detected. The following batches already exist in the system:',
+        errors: duplicateBatchErrors,
+        totalErrors: duplicateBatchErrors.length,
+        helpText: 'Please use different batch numbers or check existing data before uploading.',
+      });
+    }
+
+    // Step 8: Generate preview summary with gender breakdown
     const centersArray = Array.from(centerMap.entries());
 
     // Use partner name from authenticated user
-    const partnerName = partnerData ? partnerData.name : 'Unknown Partner';
+    const partnerName = partnerData.name;
 
     const summary = {
       fileName,
+      fileFormat: fileFormat.toUpperCase(), // Show format to user (CSV, XLSX, XLS)
+      worksheetName: worksheetName || 'Sheet1',
       totalRows,
       centersCount: centersArray.length,
       batchesCount: 0,
@@ -164,9 +287,15 @@ const uploadCSV = async (req, res, next) => {
         const batchesArray = Array.from(centerData.batches.entries());
         const batchesCount = batchesArray.length;
 
+        // Find the actual center name from partnerCenters
+        const centerInfo = partnerCenters.find((c) => c.center_id === centerId);
+        const centerName = centerInfo ? centerInfo.center_name : centerId;
+
         return {
           centerId,
-          centerName: centerId, // Will be resolved from database during save
+          centerName,
+          city: centerInfo?.city || '',
+          state: centerInfo?.state || '',
           batchesCount,
           batches: batchesArray.map(([batchNumber, batchData]) => {
             // Calculate gender breakdown from students array
@@ -196,15 +325,16 @@ const uploadCSV = async (req, res, next) => {
       0
     );
 
-    // Step 7: Return preview (don't save yet)
+    // Step 9: Return preview (don't save yet)
     res.status(200).json({
       success: true,
-      message: 'CSV validation successful. Review the preview before confirming upload.',
+      message: `${fileFormat.toUpperCase()} file validation successful! Review the preview before confirming upload. ✅ We accept all formats - no rejections!`,
       preview: summary,
       validation: {
         isValid: true,
         totalRows,
         errorsCount: 0,
+        fileFormat: fileFormat.toUpperCase(),
       },
       uploadData: {
         fileName,
@@ -218,6 +348,7 @@ const uploadCSV = async (req, res, next) => {
       fs.unlinkSync(req.file.path);
     }
 
+    console.error('Upload processing error:', error);
     next(error);
   }
 };
@@ -248,8 +379,8 @@ const confirmUpload = async (req, res, next) => {
     const partnerId = req.user.partner_id;
     const userId = req.user.id;
 
-    // Re-parse and validate CSV
-    const { rows, totalRows } = await csvParser.parseCSVFile(filePath);
+    // Re-parse and validate file using ExcelJS
+    const { rows, totalRows, fileFormat } = await excelHandler.parseExcelFile(filePath, fileName);
     const availableCourses = await uploadService.getAllCourses();
 
     const validatedRows = [];
@@ -536,6 +667,83 @@ const resubmitUpload = async (req, res, next) => {
   }
 };
 
+/**
+ * DELETE /api/v1/uploads/:id
+ * Delete an upload (partner or admin)
+ */
+const deleteUpload = async (req, res, next) => {
+  try {
+    const uploadId = req.params.id;
+    const userId = req.user.partner_id || req.user.id;
+    const userRole = req.user.role;
+
+    const result = await uploadService.deleteUpload(uploadId, userId, userRole);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    console.error('Delete upload error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Bulk delete uploads
+ * @route POST /api/v1/uploads/bulk-delete
+ * @access ADMIN, SUPER_ADMIN, PARTNER
+ */
+const bulkDeleteUploads = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an array of upload IDs to delete',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const results = await uploadService.bulkDeleteUploads(ids, userId, userRole);
+
+    // Return appropriate status code
+    if (results.summary.failed === 0) {
+      return res.status(200).json({
+        success: true,
+        message: `Successfully deleted ${results.summary.successful} upload(s)`,
+        data: results,
+        timestamp: new Date().toISOString(),
+      });
+    } else if (results.summary.successful === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to delete any uploads',
+        data: results,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      // Partial success
+      return res.status(207).json({
+        success: true,
+        message: `Deleted ${results.summary.successful} upload(s), ${results.summary.failed} failed`,
+        data: results,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch (error) {
+    console.error('Error in bulkDeleteUploads:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete uploads',
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
 module.exports = {
   downloadTemplate,
   downloadDynamicTemplate,
@@ -549,4 +757,6 @@ module.exports = {
   approveUpload,
   rejectUpload,
   resubmitUpload,
+  deleteUpload,
+  bulkDeleteUploads,
 };

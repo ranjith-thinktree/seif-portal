@@ -31,13 +31,19 @@ class CenterController {
       } = req.query;
       const { role, partner_id: user_partner_id } = req.user;
 
+      // Handle partner_id as array (multi-select support)
+      let partnerIdFilter = '';
+      if (partner_id) {
+        partnerIdFilter = Array.isArray(partner_id) ? partner_id : [partner_id];
+      }
+
       const result = await centerService.getAllCenters({
         page: parseInt(page) || 1,
         limit: parseInt(limit) || 10,
         search: search || '',
         status: status || '',
         approval_status: approval_status || '',
-        partner_id: partner_id || '',
+        partner_id: partnerIdFilter,
         region: region || '',
         city: city || '',
         state: state || '',
@@ -158,7 +164,7 @@ class CenterController {
    */
   async createCenter(req, res) {
     try {
-      const { role, partner_id: user_partner_id } = req.user;
+      const { role, partner_id: user_partner_id, id: userId } = req.user;
 
       // If partner is creating, ensure they're creating for their own partner_id
       if (role === 'PARTNER') {
@@ -166,6 +172,22 @@ class CenterController {
       }
 
       const center = await centerService.createCenter(req.body, role);
+
+      // If partner created, notify admins
+      if (role === 'PARTNER') {
+        try {
+          const notificationService = require('../services/notification.service');
+          console.log('📢 Sending notification to admins for center:', center.id);
+          const result = await notificationService.notifyAdminsAboutNewCenter(
+            center.id,
+            user_partner_id
+          );
+          console.log('✅ Notification sent successfully:', result);
+        } catch (notifError) {
+          console.error('❌ Error sending notification to admins:', notifError);
+          // Don't fail center creation if notification fails
+        }
+      }
 
       const message =
         role === 'PARTNER'
@@ -175,6 +197,9 @@ class CenterController {
       return successResponse(res, message, center, 201);
     } catch (error) {
       console.error('Error in createCenter:', error);
+      if (error.message.includes('already exists')) {
+        return errorResponse(res, error.message, 409);
+      }
       if (error.message.includes('Duplicate entry')) {
         return errorResponse(res, 'Center with this name already exists', 409);
       }
@@ -216,6 +241,27 @@ class CenterController {
   }
 
   /**
+   * Get center deletion impact
+   * @route GET /api/v1/centers/:id/deletion-impact
+   * @access Admin, SUPER_ADMIN, PARTNER
+   */
+  async getCenterDeletionImpact(req, res) {
+    try {
+      const { id } = req.params;
+
+      const impact = await centerService.getCenterDeletionImpact(id);
+
+      return successResponse(res, 'Deletion impact retrieved successfully', impact);
+    } catch (error) {
+      console.error('Error in getCenterDeletionImpact:', error);
+      if (error.message === 'Center not found') {
+        return errorResponse(res, 'Center not found', 404);
+      }
+      return errorResponse(res, 'Failed to get deletion impact', 500);
+    }
+  }
+
+  /**
    * Delete center
    * @route DELETE /api/v1/centers/:id
    * @access Admin, SUPER_ADMIN
@@ -250,6 +296,10 @@ class CenterController {
       const { id: userId } = req.user;
 
       const center = await centerService.approveCenter(id, userId);
+
+      // Notify partner about approval
+      const notificationService = require('../services/notification.service');
+      await notificationService.notifyPartnerAboutCenterApproval(id, center.partner_id);
 
       return successResponse(res, 'Center approved successfully', center);
     } catch (error) {
@@ -343,6 +393,67 @@ class CenterController {
     } catch (error) {
       console.error('Error in exportCenters:', error);
       return errorResponse(res, 'Failed to export centers', 500);
+    }
+  }
+
+  /**
+   * Get all active courses
+   * @route GET /api/v1/centers/courses
+   * @access Private (All roles)
+   */
+  async getAllCourses(req, res) {
+    try {
+      const courses = await centerService.getAllCourses();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Courses fetched successfully',
+        data: courses,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in getAllCourses:', error);
+      return errorResponse(res, 'Failed to fetch courses', 500);
+    }
+  }
+
+  /**
+   * Bulk delete centers
+   * @route POST /api/v1/centers/bulk-delete
+   * @access Admin, SUPER_ADMIN, PARTNER
+   */
+  async bulkDeleteCenters(req, res) {
+    try {
+      const { ids } = req.body;
+      const { role, partner_id } = req.user;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return errorResponse(res, 'Please provide an array of center IDs to delete', 400);
+      }
+
+      const results = await centerService.bulkDeleteCenters(ids, role, partner_id);
+
+      // Return appropriate status code
+      if (results.summary.failed === 0) {
+        return successResponse(
+          res,
+          `Successfully deleted ${results.summary.successful} center(s)`,
+          results
+        );
+      } else if (results.summary.successful === 0) {
+        return errorResponse(res, 'Failed to delete any centers', 400, results);
+      } else {
+        // Partial success
+        return res.status(207).json({
+          success: true,
+          message: `Deleted ${results.summary.successful} center(s), ${results.summary.failed} failed`,
+          data: results,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error('Error in bulkDeleteCenters:', error);
+      return errorResponse(res, error.message || 'Failed to delete centers', 500);
     }
   }
 }

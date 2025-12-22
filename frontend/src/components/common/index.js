@@ -15,3 +15,5 @@ export { default as ErrorBoundary } from "./ErrorBoundary";
 export { default as Modal } from "./Modal";
 export { default as SuccessModal } from "./SuccessModal";
 export { default as RejectionModal } from "./RejectionModal";
+export { default as PasswordInput } from "./PasswordInput";
+export { default as PasswordStrengthMeter } from "./PasswordStrengthMeter";

@@ -1,49 +1,59 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout";
-import DataTable, { StatusBadge } from "../../components/common/DataTable";
+import EnhancedDataTable, {
+  StatusBadge,
+} from "../../components/common/EnhancedDataTable";
 import CenterForm from "../../components/forms/CenterForm";
+import BulkCenterUpload from "../../components/forms/BulkCenterUpload";
 import { SuccessModal, RejectionModal } from "../../components/common";
+import ConfirmDeleteCenterModal from "../../components/common/ConfirmDeleteCenterModal";
 import Breadcrumb from "../../components/common/Breadcrumb";
-import SearchBar from "../../components/common/SearchBar";
+import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
+import BulkDeleteButton from "../../components/common/BulkDeleteButton";
+import ConfirmationModal from "../../components/common/ConfirmationModal";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import {
   PlusIcon,
-  MagnifyingGlassIcon,
   CheckIcon,
   XMarkIcon,
   PencilIcon,
   TrashIcon,
   ArrowLeftIcon,
+  ArrowUpTrayIcon,
 } from "@heroicons/react/24/outline";
 import {
   getCenters,
   createCenter,
   updateCenter,
   deleteCenter,
+  bulkDeleteCenters,
+  getCenterDeletionImpact,
   approveCenter,
   rejectCenter,
   exportCenters,
   downloadCSV,
+  getCenterFilterOptions,
+  getPartnerById,
 } from "../../services/data.service";
 
 import { toast } from "react-toastify";
-import { isAdminRole } from "../../utils/role";
+import { useAuth } from "../../hooks";
 
-const CentersPage = () => {
+const CentersPage = ({ embedded = false }) => {
   const navigate = useNavigate();
   const { partnerId } = useParams();
+  const { role } = useAuth();
 
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const isAdmin = isAdminRole(user.role);
-  const canExport = ["ADMIN", "SUPER_ADMIN", "ESSCI", "PARTNER"].includes(
-    user.role
-  );
-  const canCreate = ["ADMIN", "SUPER_ADMIN", "PARTNER"].includes(user.role);
+  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(role);
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const canExport = ["ADMIN", "SUPER_ADMIN", "ESSCI", "PARTNER"].includes(role);
+  const canCreate = ["ADMIN", "SUPER_ADMIN", "PARTNER"].includes(role);
 
   const [centers, setCenters] = useState([]);
+  const [partnerName, setPartnerName] = useState("");
+  const [table, setTable] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -52,27 +62,75 @@ const CentersPage = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState([
-    { label: "Active", value: "active", checked: false },
-    { label: "Inactive", value: "inactive", checked: false },
-    ...(isAdmin
-      ? [
-          { label: "Pending Approval", value: "pending", checked: false },
-          { label: "Approved", value: "approved", checked: false },
-          { label: "Rejected", value: "rejected", checked: false },
-        ]
-      : []),
-  ]);
-  const [sortBy, setSortBy] = useState("");
-  const [sortOrder, setSortOrder] = useState("asc");
+  const [activeFilters, setActiveFilters] = useState({
+    partner_id: [], // Keep empty - partnerId from route is handled separately
+    region: "",
+    city: "",
+    state: "",
+    center_type: "",
+    year_of_establishment: "",
+    status: "",
+    approval_status: "",
+  });
+  const [filterOptions, setFilterOptions] = useState({
+    partners: [],
+    regions: [],
+    cities: [],
+    states: [],
+    centerTypes: [],
+    years: [],
+    statuses: [],
+    approvalStatuses: [],
+  });
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
   const [showForm, setShowForm] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [editingCenter, setEditingCenter] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletionImpact, setDeletionImpact] = useState(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedCenter, setSelectedCenter] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Bulk delete states
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkDeleteResults, setBulkDeleteResults] = useState(null);
+
+  // Fetch partner details if partnerId exists
+  useEffect(() => {
+    const fetchPartnerDetails = async () => {
+      if (partnerId) {
+        try {
+          const response = await getPartnerById(partnerId);
+          const partnerData = response?.data || response;
+          if (partnerData?.name) {
+            setPartnerName(partnerData.name);
+          }
+        } catch (error) {
+          console.error("Error fetching partner details:", error);
+        }
+      }
+    };
+    fetchPartnerDetails();
+  }, [partnerId]);
+
+  // Fetch filter options
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const response = await getCenterFilterOptions();
+        setFilterOptions(response.data);
+      } catch (error) {
+        console.error("Error fetching filter options:", error);
+      }
+    };
+    fetchFilterOptions();
+  }, []);
 
   // Fetch centers
   const fetchCenters = useCallback(async () => {
@@ -82,8 +140,20 @@ const CentersPage = () => {
         page: pagination.page,
         limit: pagination.limit,
         search: searchTerm,
-        ...(partnerId && { partner_id: partnerId }),
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        ...activeFilters,
+        ...(partnerId && { partner_id: partnerId }), // Override activeFilters.partner_id if partnerId exists
       };
+
+      // Remove empty filters (including empty arrays)
+      Object.keys(params).forEach(
+        (key) =>
+          (params[key] === "" ||
+            params[key] === null ||
+            (Array.isArray(params[key]) && params[key].length === 0)) &&
+          delete params[key]
+      );
 
       const response = await getCenters(params);
       setCenters(response.data.data);
@@ -94,11 +164,28 @@ const CentersPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [pagination.page, pagination.limit, searchTerm, partnerId]);
+  }, [
+    pagination.page,
+    pagination.limit,
+    searchTerm,
+    partnerId,
+    activeFilters,
+    sortBy,
+    sortOrder,
+  ]);
 
+  // Fetch centers when dependencies change (removed fetchCenters from deps to prevent loop)
   useEffect(() => {
     fetchCenters();
-  }, [fetchCenters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pagination.page,
+    pagination.limit,
+    partnerId,
+    activeFilters,
+    sortBy,
+    sortOrder,
+  ]);
 
   // Handle search with debounce
   useEffect(() => {
@@ -111,7 +198,8 @@ const CentersPage = () => {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, fetchCenters, pagination.page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   // Handle page change
   const handlePageChange = (newPage) => {
@@ -152,10 +240,19 @@ const CentersPage = () => {
   };
 
   // Handle delete center
-  const handleDeleteCenter = (centerId) => {
+  const handleDeleteCenter = async (centerId) => {
     const center = centers.find((c) => c.id === centerId);
     setSelectedCenter(center);
-    setShowDeleteModal(true);
+
+    // Fetch deletion impact
+    try {
+      const result = await getCenterDeletionImpact(centerId);
+      setDeletionImpact(result.data);
+      setShowDeleteModal(true);
+    } catch (error) {
+      console.error("Error fetching deletion impact:", error);
+      toast.error("Failed to check center deletion impact");
+    }
   };
 
   const confirmDeleteCenter = async () => {
@@ -167,12 +264,43 @@ const CentersPage = () => {
       toast.success("Center deleted successfully");
       setShowDeleteModal(false);
       setSelectedCenter(null);
+      setDeletionImpact(null);
       fetchCenters();
     } catch (error) {
       console.error("Error deleting center:", error);
       toast.error(error.response?.data?.message || "Failed to delete center");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    setBulkDeleteLoading(true);
+    try {
+      const response = await bulkDeleteCenters(selectedRows);
+      setBulkDeleteResults(response.data);
+
+      // Show success toast if any deletions succeeded
+      if (response.data.summary.successful > 0) {
+        toast.success(
+          `Successfully deleted ${response.data.summary.successful} center(s)`
+        );
+        fetchCenters(); // Refresh table
+        setSelectedRows([]); // Clear selection
+      }
+
+      // Show error toast if all failed
+      if (response.data.summary.successful === 0) {
+        toast.error("Failed to delete any centers");
+      }
+    } catch (error) {
+      console.error("Error bulk deleting centers:", error);
+      toast.error(error.response?.data?.message || "Failed to delete centers");
+      setBulkDeleteResults(null);
+      setShowBulkDeleteModal(false);
+    } finally {
+      setBulkDeleteLoading(false);
     }
   };
 
@@ -208,7 +336,7 @@ const CentersPage = () => {
     setShowRejectModal(true);
   };
 
-  const confirmRejectCenter = async ({ reason, remarks }) => {
+  const confirmRejectCenter = async ({ reason }) => {
     if (!selectedCenter) return;
 
     setIsProcessing(true);
@@ -227,16 +355,34 @@ const CentersPage = () => {
   };
 
   // Handle filter change
-  const handleFilterChange = (value, checked) => {
-    setFilters((prev) =>
-      prev.map((f) => (f.value === value ? { ...f, checked } : f))
-    );
+  const handleFilterChange = (key, value) => {
+    setActiveFilters((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+    setPagination((prev) => ({ ...prev, page: 1 })); // Reset to first page
+  };
+
+  // Handle clear all filters
+  const handleClearFilters = () => {
+    setActiveFilters({
+      partner_id: [], // Keep empty - partnerId from route is handled separately
+      region: "",
+      city: "",
+      state: "",
+      center_type: "",
+      year_of_establishment: "",
+      status: "",
+      approval_status: "",
+    });
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   // Handle sort change
-  const handleSortChange = (sortByValue, sortOrderValue) => {
-    setSortBy(sortByValue);
-    setSortOrder(sortOrderValue);
+  const handleSortChange = (field, order) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   // Handle export
@@ -256,18 +402,20 @@ const CentersPage = () => {
 
   // Handle row click - navigate to center's students
   const handleRowClick = (center) => {
-    navigate(`/data/centers/${center.id}/students`);
+    navigate(`/data/centers/${center.id}/students`, {
+      state: { centerName: center.center_name },
+    });
   };
 
   // Handle back navigation
   const handleBack = () => {
-    navigate("/data/partners");
+    navigate("/data-management", { state: { activeTab: "partners" } });
   };
 
   // Breadcrumb items
   const breadcrumbItems = [
-    { label: "Partners", path: "/data/partners" },
-    { label: "Centers" },
+    { label: "Data Management", path: "/data-management" },
+    { label: partnerName || "Centers" },
   ];
 
   // Handle edit click
@@ -280,76 +428,97 @@ const CentersPage = () => {
   // Table columns
   const columns = [
     {
+      id: "center_name",
+      accessorKey: "center_name",
       header: "Center Name",
-      accessor: "center_name",
-      width: "20%",
+      cell: ({ row }) => (
+        <div className="font-medium cursor-pointer hover:text-blue-600">
+          {row.original.center_name}
+        </div>
+      ),
+      size: 250,
+      enableHiding: false,
     },
     {
+      id: "center_type",
+      accessorKey: "center_type",
       header: "Type",
-      accessor: "center_type",
-      render: (row) => (
+      cell: ({ row }) => (
         <Badge variant="outline" className="text-xs">
-          {row.center_type}
+          {row.original.center_type}
         </Badge>
       ),
+      size: 150,
     },
     {
+      id: "total_batches",
+      accessorKey: "total_batches",
       header: "Batches",
-      accessor: "total_batches",
-      render: (row) => (
-        <Badge variant="outline">{row.total_batches || 0}</Badge>
+      cell: ({ row }) => (
+        <Badge variant="outline">{row.original.total_batches || 0}</Badge>
       ),
+      size: 100,
     },
     {
+      id: "total_students",
+      accessorKey: "total_students",
       header: "Total Students",
-      accessor: "total_students",
-      render: (row) => (
-        <Badge variant="outline">{row.total_students || 0}</Badge>
+      cell: ({ row }) => (
+        <Badge variant="outline">{row.original.total_students || 0}</Badge>
       ),
+      size: 140,
     },
     {
+      id: "total_male_students",
+      accessorKey: "total_male_students",
       header: "Male",
-      accessor: "total_male_students",
-      render: (row) => (
-        <Badge variant="outline">{row.total_male_students || 0}</Badge>
+      cell: ({ row }) => (
+        <Badge variant="outline">{row.original.total_male_students || 0}</Badge>
       ),
+      size: 100,
     },
     {
+      id: "total_female_students",
+      accessorKey: "total_female_students",
       header: "Female",
-      accessor: "total_female_students",
-      render: (row) => (
-        <Badge variant="outline">{row.total_female_students || 0}</Badge>
+      cell: ({ row }) => (
+        <Badge variant="outline">
+          {row.original.total_female_students || 0}
+        </Badge>
       ),
+      size: 100,
     },
     {
+      id: "status",
+      accessorKey: "status",
       header: "Status",
-      accessor: "status",
-      render: (row) => <StatusBadge status={row.status} />,
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      size: 120,
     },
     ...(isAdmin
       ? [
           {
+            id: "approval_status",
+            accessorKey: "approval_status",
             header: "Approval",
-            accessor: "approval_status",
-            render: (row) => <StatusBadge status={row.approval_status} />,
+            cell: ({ row }) => (
+              <StatusBadge status={row.original.approval_status} />
+            ),
+            size: 120,
           },
         ]
       : []),
     {
+      id: "actions",
       header: "Actions",
-      accessor: "actions",
-      width: "12%",
-      render: (row) => (
-        <div
-          className="flex items-center gap-2"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {isAdmin && row.approval_status === "pending" && (
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          {isAdmin && row.original.approval_status === "pending" && (
             <>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleApproveCenter(row.id);
+                  handleApproveCenter(row.original.id);
                 }}
                 className="text-green-600 hover:text-green-800"
                 title="Approve"
@@ -359,7 +528,7 @@ const CentersPage = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleRejectCenter(row.id);
+                  handleRejectCenter(row.original.id);
                 }}
                 className="text-red-600 hover:text-red-800"
                 title="Reject"
@@ -368,9 +537,12 @@ const CentersPage = () => {
               </button>
             </>
           )}
-          {(isAdmin || user.role === "PARTNER") && (
+          {(isAdmin || role === "PARTNER") && (
             <button
-              onClick={(e) => handleEditClick(e, row)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEditClick(e, row.original);
+              }}
               className="text-blue-600 hover:text-blue-800"
               title="Edit"
             >
@@ -381,7 +553,7 @@ const CentersPage = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleDeleteCenter(row.id);
+                handleDeleteCenter(row.original.id);
               }}
               className="text-red-600 hover:text-red-800"
               title="Delete"
@@ -391,11 +563,14 @@ const CentersPage = () => {
           )}
         </div>
       ),
+      size: 180,
+      enableHiding: false,
+      enableResizing: false,
     },
   ];
 
-  return (
-    <MainLayout>
+  const content = (
+    <>
       <div className="space-y-6">
         {/* Breadcrumb with Back Button */}
         {partnerId && (
@@ -412,19 +587,35 @@ const CentersPage = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {partnerId ? "Partner Centers" : "Centers"}
+              {partnerId && partnerName
+                ? `${partnerName} - Centers`
+                : "Centers"}
             </h1>
             <p className="text-gray-600 mt-1">
               {partnerId
-                ? "View and manage centers for this partner"
+                ? `View and manage centers for ${partnerName || "this partner"}`
                 : "Manage and view all training centers"}
             </p>
-          </div>{" "}
-          {canCreate && !showForm && (
-            <Button onClick={() => setShowForm(true)} className="gap-2">
-              <PlusIcon className="h-5 w-5" />
-              Create Center
-            </Button>
+          </div>
+          {canCreate && !showForm && !embedded && (
+            <div className="flex items-center gap-3">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowBulkUpload(true)}
+                  className="px-6 py-3 bg-secondary-500 text-white rounded-full font-semibold hover:bg-secondary-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                >
+                  <ArrowUpTrayIcon className="h-5 w-5" />
+                  Bulk Upload
+                </button>
+              )}
+              <button
+                onClick={() => setShowForm(true)}
+                className="px-8 py-3 bg-primary-500 text-white rounded-full font-semibold hover:bg-primary-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Create Center
+              </button>
+            </div>
           )}
         </div>
 
@@ -444,62 +635,153 @@ const CentersPage = () => {
 
         {/* Search with Filters and Sort */}
         {!showForm && (
-          <div>
-            <SearchBar
-              value={searchTerm}
-              onChange={setSearchTerm}
-              placeholder="Search centers by name, city, state..."
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              sortOptions={[
-                { label: "Center Name (A-Z)", value: "name" },
-                { label: "Partner Name", value: "partner" },
-                { label: "City (A-Z)", value: "city" },
-                { label: "State (A-Z)", value: "state" },
-                { label: "Total Batches", value: "batches" },
-                { label: "Status", value: "status" },
-              ]}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={handleSortChange}
-            />
+          <div className="space-y-4">
+            {/* Bulk Delete Button */}
+            {canCreate && selectedRows.length > 0 && (
+              <div className="flex justify-end">
+                <BulkDeleteButton
+                  selectedCount={selectedRows.length}
+                  onDelete={() => setShowBulkDeleteModal(true)}
+                  loading={bulkDeleteLoading}
+                />
+              </div>
+            )}
+
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <AdvancedSearchBar
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                  placeholder="Search centers by name, city, state..."
+                  table={table}
+                  storageKey="centers"
+                  filterGroups={[
+                    ...(embedded &&
+                    !partnerId &&
+                    filterOptions.partners.length > 0
+                      ? [
+                          {
+                            label: "Partner",
+                            key: "partner_id",
+                            options: filterOptions.partners,
+                            multi: true,
+                          },
+                        ]
+                      : []),
+                    {
+                      label: "Region",
+                      key: "region",
+                      options: filterOptions.regions,
+                    },
+                    {
+                      label: "City",
+                      key: "city",
+                      options: filterOptions.cities,
+                    },
+                    {
+                      label: "State",
+                      key: "state",
+                      options: filterOptions.states,
+                    },
+                    {
+                      label: "Center Type",
+                      key: "center_type",
+                      options: filterOptions.centerTypes,
+                    },
+                    {
+                      label: "Establishment Year",
+                      key: "year_of_establishment",
+                      options: filterOptions.years,
+                    },
+                    {
+                      label: "Status",
+                      key: "status",
+                      options: filterOptions.statuses,
+                    },
+                    ...(isAdmin && filterOptions.approvalStatuses.length > 0
+                      ? [
+                          {
+                            label: "Approval Status",
+                            key: "approval_status",
+                            options: filterOptions.approvalStatuses,
+                          },
+                        ]
+                      : []),
+                  ]}
+                  activeFilters={
+                    partnerId
+                      ? // Hide partner_id from filter badge when viewing specific partner
+                        (() => {
+                          const { partner_id: _partner_id, ...rest } =
+                            activeFilters;
+                          return rest;
+                        })()
+                      : activeFilters
+                  }
+                  onFilterChange={handleFilterChange}
+                  onClearFilters={handleClearFilters}
+                  sortOptions={[
+                    { label: "Center Name", value: "center_name" },
+                    { label: "City", value: "city" },
+                    { label: "Region", value: "region" },
+                    {
+                      label: "Establishment Year",
+                      value: "year_of_establishment",
+                    },
+                    { label: "Status", value: "status" },
+                    { label: "Created Date", value: "created_at" },
+                  ]}
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onSortChange={handleSortChange}
+                />
+              </div>
+              {canExport && (
+                <Button
+                  onClick={handleExport}
+                  variant="outline"
+                  className="whitespace-nowrap"
+                >
+                  Export CSV
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
         {/* Table */}
         {!showForm && (
-          <DataTable
+          <EnhancedDataTable
             columns={columns}
             data={centers}
             pagination={pagination}
             onPageChange={handlePageChange}
-            onExport={canExport ? handleExport : null}
             onRowClick={handleRowClick}
             isLoading={isLoading}
             emptyMessage="No centers found"
-            showExport={canExport}
+            showSerialNumber={true}
+            storageKey="centers"
+            onTableReady={setTable}
+            enableRowSelection={canCreate}
+            selectedRows={selectedRows}
+            onSelectionChange={setSelectedRows}
+            getRowId={(row) => row.id}
           />
         )}
       </div>
 
       {/* Delete Confirmation Modal */}
-      <RejectionModal
+      <ConfirmDeleteCenterModal
         isOpen={showDeleteModal}
         onClose={() => {
           setShowDeleteModal(false);
           setSelectedCenter(null);
+          setDeletionImpact(null);
         }}
-        title={`Delete Center: ${selectedCenter?.center_name || ""}`}
-        description="Are you sure you want to delete this center? This action cannot be undone."
-        onSubmit={async () => {
-          await confirmDeleteCenter();
-        }}
+        centerName={selectedCenter?.center_name || ""}
+        impact={deletionImpact}
+        onConfirm={confirmDeleteCenter}
         isLoading={isProcessing}
-        reasonLabel="Reason for Deletion"
-        remarksLabel="Additional Notes"
-        reasonPlaceholder="Please provide a reason for deleting this center..."
-        remarksPlaceholder="Any additional notes..."
-        minReasonLength={10}
       />
 
       {/* Approve Confirmation Modal */}
@@ -536,8 +818,38 @@ const CentersPage = () => {
         remarksPlaceholder="Any additional comments..."
         minReasonLength={10}
       />
-    </MainLayout>
+
+      {/* Bulk Upload Modal */}
+      {showBulkUpload && (
+        <BulkCenterUpload
+          onClose={() => setShowBulkUpload(false)}
+          onSuccess={() => {
+            fetchCenters();
+            toast.success("Centers uploaded successfully");
+          }}
+        />
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        open={showBulkDeleteModal}
+        onClose={() => {
+          setShowBulkDeleteModal(false);
+          setBulkDeleteResults(null);
+        }}
+        onConfirm={handleBulkDelete}
+        title="Delete Centers"
+        message={`Are you sure you want to delete ${selectedRows.length} center(s)?`}
+        itemCount={selectedRows.length}
+        items={centers.filter((c) => selectedRows.includes(c.id))}
+        loading={bulkDeleteLoading}
+        results={bulkDeleteResults}
+        itemType="centers"
+      />
+    </>
   );
+
+  return embedded ? content : <MainLayout>{content}</MainLayout>;
 };
 
 export default CentersPage;

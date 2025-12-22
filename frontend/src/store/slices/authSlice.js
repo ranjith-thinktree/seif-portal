@@ -160,6 +160,10 @@ const authSlice = createSlice({
       state.user = action.payload;
       authApi.storeUser(action.payload);
     },
+    // Update user data (e.g., after token refresh with new fields)
+    updateUser: (state, action) => {
+      state.user = action.payload;
+    },
     // Clear auth state (manual logout)
     clearAuth: (state) => {
       state.user = null;
@@ -271,6 +275,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setUser, clearAuth } = authSlice.actions;
+export const { clearError, setUser, updateUser, clearAuth } = authSlice.actions;
 
 export default authSlice.reducer;

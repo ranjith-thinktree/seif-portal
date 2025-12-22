@@ -1,5 +1,6 @@
 import React from "react";
 import { useAuth } from "../../hooks";
+import { useNotifications } from "../../hooks/useNotifications";
 import { ROLES, ROLE_LABELS } from "../../constants";
 import { MainLayout } from "../../components/layout";
 import {
@@ -17,6 +18,8 @@ import {
   ArrowTrendingDownIcon,
 } from "@heroicons/react/24/outline";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
+import IndiaTrainingCard from "../../components/dashboard/IndiaTrainingCard";
+import { useNavigate } from "react-router-dom";
 
 /**
  * Helper function to calculate trend automatically from data
@@ -72,9 +75,12 @@ const StatCard = ({ title, value, trend = "up", graphData = [] }) => {
       </div>
 
       {/* Graph Section */}
-      <div className="mt-auto h-[40px] md:h-[40px] w-full">
+      <div
+        className="mt-auto h-[40px] md:h-[40px] w-full"
+        style={{ minHeight: "40px" }}
+      >
         {graphData && graphData.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minHeight={40}>
             <AreaChart data={graphData}>
               <defs>
                 {/* Green gradient for uptrend */}
@@ -136,6 +142,9 @@ const StatCard = ({ title, value, trend = "up", graphData = [] }) => {
  * Super Admin & Admin Dashboard
  */
 const AdminDashboard = () => {
+  const navigate = useNavigate();
+  const { notifications } = useNotifications();
+
   // Sample graph data for demonstration
   const sampleGraphData = [
     { value: 42 },
@@ -243,54 +252,67 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Recent Activity */}
+      {/* Two Column Layout - India Training Overview & Notifications */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Data Uploads</CardTitle>
-            <CardDescription>Latest uploads from partners</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[1, 2, 3, 4].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center justify-between py-3 border-b border-border last:border-0"
-                >
-                  <div>
-                    <p className="font-medium">Partner XYZ - Student Data</p>
-                    <p className="text-sm text-muted-foreground">2 hours ago</p>
-                  </div>
-                  <span className="px-3 py-1 text-xs font-medium bg-secondary-100 text-secondary-700 rounded-full">
-                    Pending Review
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {/* India Training Overview */}
+        <IndiaTrainingCard />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Refurbishment Requests</CardTitle>
-            <CardDescription>Requests requiring attention</CardDescription>
+        {/* Notifications */}
+        <Card className="relative bg-white rounded-xl shadow-sm border-[#A5A5A5] border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-xl font-bold">Notifications</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[1, 2, 3, 4].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center justify-between py-3 border-b border-border last:border-0"
-                >
-                  <div>
-                    <p className="font-medium">Center ABC - Equipment</p>
-                    <p className="text-sm text-muted-foreground">5 hours ago</p>
+          <CardContent className="p-0">
+            <div
+              className="overflow-y-auto"
+              style={{ maxHeight: "450px", minHeight: "450px" }}
+            >
+              {notifications && notifications.length > 0 ? (
+                notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className="flex items-start gap-4 px-6 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => navigate("/inbox")}
+                  >
+                    {/* Avatar with New Badge */}
+                    <div className="relative flex-shrink-0">
+                      <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
+                        {/* Placeholder avatar */}
+                      </div>
+                      {!notification.is_read && (
+                        <span className="absolute -top-1 -left-1 bg-[#FF4B4A] text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                          New
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-[#111827] text-base mb-1">
+                        {notification.total_centers !== undefined
+                          ? `New Data uploaded: ${
+                              notification.total_centers
+                            } center${
+                              notification.total_centers !== 1 ? "s" : ""
+                            }`
+                          : notification.title}
+                      </h3>
+                      <p className="text-sm text-[#6B7280] leading-relaxed">
+                        {notification.message}
+                      </p>
+                    </div>
+
+                    {/* View Button */}
+                    <button className="flex-shrink-0 px-6 py-2 border border-gray-300 rounded-3xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                      View
+                    </button>
                   </div>
-                  <span className="px-3 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
-                    New
-                  </span>
+                ))
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <p>No notifications</p>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>

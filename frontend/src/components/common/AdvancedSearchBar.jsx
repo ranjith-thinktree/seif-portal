@@ -7,6 +7,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
 } from "@heroicons/react/24/outline";
+import ColumnVisibilityToggle from "./ColumnVisibilityToggle";
 
 /**
  * Advanced SearchBar Component with Hierarchical Filters
@@ -14,8 +15,8 @@ import {
  * @param {string} value - Search input value
  * @param {function} onChange - Search change handler
  * @param {string} placeholder - Search input placeholder
- * @param {array} filterGroups - Array of filter group objects: { label, key, options: [{value, label}] }
- * @param {object} activeFilters - Object with active filters: { region: 'value', city: 'value', ... }
+ * @param {array} filterGroups - Array of filter group objects: { label, key, options: [{value, label}], multi: true/false }
+ * @param {object} activeFilters - Object with active filters: { region: 'value', city: ['value1', 'value2'], ... }
  * @param {function} onFilterChange - Filter change handler (key, value)
  * @param {function} onClearFilters - Clear all filters handler
  * @param {array} sortOptions - Array of sort objects: { label, value }
@@ -23,6 +24,8 @@ import {
  * @param {string} sortOrder - Current sort order: 'asc' or 'desc'
  * @param {function} onSortChange - Sort change handler (sortBy, sortOrder)
  * @param {array} actions - Array of action button objects: { label, onClick, variant, icon, disabled }
+ * @param {object} table - TanStack table instance (optional, for column visibility)
+ * @param {string} storageKey - Storage key for column visibility (optional)
  */
 const AdvancedSearchBar = ({
   value,
@@ -37,10 +40,13 @@ const AdvancedSearchBar = ({
   sortOrder = "asc",
   onSortChange,
   actions = [],
+  table,
+  storageKey,
 }) => {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState(null);
+  const [filterSearchTerms, setFilterSearchTerms] = useState({});
   const filterRef = useRef(null);
   const sortRef = useRef(null);
 
@@ -50,6 +56,7 @@ const AdvancedSearchBar = ({
       if (filterRef.current && !filterRef.current.contains(event.target)) {
         setShowFilterDropdown(false);
         setExpandedGroup(null);
+        setFilterSearchTerms({});
       }
       if (sortRef.current && !sortRef.current.contains(event.target)) {
         setShowSortDropdown(false);
@@ -61,9 +68,20 @@ const AdvancedSearchBar = ({
   }, []);
 
   // Count active filters
-  const activeFiltersCount = Object.values(activeFilters).filter(
-    (value) => value !== "" && value !== null && value !== undefined
-  ).length;
+  const activeFiltersCount = Object.values(activeFilters).filter((value) => {
+    if (value === "" || value === null || value === undefined) return false;
+    if (Array.isArray(value) && value.length === 0) return false;
+    return true;
+  }).length;
+
+  // Get count of selected items for a filter
+  const getFilterCount = (key) => {
+    const value = activeFilters[key];
+    if (Array.isArray(value)) {
+      return value.length;
+    }
+    return value && value !== "" ? 1 : 0;
+  };
 
   // Get current sort label
   const currentSortLabel =
@@ -79,13 +97,27 @@ const AdvancedSearchBar = ({
     }
   };
 
-  const handleFilterSelect = (key, value) => {
-    // Toggle filter - if same value, clear it; otherwise set it
-    if (activeFilters[key] === value) {
-      onFilterChange(key, "");
+  const handleFilterSelect = (key, value, isMulti) => {
+    if (isMulti) {
+      // Multi-select logic
+      const currentValues = activeFilters[key] || [];
+      const newValues = currentValues.includes(value)
+        ? currentValues.filter((v) => v !== value)
+        : [...currentValues, value];
+      onFilterChange(key, newValues);
     } else {
-      onFilterChange(key, value);
+      // Single-select logic
+      if (activeFilters[key] === value) {
+        onFilterChange(key, "");
+      } else {
+        onFilterChange(key, value);
+      }
     }
+  };
+
+  const handleClearFilter = (key) => {
+    const group = filterGroups.find((g) => g.key === key);
+    onFilterChange(key, group?.multi ? [] : "");
   };
 
   const handleClearAllFilters = () => {
@@ -93,6 +125,32 @@ const AdvancedSearchBar = ({
       onClearFilters();
     }
     setExpandedGroup(null);
+    setFilterSearchTerms({});
+  };
+
+  const handleFilterSearch = (key, searchTerm) => {
+    setFilterSearchTerms((prev) => ({
+      ...prev,
+      [key]: searchTerm,
+    }));
+  };
+
+  const getFilteredOptions = (group) => {
+    const searchTerm = filterSearchTerms[group.key]?.toLowerCase() || "";
+    if (!group.options || !Array.isArray(group.options)) return [];
+    if (!searchTerm) return group.options;
+
+    return group.options.filter((option) =>
+      option.label.toLowerCase().includes(searchTerm)
+    );
+  };
+
+  const isOptionSelected = (key, optionValue, isMulti) => {
+    if (isMulti) {
+      const values = activeFilters[key] || [];
+      return values.includes(optionValue);
+    }
+    return activeFilters[key] === optionValue;
   };
 
   const getActionButtonStyles = (variant) => {
@@ -155,74 +213,129 @@ const AdvancedSearchBar = ({
                 )}
               </div>
               <div className="max-h-96 overflow-y-auto">
-                {filterGroups.map((group) => (
-                  <div
-                    key={group.key}
-                    className="border-b border-gray-100 last:border-0"
-                  >
-                    {/* Filter Group Header */}
-                    <button
-                      onClick={() =>
-                        setExpandedGroup(
-                          expandedGroup === group.key ? null : group.key
-                        )
-                      }
-                      className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-700">
-                          {group.label}
-                        </span>
-                        {activeFilters[group.key] && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                            1
-                          </span>
-                        )}
-                      </div>
-                      <ChevronDownIcon
-                        className={`h-4 w-4 text-gray-500 transition-transform ${
-                          expandedGroup === group.key ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
+                {filterGroups.map((group) => {
+                  const filteredOptions = getFilteredOptions(group);
+                  const filterCount = getFilterCount(group.key);
 
-                    {/* Filter Options */}
-                    {expandedGroup === group.key && (
-                      <div className="px-3 pb-3 space-y-1 max-h-48 overflow-y-auto">
-                        {group.options && group.options.length > 0 ? (
-                          group.options.map((option) => (
-                            <label
-                              key={option.value}
-                              className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={
-                                  activeFilters[group.key] === option.value
-                                }
-                                onChange={() =>
-                                  handleFilterSelect(group.key, option.value)
-                                }
-                                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-gray-700">
-                                {option.label}
+                  return (
+                    <div
+                      key={group.key}
+                      className="border-b border-gray-100 last:border-0"
+                    >
+                      {/* Filter Group Header */}
+                      <div className="flex items-center justify-between p-3 hover:bg-gray-50">
+                        <button
+                          onClick={() =>
+                            setExpandedGroup(
+                              expandedGroup === group.key ? null : group.key
+                            )
+                          }
+                          className="flex-1 flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">
+                              {group.label}
+                            </span>
+                            {filterCount > 0 && (
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                                {filterCount}
                               </span>
-                            </label>
-                          ))
-                        ) : (
-                          <p className="text-sm text-gray-500 p-2">
-                            No options available
-                          </p>
+                            )}
+                          </div>
+                          <ChevronDownIcon
+                            className={`h-4 w-4 text-gray-500 transition-transform ${
+                              expandedGroup === group.key ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        {filterCount > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleClearFilter(group.key);
+                            }}
+                            className="ml-2 p-1 hover:bg-gray-200 rounded transition-colors"
+                            title="Clear filter"
+                          >
+                            <XMarkIcon className="h-4 w-4 text-gray-500" />
+                          </button>
                         )}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* Filter Options */}
+                      {expandedGroup === group.key && (
+                        <div className="px-3 pb-3 space-y-2">
+                          {/* Search Input for Multi-Select or Large Lists */}
+                          {(group.multi ||
+                            (group.options && group.options.length > 5)) && (
+                            <div className="relative">
+                              <MagnifyingGlassIcon className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <input
+                                type="text"
+                                value={filterSearchTerms[group.key] || ""}
+                                onChange={(e) =>
+                                  handleFilterSearch(group.key, e.target.value)
+                                }
+                                placeholder={`Search ${group.label.toLowerCase()}...`}
+                                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+                          )}
+
+                          {/* Options List */}
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {filteredOptions && filteredOptions.length > 0 ? (
+                              filteredOptions.map((option) => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isOptionSelected(
+                                      group.key,
+                                      option.value,
+                                      group.multi
+                                    )}
+                                    onChange={() =>
+                                      handleFilterSelect(
+                                        group.key,
+                                        option.value,
+                                        group.multi
+                                      )
+                                    }
+                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-700">
+                                    {option.label}
+                                  </span>
+                                </label>
+                              ))
+                            ) : filterSearchTerms[group.key] ? (
+                              <p className="text-sm text-gray-500 p-2">
+                                No matches found
+                              </p>
+                            ) : (
+                              <p className="text-sm text-gray-500 p-2">
+                                No options available
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {/* Column Visibility Toggle */}
+      {table && storageKey && (
+        <ColumnVisibilityToggle table={table} storageKey={storageKey} />
       )}
 
       {/* Sort Dropdown */}

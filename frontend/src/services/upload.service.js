@@ -152,6 +152,22 @@ export const getBatchStudents = async (batchId, page = 1, limit = 50) => {
   return response.data;
 };
 
+/**
+ * Delete upload
+ */
+export const deleteUpload = async (uploadId) => {
+  const response = await apiClient.delete(`/uploads/${uploadId}`);
+  return response.data;
+};
+
+/**
+ * Bulk delete uploads
+ */
+export const bulkDeleteUploads = async (ids) => {
+  const response = await apiClient.post("/uploads/bulk-delete", { ids });
+  return response.data;
+};
+
 export default {
   downloadTemplate,
   downloadDynamicTemplate,
@@ -164,4 +180,6 @@ export default {
   getBatchStudents,
   approveUpload,
   rejectUpload,
+  deleteUpload,
+  bulkDeleteUploads,
 };

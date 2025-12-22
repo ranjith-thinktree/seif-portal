@@ -78,4 +78,16 @@ router.get(
   studentController.getStudentById
 );
 
+/**
+ * @route   POST /api/v1/students/bulk-delete
+ * @desc    Bulk delete students
+ * @access  ADMIN, SUPER_ADMIN, PARTNER
+ */
+router.post(
+  '/bulk-delete',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER']),
+  studentController.bulkDeleteStudents
+);
+
 module.exports = router;

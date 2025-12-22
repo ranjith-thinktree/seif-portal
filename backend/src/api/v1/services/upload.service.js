@@ -36,6 +36,75 @@ const getPartnerById = async (partnerId) => {
 };
 
 /**
+ * Get partner's active centers for CSV template
+ */
+const getPartnerActiveCenters = async (partnerId) => {
+  try {
+    const [centers] = await pool.query(
+      `SELECT id, center_id, center_name, city, state, country
+       FROM centers 
+       WHERE partner_id = ? 
+       AND status = 'active' 
+       AND approval_status = 'approved'
+       ORDER BY center_id ASC`,
+      [partnerId]
+    );
+    return centers;
+  } catch (error) {
+    throw new Error(`Failed to fetch partner centers: ${error.message}`);
+  }
+};
+
+/**
+ * Check for duplicate batches in the upload
+ * Returns array of error messages for duplicate batches
+ */
+const checkDuplicateBatches = async (partnerId, centerMap) => {
+  try {
+    const errors = [];
+
+    // Get center_id to center.id mapping
+    const [centers] = await pool.query(`SELECT id, center_id FROM centers WHERE partner_id = ?`, [
+      partnerId,
+    ]);
+
+    const centerIdMap = {};
+    centers.forEach((center) => {
+      centerIdMap[center.center_id] = center.id;
+    });
+
+    // Check each center and batch combination
+    for (const [csvCenterId, centerData] of centerMap) {
+      const centerId = centerIdMap[csvCenterId];
+
+      if (!centerId) {
+        continue; // Skip if center not found (already handled in validation)
+      }
+
+      // Get existing batches for this center
+      const [existingBatches] = await pool.query(
+        `SELECT batch_number FROM batches WHERE center_id = ? AND partner_id = ?`,
+        [centerId, partnerId]
+      );
+
+      const existingBatchNumbers = new Set(existingBatches.map((b) => b.batch_number));
+
+      // Check each batch in upload
+      for (const [batchNumber] of centerData.batches) {
+        if (existingBatchNumbers.has(batchNumber)) {
+          errors.push(`Center ${csvCenterId}: Batch "${batchNumber}" already exists in the system`);
+        }
+      }
+    }
+
+    return errors;
+  } catch (error) {
+    console.error('Error checking duplicate batches:', error);
+    throw new Error(`Failed to check duplicate batches: ${error.message}`);
+  }
+};
+
+/**
  * Get upload version number for partner (deprecated - version column removed)
  */
 const getNextVersionNumber = async (partnerId) => {
@@ -89,68 +158,59 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
     let totalCenters = 0;
     let totalBatches = 0;
     let totalStudents = 0;
+    const errors = [];
 
     // Iterate through centers
     for (const [csvCenterId, centerData] of centerMap) {
       totalCenters++;
 
-      // Fetch existing center details from approved centers
+      // Validate that center exists and is approved
       const [existingCenters] = await connection.query(
-        `SELECT id, name, center_type, region, city, state, address, 
+        `SELECT id, center_id, center_name, center_type, region, city, state, address, 
                 year_of_establishment, status, center_head, mobile_number, email 
          FROM centers 
-         WHERE partner_id = ? AND (id = ? OR name LIKE ?) AND approval_status = 'approved'
+         WHERE partner_id = ? AND center_id = ? AND approval_status = 'approved'
          LIMIT 1`,
-        [partnerId, csvCenterId, `%${csvCenterId}%`]
+        [partnerId, csvCenterId]
       );
 
-      let centerDetails;
-      if (existingCenters.length > 0) {
-        centerDetails = existingCenters[0];
-      } else {
-        // Center not found - this will be flagged during admin review
-        console.warn(`Center ${csvCenterId} not found for partner ${partnerId}`);
-        centerDetails = {
-          name: csvCenterId, // Use CSV ID as placeholder name
-          center_type: null,
-          region: null,
-          city: null,
-          state: null,
-          address: null,
-          year_of_establishment: null,
-          status: 'active',
-          center_head: null,
-          mobile_number: null,
-          email: null,
-        };
+      if (existingCenters.length === 0) {
+        // Center not found or not approved - reject this upload
+        errors.push(
+          `Center "${csvCenterId}" does not exist or is not approved. Please create and get approval for this center first.`
+        );
+        continue; // Skip this center
       }
 
-      // Generate UUID for uploaded center
+      const approvedCenter = existingCenters[0];
+      const approvedCenterId = approvedCenter.id;
+
+      // Create uploaded_centers entry (required for foreign key relationships)
       const uploadedCenterId = (await connection.query('SELECT UUID() as id'))[0][0].id;
 
-      // Insert center with fetched details
       await connection.query(
         `INSERT INTO uploaded_centers 
-        (id, data_upload_id, partner_id, csv_center_id, center_name, center_type, region, 
-         city, state, address, year_of_establishment, status, center_head, 
-         mobile_number, email, approval_status, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+        (id, data_upload_id, partner_id, csv_center_id, center_name, center_type, 
+         region, city, state, address, year_of_establishment, status, center_head, 
+         mobile_number, email, approval_status, approved_center_id, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW())`,
         [
           uploadedCenterId,
           dataUploadId,
           partnerId,
           csvCenterId,
-          centerDetails.name,
-          centerDetails.center_type,
-          centerDetails.region,
-          centerDetails.city,
-          centerDetails.state,
-          centerDetails.address,
-          centerDetails.year_of_establishment,
-          centerDetails.status,
-          centerDetails.center_head,
-          centerDetails.mobile_number,
-          centerDetails.email,
+          approvedCenter.center_name,
+          approvedCenter.center_type,
+          approvedCenter.region,
+          approvedCenter.city,
+          approvedCenter.state,
+          approvedCenter.address,
+          approvedCenter.year_of_establishment,
+          approvedCenter.status,
+          approvedCenter.center_head,
+          approvedCenter.mobile_number,
+          approvedCenter.email,
+          approvedCenterId, // Link to approved center
         ]
       );
 
@@ -166,7 +226,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
         // Generate UUID for batch
         const uploadedBatchId = (await connection.query('SELECT UUID() as id'))[0][0].id;
 
-        // Insert batch with auto-calculated counts
+        // Insert batch - reference uploaded_centers entry
         await connection.query(
           `INSERT INTO uploaded_batches 
           (id, data_upload_id, csv_center_id, uploaded_center_id, partner_id, batch_number, 
@@ -177,7 +237,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
             uploadedBatchId,
             dataUploadId,
             csvCenterId,
-            uploadedCenterId,
+            uploadedCenterId, // Use uploaded_centers.id (not centers.id)
             partnerId,
             batchData.batchData.batch_number,
             batchData.batchData.batch_start_date,
@@ -199,7 +259,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
           await connection.query(
             `INSERT INTO uploaded_students 
             (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, 
-             partner_id, student_id, student_name, father_name, date_of_birth, gender, 
+             partner_id, partner_student_id, student_name, father_name, date_of_birth, gender, 
              mobile_number, email, qualification, address, city, state, district,
              enrollment_date, course_name, course_duration_months, training_status, 
              approval_status, created_at) 
@@ -209,9 +269,9 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
               dataUploadId,
               csvCenterId,
               uploadedBatchId,
-              uploadedCenterId,
+              uploadedCenterId, // Use uploaded_centers.id (not centers.id)
               partnerId,
-              student.student_id,
+              student.partner_student_id,
               student.student_name,
               student.father_name,
               student.date_of_birth,
@@ -231,6 +291,12 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
           );
         }
       }
+    }
+
+    // If there were validation errors, rollback and return errors
+    if (errors.length > 0) {
+      await connection.rollback();
+      throw new Error(errors.join('\n'));
     }
 
     // Update data_uploads with totals and initialize review progress
@@ -508,7 +574,7 @@ const getBatchStudents = async (batchId, page = 1, limit = 50) => {
     const [students] = await pool.query(
       `SELECT * FROM uploaded_students 
        WHERE uploaded_batch_id = ? 
-       ORDER BY student_id 
+       ORDER BY partner_student_id 
        LIMIT ? OFFSET ?`,
       [batchId, limit, offset]
     );
@@ -637,7 +703,7 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
 
           await connection.query(
             `INSERT INTO students 
-            (id, center_id, batch_id, partner_id, student_id, student_name, date_of_birth, 
+            (id, center_id, batch_id, partner_id, partner_student_id, student_name, date_of_birth, 
              gender, mobile_number, email, address, city, state, enrollment_date, 
              course_name, course_duration_months, training_status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
@@ -646,7 +712,7 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
               approvedCenterId,
               approvedBatchId,
               student.partner_id,
-              student.student_id,
+              student.partner_student_id,
               student.student_name,
               student.date_of_birth,
               student.gender,
@@ -875,55 +941,75 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
 
       const studentData = editedStudent || originalStudent;
 
+      // Get uploaded_batch_id for this student
+      const [batchInfo] = await connection.query(
+        `SELECT id FROM uploaded_batches 
+         WHERE data_upload_id = ? AND uploaded_center_id = ?
+         LIMIT 1`,
+        [newUploadId, newCenter[0].id]
+      );
+
       // Insert student record
       await connection.query(
         `INSERT INTO uploaded_students 
-        (id, data_upload_id, uploaded_center_id, center_id, student_name, gender, date_of_birth,
-         mobile_number, email, father_name, mother_name, address, qualification,
-         batch_number, batch_start_date, batch_completion_date, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, 
+         partner_id, partner_student_id, student_name, father_name, date_of_birth, gender, 
+         mobile_number, email, qualification, address, city, state, district,
+         enrollment_date, course_name, course_duration_months, training_status, 
+         approval_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
         [
           newStudentId,
           newUploadId,
+          originalStudent.csv_center_id,
+          batchInfo.length > 0 ? batchInfo[0].id : null,
           newCenter[0].id,
-          studentData.center_id,
+          partnerId,
+          studentData.partner_student_id,
           studentData.student_name,
-          studentData.gender,
+          studentData.father_name,
           studentData.date_of_birth,
+          studentData.gender,
           studentData.mobile_number,
           studentData.email,
-          studentData.father_name,
-          studentData.mother_name,
-          studentData.address,
           studentData.qualification,
-          studentData.batch_number,
-          studentData.batch_start_date,
-          studentData.batch_completion_date,
+          studentData.address,
+          studentData.city,
+          studentData.state,
+          studentData.district,
+          studentData.enrollment_date,
+          studentData.course_name,
+          studentData.course_duration_months,
+          studentData.training_status,
         ]
       );
 
       // Log edits if this student was modified
       if (editedStudent) {
         const fieldsToCheck = [
+          'partner_student_id',
           'student_name',
-          'gender',
+          'father_name',
           'date_of_birth',
+          'gender',
           'mobile_number',
           'email',
-          'father_name',
-          'mother_name',
-          'address',
           'qualification',
-          'batch_number',
-          'batch_start_date',
-          'batch_completion_date',
+          'address',
+          'city',
+          'state',
+          'district',
+          'enrollment_date',
+          'course_name',
+          'course_duration_months',
+          'training_status',
         ];
 
         for (const field of fieldsToCheck) {
           if (originalStudent[field] !== editedStudent[field]) {
             await connection.query(
               `INSERT INTO data_edit_logs 
-              (id, upload_id, original_upload_id, student_id, field_name, old_value, new_value, edited_by, created_at)
+              (id, upload_id, original_upload_id, record_id, field_name, old_value, new_value, edited_by, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
               [
                 uuidv4(),
@@ -972,9 +1058,256 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
   }
 };
 
+/**
+ * Delete upload (only pending/rejected, prevent deletion if has child versions)
+ */
+const deleteUpload = async (uploadId, userId, userRole) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Get upload details
+    const [uploads] = await connection.query('SELECT * FROM data_uploads WHERE id = ?', [uploadId]);
+
+    if (uploads.length === 0) {
+      throw new Error('Upload not found');
+    }
+
+    const upload = uploads[0];
+
+    // Permission check: Partner can only delete their own, Admin can delete any
+    if (userRole === 'PARTNER' && upload.partner_id !== userId) {
+      throw new Error('Unauthorized: You can only delete your own uploads');
+    }
+
+    // Prevent deletion of approved or partial uploads
+    if (upload.status === 'approved' || upload.status === 'partial') {
+      throw new Error(
+        'Cannot delete approved uploads. Data has been moved to production and cannot be removed.'
+      );
+    }
+
+    // Check if this upload has child versions (resubmissions)
+    const [childVersions] = await connection.query(
+      'SELECT id FROM data_uploads WHERE parent_upload_id = ?',
+      [uploadId]
+    );
+
+    if (childVersions.length > 0) {
+      throw new Error(
+        `Cannot delete this upload. It has ${childVersions.length} resubmitted version(s). Please delete child versions first.`
+      );
+    }
+
+    // Delete in correct order to respect foreign key constraints
+
+    // 1. Delete notifications related to this upload
+    await connection.query(
+      `DELETE FROM notifications 
+       WHERE related_entity_type = 'data_upload' AND related_entity_id = ?`,
+      [uploadId]
+    );
+
+    // 2. Delete uploaded_students
+    await connection.query('DELETE FROM uploaded_students WHERE data_upload_id = ?', [uploadId]);
+
+    // 3. Delete uploaded_batches
+    await connection.query('DELETE FROM uploaded_batches WHERE data_upload_id = ?', [uploadId]);
+
+    // 4. Delete uploaded_centers
+    await connection.query('DELETE FROM uploaded_centers WHERE data_upload_id = ?', [uploadId]);
+
+    // 5. Delete data_uploads (data_edit_logs will auto-cascade)
+    await connection.query('DELETE FROM data_uploads WHERE id = ?', [uploadId]);
+
+    // 6. Delete physical file if exists
+    if (upload.file_url) {
+      const fs = require('fs');
+      const filePath = upload.file_url;
+
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (fileError) {
+          console.error(`Failed to delete file ${filePath}:`, fileError.message);
+          // Continue anyway - database cleanup is more important
+        }
+      }
+    }
+
+    await connection.commit();
+
+    return {
+      success: true,
+      message: 'Upload deleted successfully',
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Bulk delete uploads with cascade delete of uploaded data
+ * @param {Array<string>} uploadIds - Array of upload IDs to delete
+ * @param {string} userId - User ID performing the action
+ * @param {string} userRole - User role (ADMIN, SUPER_ADMIN, PARTNER)
+ * @returns {Promise<Object>} Deletion results with success/failure details
+ */
+const bulkDeleteUploads = async (uploadIds, userId, userRole) => {
+  const results = {
+    success: [],
+    failed: [],
+    summary: {
+      total: uploadIds.length,
+      successful: 0,
+      failed: 0,
+    },
+  };
+
+  // Process each upload
+  for (const uploadId of uploadIds) {
+    const connection = await pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      // Get upload details
+      const [uploads] = await connection.query('SELECT * FROM data_uploads WHERE id = ?', [
+        uploadId,
+      ]);
+
+      if (uploads.length === 0) {
+        results.failed.push({
+          id: uploadId,
+          readable_id: uploadId,
+          name: 'Unknown',
+          reason: 'Upload not found',
+        });
+        await connection.rollback();
+        connection.release();
+        continue;
+      }
+
+      const upload = uploads[0];
+
+      // Permission check: Partner can only delete their own, Admin can delete any
+      if (userRole === 'PARTNER' && upload.partner_id !== userId) {
+        results.failed.push({
+          id: uploadId,
+          readable_id: upload.file_name || uploadId,
+          name: upload.file_name || 'Unknown',
+          reason: 'Not authorized to delete this upload',
+        });
+        await connection.rollback();
+        connection.release();
+        continue;
+      }
+
+      // Prevent deletion of approved or partial uploads
+      if (upload.status === 'approved' || upload.status === 'partial') {
+        results.failed.push({
+          id: uploadId,
+          readable_id: upload.file_name || uploadId,
+          name: upload.file_name || 'Unknown',
+          reason:
+            'Cannot delete approved uploads. Data has been moved to production and cannot be removed.',
+        });
+        await connection.rollback();
+        connection.release();
+        continue;
+      }
+
+      // Check if this upload has child versions (resubmissions)
+      const [childVersions] = await connection.query(
+        'SELECT id FROM data_uploads WHERE parent_upload_id = ?',
+        [uploadId]
+      );
+
+      if (childVersions.length > 0) {
+        results.failed.push({
+          id: uploadId,
+          readable_id: upload.file_name || uploadId,
+          name: upload.file_name || 'Unknown',
+          reason: `Cannot delete upload with ${childVersions.length} resubmitted version(s). Please delete child versions first.`,
+        });
+        await connection.rollback();
+        connection.release();
+        continue;
+      }
+
+      // All checks passed - CASCADE DELETE uploaded data
+
+      // 1. Delete notifications related to this upload
+      await connection.query(
+        `DELETE FROM notifications 
+         WHERE related_entity_type = 'data_upload' AND related_entity_id = ?`,
+        [uploadId]
+      );
+
+      // 2. Delete uploaded_students (CASCADE as per requirement)
+      await connection.query('DELETE FROM uploaded_students WHERE data_upload_id = ?', [uploadId]);
+
+      // 3. Delete uploaded_batches
+      await connection.query('DELETE FROM uploaded_batches WHERE data_upload_id = ?', [uploadId]);
+
+      // 4. Delete uploaded_centers (CASCADE as per requirement)
+      await connection.query('DELETE FROM uploaded_centers WHERE data_upload_id = ?', [uploadId]);
+
+      // 5. Delete data_uploads (data_edit_logs will auto-cascade)
+      await connection.query('DELETE FROM data_uploads WHERE id = ?', [uploadId]);
+
+      // 6. Delete physical file if exists
+      if (upload.file_url) {
+        const fs = require('fs');
+        const filePath = upload.file_url;
+
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (fileError) {
+            console.error(`Failed to delete file ${filePath}:`, fileError.message);
+            // Continue anyway - database cleanup is more important
+          }
+        }
+      }
+
+      await connection.commit();
+
+      results.success.push({
+        id: uploadId,
+        readable_id: upload.file_name || uploadId,
+        name: upload.file_name || 'Unknown',
+      });
+
+      connection.release();
+    } catch (error) {
+      await connection.rollback();
+      connection.release();
+
+      results.failed.push({
+        id: uploadId,
+        readable_id: uploadId,
+        name: 'Unknown',
+        reason: error.message,
+      });
+    }
+  }
+
+  results.summary.successful = results.success.length;
+  results.summary.failed = results.failed.length;
+
+  return results;
+};
+
 module.exports = {
   getAllCourses,
   getPartnerById,
+  getPartnerActiveCenters,
+  checkDuplicateBatches,
   getNextVersionNumber,
   createDataUpload,
   saveUploadedData,
@@ -987,4 +1320,6 @@ module.exports = {
   approveUpload,
   rejectUpload,
   resubmitWithEdits,
+  deleteUpload,
+  bulkDeleteUploads,
 };

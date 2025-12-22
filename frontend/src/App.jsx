@@ -3,7 +3,7 @@ import { Provider, useDispatch, useSelector } from "react-redux";
 import store from "./store";
 import { AppRoutes } from "./routes";
 import { NotificationProvider } from "./context/NotificationContext";
-import { verifyTokenOnMount } from "./store/slices/authSlice";
+import { verifyTokenOnMount, updateUser } from "./store/slices/authSlice";
 import { PageLoader } from "./components/common";
 
 /**
@@ -30,6 +30,23 @@ const AppInitializer = ({ children }) => {
     };
 
     initAuth();
+  }, [dispatch]);
+
+  useEffect(() => {
+    // Listen for user updates from token refresh
+    const handleUserUpdate = (event) => {
+      const { user } = event.detail;
+      if (user) {
+        console.log("👤 User data updated from token refresh");
+        dispatch(updateUser(user));
+      }
+    };
+
+    window.addEventListener("user-updated", handleUserUpdate);
+
+    return () => {
+      window.removeEventListener("user-updated", handleUserUpdate);
+    };
   }, [dispatch]);
 
   // Show loader while auth is being verified

@@ -1,0 +1,21 @@
+{
+  "generated_at": "2025-12-08T14:05:00.136Z",
+  "counts": {
+    "countries": 250,
+    "states": 4963,
+    "cities": 148038
+  },
+  "sample_countries": [
+    "Afghanistan",
+    "Aland Islands",
+    "Albania",
+    "Algeria",
+    "American Samoa",
+    "Andorra",
+    "Angola",
+    "Anguilla",
+    "Antarctica",
+    "Antigua And Barbuda"
+  ],
+  "file_size_mb": "9.82"
+}

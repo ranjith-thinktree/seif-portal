@@ -46,6 +46,16 @@ router.get(
   reviewController.getCenterStudentsForReview
 );
 
+// Save admin edits to students (during initial review)
+router.put(
+  '/:uploadId/centers/:centerId/save-edits',
+  authenticate,
+  authorize(['ADMIN', 'SUPER_ADMIN']),
+  [...uploadIdValidator, ...centerIdValidator],
+  validate,
+  reviewController.saveAdminEdits
+);
+
 // Approve a center
 router.post(
   '/:uploadId/centers/:centerId/approve',
@@ -84,6 +94,44 @@ router.get(
   uploadIdValidator,
   validate,
   reviewController.getUploadForPartnerReview
+);
+
+// ========== NEW TWO-TAB SYSTEM ROUTES ==========
+
+// Tab 1: Get pending centers for approval (from centers table)
+router.get(
+  '/pending-centers',
+  authenticate,
+  authorize(['ADMIN', 'SUPER_ADMIN']),
+  reviewController.getPendingCentersForApproval
+);
+
+// Tab 1: Approve center directly (from centers table)
+router.post(
+  '/centers/:centerId/approve',
+  authenticate,
+  authorize(['ADMIN', 'SUPER_ADMIN']),
+  centerIdValidator,
+  validate,
+  reviewController.approveCenterDirect
+);
+
+// Tab 1: Reject center directly (from centers table)
+router.post(
+  '/centers/:centerId/reject',
+  authenticate,
+  authorize(['ADMIN', 'SUPER_ADMIN']),
+  [...centerIdValidator, ...rejectCenterValidator],
+  validate,
+  reviewController.rejectCenterDirect
+);
+
+// Tab 2: Get pending data uploads (batches/students)
+router.get(
+  '/pending-uploads',
+  authenticate,
+  authorize(['ADMIN', 'SUPER_ADMIN']),
+  reviewController.getPendingDataUploads
 );
 
 module.exports = router;

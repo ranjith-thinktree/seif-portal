@@ -127,11 +127,26 @@ class AuthController {
   static async changePassword(req, res, next) {
     try {
       const userId = req.user.id;
-      const { oldPassword, newPassword } = req.body;
+      const { currentPassword, newPassword, confirmPassword } = req.body;
 
-      await AuthService.changePassword(userId, oldPassword, newPassword);
+      // Validate required fields
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        return ApiResponse.error(
+          res,
+          'Current password, new password, and confirm password are required',
+          400
+        );
+      }
 
-      return ApiResponse.success(res, null, SUCCESS_MESSAGES.PASSWORD_RESET_SUCCESS, 200);
+      // Check if new password and confirm password match
+      if (newPassword !== confirmPassword) {
+        return ApiResponse.error(res, 'New password and confirm password do not match', 400);
+      }
+
+      // Change password
+      const result = await AuthService.changePassword(userId, currentPassword, newPassword);
+
+      return ApiResponse.success(res, result, result.message, 200);
     } catch (error) {
       next(error);
     }

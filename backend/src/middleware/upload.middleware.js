@@ -4,7 +4,8 @@ const fs = require('fs');
 
 /**
  * Multer Configuration for File Uploads
- * Handles CSV file uploads for partner data submissions
+ * Handles multiple format file uploads (CSV, XLSX, XLS, XLSM) for partner data submissions
+ * Updated to support ExcelJS integration - never reject uploads!
  */
 
 // Ensure uploads directory exists
@@ -27,7 +28,8 @@ const storage = multer.diskStorage({
     cb(null, partnerDir);
   },
   filename: (req, file, cb) => {
-    // Generate unique filename: originalname_timestamp.csv
+    // Generate unique filename: timestamp_originalname
+    // Preserve original extension for multi-format support
     const timestamp = Date.now();
     const originalName = file.originalname.replace(/\s+/g, '_');
     const filename = `${timestamp}_${originalName}`;
@@ -35,25 +37,42 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter - only allow CSV files
+// File filter - allow multiple Excel formats (CSV, XLSX, XLS, XLSM)
 const fileFilter = (req, file, cb) => {
   // Check file extension
   const ext = path.extname(file.originalname).toLowerCase();
+  const allowedExtensions = ['.csv', '.xlsx', '.xls', '.xlsm'];
 
-  if (ext !== '.csv') {
-    return cb(new Error('Invalid file type. Only CSV files are allowed.'), false);
+  if (!allowedExtensions.includes(ext)) {
+    return cb(
+      new Error(
+        `Invalid file type. Supported formats: CSV (.csv), Excel (.xlsx, .xls, .xlsm). You uploaded: ${ext}`
+      ),
+      false
+    );
   }
 
-  // Check MIME type
+  // Check MIME type - be lenient to accept various Excel formats
   const allowedMimeTypes = [
+    // CSV
     'text/csv',
     'application/csv',
     'text/plain',
+    // Excel XLSX
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    // Excel XLS (older format)
     'application/vnd.ms-excel',
+    // Excel XLSM (macro-enabled)
+    'application/vnd.ms-excel.sheet.macroEnabled.12',
+    // Generic Office document
+    'application/octet-stream', // Sometimes Excel files come with this MIME type
   ];
 
   if (!allowedMimeTypes.includes(file.mimetype)) {
-    return cb(new Error('Invalid file type. Only CSV files are allowed.'), false);
+    console.warn(
+      `Warning: Unexpected MIME type "${file.mimetype}" for file "${file.originalname}". Allowing based on extension.`
+    );
+    // Don't reject - trust the extension if MIME type is unusual
   }
 
   cb(null, true);
@@ -70,7 +89,8 @@ const upload = multer({
 });
 
 /**
- * Middleware to handle single CSV file upload
+ * Middleware to handle single file upload (CSV, XLSX, XLS, XLSM)
+ * Name kept as uploadCSV for backward compatibility
  */
 const uploadCSV = upload.single('file');
 

@@ -26,7 +26,7 @@ class StudentService {
     city = '',
     state = '',
     course_name = '',
-    placement_status = '',
+    training_status = '',
     sort_by = 'created_at',
     sort_order = 'desc',
   }) {
@@ -41,22 +41,31 @@ class StudentService {
         queryParams.push(user_partner_id);
       }
 
-      // Center filter
+      // Center filter (supports array for multi-select)
       if (center_id) {
-        whereConditions.push('s.center_id = ?');
-        queryParams.push(center_id);
+        const centerIds = Array.isArray(center_id) ? center_id : [center_id];
+        if (centerIds.length > 0) {
+          whereConditions.push(`s.center_id IN (${centerIds.map(() => '?').join(',')})`);
+          queryParams.push(...centerIds);
+        }
       }
 
-      // Batch filter
+      // Batch filter (supports array for multi-select)
       if (batch_id) {
-        whereConditions.push('s.batch_id = ?');
-        queryParams.push(batch_id);
+        const batchIds = Array.isArray(batch_id) ? batch_id : [batch_id];
+        if (batchIds.length > 0) {
+          whereConditions.push(`s.batch_id IN (${batchIds.map(() => '?').join(',')})`);
+          queryParams.push(...batchIds);
+        }
       }
 
-      // Partner filter
+      // Partner filter (supports array for multi-select)
       if (partner_id) {
-        whereConditions.push('s.partner_id = ?');
-        queryParams.push(partner_id);
+        const partnerIds = Array.isArray(partner_id) ? partner_id : [partner_id];
+        if (partnerIds.length > 0) {
+          whereConditions.push(`s.partner_id IN (${partnerIds.map(() => '?').join(',')})`);
+          queryParams.push(...partnerIds);
+        }
       }
 
       // Gender filter
@@ -83,19 +92,19 @@ class StudentService {
         queryParams.push(course_name);
       }
 
-      // Placement status filter
-      if (placement_status) {
-        whereConditions.push('s.placement_status = ?');
-        queryParams.push(placement_status);
+      // Training status filter
+      if (training_status) {
+        whereConditions.push('s.training_status = ?');
+        queryParams.push(training_status);
       }
 
       // Search filter
       if (search) {
         whereConditions.push(
-          '(s.enrollment_id LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ? OR s.email LIKE ? OR s.mobile_number LIKE ?)'
+          '(s.student_id LIKE ? OR s.student_name LIKE ? OR s.email LIKE ? OR s.mobile_number LIKE ?)'
         );
         const searchPattern = `%${search}%`;
-        queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+        queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
       }
 
       const whereClause =
@@ -103,14 +112,14 @@ class StudentService {
 
       // Validate and sanitize sort parameters
       const allowedSortFields = [
-        'enrollment_id',
-        'first_name',
-        'last_name',
+        'student_id',
+        'student_name',
+        'student_name',
         'gender',
         'city',
         'state',
         'course_name',
-        'placement_status',
+        'training_status',
         'created_at',
       ];
       const sortField = allowedSortFields.includes(sort_by) ? `s.${sort_by}` : 's.created_at';
@@ -218,22 +227,31 @@ class StudentService {
         queryParams.push(user_partner_id);
       }
 
-      // Center filter
+      // Center filter (supports array for multi-select)
       if (center_id) {
-        whereConditions.push('s.center_id = ?');
-        queryParams.push(center_id);
+        const centerIds = Array.isArray(center_id) ? center_id : [center_id];
+        if (centerIds.length > 0) {
+          whereConditions.push(`s.center_id IN (${centerIds.map(() => '?').join(',')})`);
+          queryParams.push(...centerIds);
+        }
       }
 
-      // Batch filter
+      // Batch filter (supports array for multi-select)
       if (batch_id) {
-        whereConditions.push('s.batch_id = ?');
-        queryParams.push(batch_id);
+        const batchIds = Array.isArray(batch_id) ? batch_id : [batch_id];
+        if (batchIds.length > 0) {
+          whereConditions.push(`s.batch_id IN (${batchIds.map(() => '?').join(',')})`);
+          queryParams.push(...batchIds);
+        }
       }
 
-      // Partner filter
+      // Partner filter (supports array for multi-select)
       if (partner_id) {
-        whereConditions.push('s.partner_id = ?');
-        queryParams.push(partner_id);
+        const partnerIds = Array.isArray(partner_id) ? partner_id : [partner_id];
+        if (partnerIds.length > 0) {
+          whereConditions.push(`s.partner_id IN (${partnerIds.map(() => '?').join(',')})`);
+          queryParams.push(...partnerIds);
+        }
       }
 
       // Search filter
@@ -396,78 +414,203 @@ class StudentService {
       }
 
       // Get unique values for each filterable field
-      const [genders, cities, states, courses, batches, placements] = await Promise.all([
-        // Genders
-        db.query(
-          `SELECT DISTINCT gender as value, 
+      const [partners, centers, batches, genders, cities, states, courses, placements] =
+        await Promise.all([
+          // Partners - get ALL partners (not just those with students)
+          role !== 'PARTNER'
+            ? db.query(
+                `SELECT id as value, name as label 
+               FROM partners
+               ORDER BY name ASC`
+              )
+            : Promise.resolve([]),
+          // Centers - get ALL centers (optionally filtered by center_id or partner)
+          db.query(
+            center_id
+              ? `SELECT id as value, center_name as label 
+               FROM centers
+               WHERE id = ?
+               ORDER BY center_name ASC`
+              : role === 'PARTNER'
+                ? `SELECT id as value, center_name as label 
+               FROM centers
+               WHERE partner_id = ?
+               ORDER BY center_name ASC`
+                : `SELECT id as value, center_name as label 
+               FROM centers
+               ORDER BY center_name ASC`,
+            center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
+          ),
+          // Batches - get ALL batches (optionally filtered by center or partner)
+          db.query(
+            center_id
+              ? `SELECT id as value, batch_number as label 
+               FROM batches
+               WHERE center_id = ?
+               ORDER BY batch_number ASC`
+              : role === 'PARTNER'
+                ? `SELECT id as value, batch_number as label 
+               FROM batches
+               WHERE partner_id = ?
+               ORDER BY batch_number ASC`
+                : `SELECT id as value, batch_number as label 
+               FROM batches
+               ORDER BY batch_number ASC`,
+            center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
+          ),
+          // Genders
+          db.query(
+            `SELECT DISTINCT gender as value, 
            CONCAT(UPPER(SUBSTRING(gender, 1, 1)), SUBSTRING(gender, 2)) as label 
            FROM students s 
            ${whereCondition}
-           AND gender IS NOT NULL AND gender != ''
+           ${whereCondition ? 'AND' : 'WHERE'} gender IS NOT NULL AND gender != ''
            ORDER BY gender ASC`,
-          queryParams
-        ),
-        // Cities
-        db.query(
-          `SELECT DISTINCT city as value, city as label 
+            queryParams
+          ),
+          // Cities
+          db.query(
+            `SELECT DISTINCT city as value, city as label 
            FROM students s 
            ${whereCondition}
-           AND city IS NOT NULL AND city != ''
+           ${whereCondition ? 'AND' : 'WHERE'} city IS NOT NULL AND city != ''
            ORDER BY city ASC`,
-          queryParams
-        ),
-        // States
-        db.query(
-          `SELECT DISTINCT state as value, state as label 
+            queryParams
+          ),
+          // States
+          db.query(
+            `SELECT DISTINCT state as value, state as label 
            FROM students s 
            ${whereCondition}
-           AND state IS NOT NULL AND state != ''
+           ${whereCondition ? 'AND' : 'WHERE'} state IS NOT NULL AND state != ''
            ORDER BY state ASC`,
-          queryParams
-        ),
-        // Courses
-        db.query(
-          `SELECT DISTINCT course_name as value, course_name as label 
+            queryParams
+          ),
+          // Courses
+          db.query(
+            `SELECT DISTINCT course_name as value, course_name as label 
            FROM students s 
            ${whereCondition}
-           AND course_name IS NOT NULL AND course_name != ''
+           ${whereCondition ? 'AND' : 'WHERE'} course_name IS NOT NULL AND course_name != ''
            ORDER BY course_name ASC`,
-          queryParams
-        ),
-        // Batches (for center-specific filtering)
-        center_id
-          ? db.query(
-              `SELECT DISTINCT b.id as value, b.batch_number as label 
-               FROM students s
-               LEFT JOIN batches b ON s.batch_id = b.id
-               ${whereCondition}
-               AND b.batch_number IS NOT NULL
-               ORDER BY b.batch_number ASC`,
-              queryParams
-            )
-          : Promise.resolve([]),
-        // Placement Status
-        db.query(
-          `SELECT DISTINCT placement_status as value, 
-           CONCAT(UPPER(SUBSTRING(placement_status, 1, 1)), SUBSTRING(placement_status, 2)) as label 
+            queryParams
+          ),
+          // Training Status
+          db.query(
+            `SELECT DISTINCT s.training_status as value, 
+           CONCAT(UPPER(SUBSTRING(s.training_status, 1, 1)), SUBSTRING(s.training_status, 2)) as label 
            FROM students s 
            ${whereCondition}
-           AND placement_status IS NOT NULL AND placement_status != ''
-           ORDER BY placement_status ASC`,
-          queryParams
-        ),
-      ]);
+           ${whereCondition ? 'AND' : 'WHERE'} s.training_status IS NOT NULL AND s.training_status != ''
+           ORDER BY s.training_status ASC`,
+            queryParams
+          ),
+        ]);
 
       return {
-        genders: genders.map((g) => ({ value: g.value, label: g.label })),
-        cities: cities.map((c) => ({ value: c.value, label: c.label })),
-        states: states.map((s) => ({ value: s.value, label: s.label })),
-        courses: courses.map((c) => ({ value: c.value, label: c.label })),
-        batches: batches.map((b) => ({ value: b.value, label: b.label })),
-        placements: placements.map((p) => ({ value: p.value, label: p.label })),
+        partners: (partners || []).map((p) => ({ value: p.value, label: p.label })),
+        centers: (centers || []).map((c) => ({ value: c.value, label: c.label })),
+        batches: (batches || []).map((b) => ({ value: b.value, label: b.label })),
+        genders: (genders || []).map((g) => ({ value: g.value, label: g.label })),
+        cities: (cities || []).map((c) => ({ value: c.value, label: c.label })),
+        states: (states || []).map((s) => ({ value: s.value, label: s.label })),
+        courses: (courses || []).map((c) => ({ value: c.value, label: c.label })),
+        trainings: (placements || []).map((p) => ({
+          value: p.value,
+          label: p.label,
+        })),
       };
     } catch (error) {
       console.error('Error in getFilterOptions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk delete students with authorization checking
+   * @param {Array<string>} ids - Array of student IDs to delete
+   * @param {string} role - User role
+   * @param {string} userPartnerId - Partner ID of the user (for PARTNER role)
+   * @returns {Promise<Object>} Deletion results with success/failure details
+   */
+  async bulkDeleteStudents(ids, role, userPartnerId = null) {
+    try {
+      const results = {
+        success: [],
+        failed: [],
+        summary: {
+          total: ids.length,
+          successful: 0,
+          failed: 0,
+        },
+      };
+
+      // Convert all IDs to UUIDs
+      const studentUUIDs = ids.map((id) => convertToUUID(id));
+
+      // Validate all students exist and check authorization
+      for (const studentId of studentUUIDs) {
+        try {
+          // Get student details
+          const student = await db.query(
+            `SELECT s.id, s.name, s.partner_id, s.center_id, s.batch_id,
+                    c.center_name, b.batch_number
+             FROM students s
+             LEFT JOIN centers c ON s.center_id = c.id
+             LEFT JOIN batches b ON s.batch_id = b.id
+             WHERE s.id = ?`,
+            [studentId]
+          );
+
+          if (student.length === 0) {
+            results.failed.push({
+              id: studentId,
+              readable_id: studentId,
+              name: 'Unknown',
+              reason: 'Student not found',
+            });
+            continue;
+          }
+
+          const studentData = student[0];
+
+          // Authorization check for PARTNER role
+          // PARTNER can delete students from ANY batch in their centers
+          if (role === 'PARTNER' && studentData.partner_id !== userPartnerId) {
+            results.failed.push({
+              id: studentId,
+              readable_id: studentId,
+              name: studentData.name,
+              reason: 'Not authorized to delete this student',
+            });
+            continue;
+          }
+
+          // No dependencies to check for students - they are leaf nodes
+          // Delete the student
+          await db.query('DELETE FROM students WHERE id = ?', [studentId]);
+
+          results.success.push({
+            id: studentId,
+            readable_id: studentId,
+            name: studentData.name,
+          });
+        } catch (error) {
+          results.failed.push({
+            id: studentId,
+            readable_id: studentId,
+            name: 'Unknown',
+            reason: error.message,
+          });
+        }
+      }
+
+      results.summary.successful = results.success.length;
+      results.summary.failed = results.failed.length;
+
+      return results;
+    } catch (error) {
+      console.error('Error in bulkDeleteStudents:', error);
       throw error;
     }
   }

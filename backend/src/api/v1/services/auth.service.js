@@ -3,8 +3,14 @@ const jwt = require('jsonwebtoken');
 const config = require('../../../config');
 const UserModel = require('../../../models/User.model');
 const { generateUUID } = require('../../../utils/uuid.util');
-const { AuthenticationError, ConflictError, NotFoundError } = require('../../../utils/error.util');
+const {
+  AuthenticationError,
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} = require('../../../utils/error.util');
 const { ERROR_MESSAGES, USER_STATUS } = require('../../../constants');
+const { validatePassword } = require('../../../utils/password.util');
 
 /**
  * Authentication Service
@@ -43,6 +49,7 @@ class AuthService {
       email: user.email,
       role: user.role,
       partner_id: user.partner_id,
+      full_name: user.full_name,
       type: 'access',
     };
 
@@ -94,39 +101,57 @@ class AuthService {
     const user = await UserModel.findByEmail(email);
 
     if (!user) {
-      throw new AuthenticationError(ERROR_MESSAGES.INVALID_CREDENTIALS);
+      // More specific error for non-existent email
+      throw new AuthenticationError(
+        'No account found with this email address. Please check your email or contact your administrator.'
+      );
     }
 
     // Check if user is active
     if (user.status === USER_STATUS.INACTIVE) {
-      throw new AuthenticationError(ERROR_MESSAGES.USER_INACTIVE);
+      throw new AuthenticationError(
+        'Your account is inactive. Please contact your administrator to activate your account.'
+      );
     }
 
     if (user.status === USER_STATUS.SUSPENDED) {
-      throw new AuthenticationError(ERROR_MESSAGES.USER_SUSPENDED);
+      throw new AuthenticationError(
+        'Your account has been suspended. Please contact your administrator for assistance.'
+      );
     }
 
     // Verify password
     const isPasswordValid = await this.comparePassword(password, user.password_hash);
 
     if (!isPasswordValid) {
-      throw new AuthenticationError(ERROR_MESSAGES.INVALID_CREDENTIALS);
+      // More helpful error for wrong password
+      throw new AuthenticationError(
+        'Incorrect password. If you recently received new credentials, please use the temporary password from your email. Contact your administrator if you need a password reset.'
+      );
     }
 
-    // Update last login
+    // Update last login (but not first_login yet - that happens after password change)
     await UserModel.updateLastLogin(user.id);
 
     // Generate tokens
     const accessToken = this.generateAccessToken(user);
     const refreshToken = this.generateRefreshToken(user);
 
+    // Check if user must change password
+    const mustChangePassword =
+      user.must_change_password === 1 || user.must_change_password === true;
+
     // Remove password hash from response
     delete user.password_hash;
 
     return {
-      user,
+      user: {
+        ...user,
+        must_change_password: mustChangePassword,
+      },
       accessToken,
       refreshToken,
+      mustChangePassword, // Also send at root level for easy access
     };
   }
 
@@ -175,7 +200,7 @@ class AuthService {
   /**
    * Refresh access token
    * @param {String} refreshToken - Refresh token
-   * @returns {Object} New access token
+   * @returns {Object} New access token and user data
    */
   static async refreshAccessToken(refreshToken) {
     // Verify refresh token
@@ -196,8 +221,12 @@ class AuthService {
     // Generate new access token
     const newAccessToken = this.generateAccessToken(user);
 
+    // Remove password hash from response
+    delete user.password_hash;
+
     return {
       accessToken: newAccessToken,
+      user, // Include user data for frontend to update
     };
   }
 
@@ -220,30 +249,77 @@ class AuthService {
   }
 
   /**
-   * Change password
+   * Change password with validation and history tracking
    * @param {String} userId - User ID
-   * @param {String} oldPassword - Current password
+   * @param {String} currentPassword - Current password
    * @param {String} newPassword - New password
+   * @returns {Object} Success message
    */
-  static async changePassword(userId, oldPassword, newPassword) {
+  static async changePassword(userId, currentPassword, newPassword) {
+    // Get user with password hash
     const user = await UserModel.findById(userId);
 
     if (!user) {
-      throw new NotFoundError(ERROR_MESSAGES.USER_NOT_FOUND);
+      throw new NotFoundError('User not found');
     }
 
-    // Verify old password
-    const isPasswordValid = await this.comparePassword(oldPassword, user.password_hash);
+    // ESSCI users cannot change their own password
+    if (user.role === 'ESSCI') {
+      throw new AuthenticationError(
+        'ESSCI users cannot change their password. Please contact your administrator for assistance.'
+      );
+    }
+
+    // Verify current password
+    const isPasswordValid = await this.comparePassword(currentPassword, user.password_hash);
 
     if (!isPasswordValid) {
-      throw new AuthenticationError('Current password is incorrect');
+      throw new AuthenticationError('Current password is incorrect. Please try again.');
+    }
+
+    // Validate new password strength
+    const validation = validatePassword(newPassword);
+    if (!validation.isValid) {
+      throw new ValidationError('Password does not meet security requirements', {
+        errors: validation.errors,
+        requirements: validation.errors,
+      });
+    }
+
+    // Check if new password is same as current password
+    const isSamePassword = await this.comparePassword(newPassword, user.password_hash);
+    if (isSamePassword) {
+      throw new ValidationError('New password must be different from your current password');
+    }
+
+    // Get password history (last 3 passwords)
+    const passwordHistory = await UserModel.getPasswordHistory(userId, 3);
+
+    // Check if new password matches any recent passwords
+    for (const historyEntry of passwordHistory) {
+      const matchesOldPassword = await this.comparePassword(
+        newPassword,
+        historyEntry.password_hash
+      );
+      if (matchesOldPassword) {
+        throw new ValidationError(
+          'You cannot reuse any of your last 3 passwords. Please choose a different password.'
+        );
+      }
     }
 
     // Hash new password
     const newPasswordHash = await this.hashPassword(newPassword);
 
-    // Update password
-    await UserModel.update(userId, { password_hash: newPasswordHash });
+    // Add current password to history before updating
+    await UserModel.addPasswordToHistory(userId, user.password_hash);
+
+    // Update password and related fields
+    await UserModel.updatePassword(userId, newPasswordHash);
+
+    return {
+      message: 'Password changed successfully. Please login again with your new password.',
+    };
   }
 
   /**

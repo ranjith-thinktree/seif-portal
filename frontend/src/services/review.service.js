@@ -61,6 +61,22 @@ const reviewService = {
   },
 
   /**
+   * Save admin edits to students (during initial review)
+   * Saves to uploaded_students + logs in data_edit_logs with admin user ID
+   * @param {string} uploadId - The upload ID
+   * @param {string} centerId - The center ID
+   * @param {Object} data - { students: [], changes: [] }
+   * @returns {Promise<Object>} Save result
+   */
+  saveAdminEdits: async (uploadId, centerId, data) => {
+    const response = await apiClient.put(
+      `/review/${uploadId}/centers/${centerId}/save-edits`,
+      data
+    );
+    return response.data;
+  },
+
+  /**
    * Reject a center
    * @param {string} uploadId - The upload ID
    * @param {string} centerId - The center ID
@@ -105,6 +121,64 @@ const reviewService = {
   resubmitUpload: async (uploadId, editedStudents) => {
     const response = await apiClient.post(`/uploads/${uploadId}/resubmit`, {
       editedStudents,
+    });
+    return response.data;
+  },
+
+  // ========== NEW TWO-TAB SYSTEM ==========
+
+  /**
+   * Tab 1: Get pending centers for approval (from centers table)
+   * @param {Object} params - Query parameters (page, limit, search, partner_id)
+   * @returns {Promise<Object>} Centers data with pagination
+   */
+  getPendingCentersForApproval: async (params = {}) => {
+    const { page = 1, limit = 10, search = "", partner_id = "" } = params;
+    const response = await apiClient.get("/review/pending-centers", {
+      params: { page, limit, search, partner_id },
+    });
+    return response.data;
+  },
+
+  /**
+   * Tab 1: Approve center directly (from centers table)
+   * @param {string} centerId - The center ID
+   * @returns {Promise<Object>} Approval result
+   */
+  approveCenterDirect: async (centerId) => {
+    const response = await apiClient.post(
+      `/review/centers/${centerId}/approve`
+    );
+    return response.data;
+  },
+
+  /**
+   * Tab 1: Reject center directly (from centers table)
+   * @param {string} centerId - The center ID
+   * @param {string} reason - Rejection reason (required)
+   * @param {string} remarks - Optional remarks
+   * @returns {Promise<Object>} Rejection result
+   */
+  rejectCenterDirect: async (centerId, reason, remarks = "") => {
+    const response = await apiClient.post(
+      `/review/centers/${centerId}/reject`,
+      {
+        reason,
+        remarks,
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Tab 2: Get pending data uploads (batches/students)
+   * @param {Object} params - Query parameters (page, limit, search, partner_id)
+   * @returns {Promise<Object>} Uploads data with pagination
+   */
+  getPendingDataUploads: async (params = {}) => {
+    const { page = 1, limit = 10, search = "", partner_id = "" } = params;
+    const response = await apiClient.get("/review/pending-uploads", {
+      params: { page, limit, search, partner_id },
     });
     return response.data;
   },

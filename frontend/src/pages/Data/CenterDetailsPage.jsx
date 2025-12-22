@@ -20,14 +20,15 @@ import {
   deleteBatch,
 } from "../../services/data.service";
 import { toast } from "react-toastify";
-import { isAdminRole } from "../../utils/role";
+import { useAuth } from "../../hooks";
 
 const CenterDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const isAdmin = isAdminRole(user.role);
-  const canCreate = ["ADMIN", "SUPER_ADMIN", "PARTNER"].includes(user.role);
+  const { role } = useAuth();
+
+  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(role);
+  const canCreate = ["ADMIN", "SUPER_ADMIN", "PARTNER"].includes(role);
 
   const [center, setCenter] = useState(null);
   const [batches, setBatches] = useState([]);
@@ -191,7 +192,7 @@ const CenterDetailsPage = () => {
           className="flex items-center gap-2"
           onClick={(e) => e.stopPropagation()}
         >
-          {(isAdmin || user.role === "PARTNER") && (
+          {(isAdmin || role === "PARTNER") && (
             <button
               onClick={(e) => handleEditClick(e, row)}
               className="text-blue-600 hover:text-blue-800"
@@ -269,10 +270,13 @@ const CenterDetailsPage = () => {
             </div>
           </div>
           {canCreate && (
-            <Button onClick={() => setShowBatchForm(true)} className="gap-2">
+            <button
+              onClick={() => setShowBatchForm(true)}
+              className="px-8 py-3 bg-primary-500 text-white rounded-full font-semibold hover:bg-primary-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+            >
               <PlusIcon className="h-5 w-5" />
               Create Batch
-            </Button>
+            </button>
           )}
         </div>
 
@@ -361,6 +365,24 @@ const CenterDetailsPage = () => {
             partnerId={center.partner_id}
           />
         )}
+
+        {/* Delete Confirmation Modal */}
+        <RejectionModal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setSelectedBatch(null);
+          }}
+          title={`Delete Batch: ${selectedBatch?.batch_number || ""}`}
+          description="Are you sure you want to delete this batch? This action cannot be undone and will affect all associated student records."
+          onSubmit={confirmDeleteBatch}
+          isLoading={isDeleting}
+          reasonLabel="Reason for Deletion"
+          remarksLabel="Additional Notes"
+          reasonPlaceholder="Please provide a reason for deleting this batch..."
+          remarksPlaceholder="Any additional notes..."
+          minReasonLength={10}
+        />
       </div>
     </MainLayout>
   );

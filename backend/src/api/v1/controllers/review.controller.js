@@ -103,6 +103,45 @@ class ReviewController {
   }
 
   /**
+   * Save admin edits to students (during initial review)
+   * Saves to uploaded_students + logs in data_edit_logs with admin user ID
+   * @route PUT /api/v1/review/:uploadId/centers/:centerId/save-edits
+   */
+  async saveAdminEdits(req, res) {
+    try {
+      const { uploadId, centerId } = req.params;
+      const { students, changes } = req.body;
+      const { id: adminUserId } = req.user;
+
+      if (!students || !Array.isArray(students)) {
+        return errorResponse(res, 'Students array is required', 400);
+      }
+
+      if (!changes || !Array.isArray(changes)) {
+        return errorResponse(res, 'Changes array is required', 400);
+      }
+
+      const result = await reviewService.saveAdminEdits(
+        uploadId,
+        centerId,
+        students,
+        changes,
+        adminUserId
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Admin edits saved successfully',
+        data: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in saveAdminEdits:', error);
+      return errorResponse(res, error.message || 'Failed to save admin edits', 500);
+    }
+  }
+
+  /**
    * Approve a center
    * @route POST /api/v1/review/:uploadId/centers/:centerId/approve
    */
@@ -220,6 +259,119 @@ class ReviewController {
     } catch (error) {
       console.error('Error in getUploadForPartnerReview:', error);
       return errorResponse(res, 'Failed to retrieve upload details', 500);
+    }
+  }
+
+  /**
+   * NEW: Get pending centers for approval (Tab 1)
+   * @route GET /api/v1/review/pending-centers
+   */
+  async getPendingCentersForApproval(req, res) {
+    try {
+      const { page, limit, search, partner_id } = req.query;
+
+      const result = await reviewService.getPendingCentersForApproval({
+        page: parseInt(page) || 1,
+        limit: parseInt(limit) || 10,
+        search: search || '',
+        partner_id: partner_id || '',
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Pending centers retrieved successfully',
+        data: result.data,
+        pagination: result.pagination,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in getPendingCentersForApproval:', error);
+      return errorResponse(res, 'Failed to retrieve pending centers', 500);
+    }
+  }
+
+  /**
+   * NEW: Approve center directly (Tab 1)
+   * @route POST /api/v1/review/centers/:centerId/approve
+   */
+  async approveCenterDirect(req, res) {
+    try {
+      const { centerId } = req.params;
+      const { id: userId } = req.user;
+
+      const result = await reviewService.approveCenterDirect(centerId, userId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Center approved successfully',
+        data: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in approveCenterDirect:', error);
+      if (error.message.includes('not found') || error.message.includes('already reviewed')) {
+        return errorResponse(res, error.message, 404);
+      }
+      return errorResponse(res, 'Failed to approve center', 500);
+    }
+  }
+
+  /**
+   * NEW: Reject center directly (Tab 1)
+   * @route POST /api/v1/review/centers/:centerId/reject
+   */
+  async rejectCenterDirect(req, res) {
+    try {
+      const { centerId } = req.params;
+      const { id: userId } = req.user;
+      const { reason, remarks } = req.body;
+
+      if (!reason) {
+        return errorResponse(res, 'Rejection reason is required', 400);
+      }
+
+      const result = await reviewService.rejectCenterDirect(centerId, userId, reason, remarks);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Center rejected successfully',
+        data: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in rejectCenterDirect:', error);
+      if (error.message.includes('not found') || error.message.includes('already reviewed')) {
+        return errorResponse(res, error.message, 404);
+      }
+      return errorResponse(res, 'Failed to reject center', 500);
+    }
+  }
+
+  /**
+   * NEW: Get pending data uploads (Tab 2)
+   * @route GET /api/v1/review/pending-uploads
+   */
+  async getPendingDataUploads(req, res) {
+    try {
+      const { page, limit, search, partner_id } = req.query;
+
+      const result = await reviewService.getPendingDataUploads({
+        page: parseInt(page) || 1,
+        limit: parseInt(limit) || 10,
+        search: search || '',
+        partner_id: partner_id || '',
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Pending data uploads retrieved successfully',
+        data: result.data,
+        pagination: result.pagination,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in getPendingDataUploads:', error);
+      return errorResponse(res, 'Failed to retrieve pending uploads', 500);
     }
   }
 }

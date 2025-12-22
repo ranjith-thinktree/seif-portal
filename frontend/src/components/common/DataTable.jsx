@@ -193,7 +193,7 @@ const DataTable = ({
                   }`}
                   style={{ width: column.width }}
                 >
-                  {column.header}
+                  {column.label || column.header}
                 </TableHead>
               ))}
             </TableRow>

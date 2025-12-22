@@ -11,6 +11,10 @@ const batchRoutes = require('./batch.routes');
 const studentRoutes = require('./student.routes');
 const reviewRoutes = require('./review.routes');
 const adminRoutes = require('./admin.routes');
+const dataRoutes = require('./data.routes');
+const analyticsRoutes = require('./analytics.routes');
+const employmentRoutes = require('./employment.routes');
+const commentRoutes = require('../../../routes/commentRoutes');
 
 /**
  * API v1 Routes Index
@@ -27,6 +31,10 @@ router.use('/batches', batchRoutes);
 router.use('/students', studentRoutes);
 router.use('/review', reviewRoutes);
 router.use('/admin', adminRoutes);
+router.use('/data', dataRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/employment', employmentRoutes);
+router.use('/comments', commentRoutes);
 
 // Future routes will be added here:
 // router.use('/users', userRoutes);

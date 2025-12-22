@@ -49,6 +49,17 @@ router.post(
   uploadController.resubmitUpload
 );
 
+// Delete upload (partner can delete own, admin can delete any)
+router.delete('/:id', authenticate, authorize(['PARTNER', 'ADMIN']), uploadController.deleteUpload);
+
+// Bulk delete uploads
+router.post(
+  '/bulk-delete',
+  authenticate,
+  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
+  uploadController.bulkDeleteUploads
+);
+
 // Get partner's upload history
 router.get('/', authenticate, authorize(['PARTNER']), uploadController.getUploads);
 

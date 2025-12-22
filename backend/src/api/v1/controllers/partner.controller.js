@@ -14,7 +14,18 @@ class PartnerController {
    */
   async getAllPartners(req, res) {
     try {
-      const { page, limit, search, status, approval_status } = req.query;
+      const {
+        page,
+        limit,
+        search,
+        status,
+        approval_status,
+        type,
+        city,
+        state,
+        sort_by,
+        sort_order,
+      } = req.query;
       const { role } = req.user;
 
       const result = await partnerService.getAllPartners({
@@ -23,6 +34,11 @@ class PartnerController {
         search: search || '',
         status: status || '',
         approval_status: approval_status || '',
+        type: type || '',
+        city: city || '',
+        state: state || '',
+        sort_by: sort_by || 'created_at',
+        sort_order: sort_order || 'desc',
         role,
       });
 
@@ -85,7 +101,10 @@ class PartnerController {
     } catch (error) {
       console.error('Error in createPartner:', error);
       if (error.message.includes('Duplicate entry')) {
-        return errorResponse(res, 'Partner with this name already exists', 409);
+        if (error.message.includes('partner_id')) {
+          return errorResponse(res, 'Partner ID conflict. Please try again.', 409);
+        }
+        return errorResponse(res, 'Partner with this name or email already exists', 409);
       }
       return errorResponse(res, 'Failed to create partner', 500);
     }
@@ -424,6 +443,185 @@ class PartnerController {
     } catch (error) {
       console.error('Error in getUploadChanges:', error);
       return errorResponse(res, 'Failed to fetch changes', 500);
+    }
+  }
+
+  /**
+   * Get filter options for partners
+   * @route GET /api/v1/partners/filter-options
+   * @access Private (ADMIN, SUPER_ADMIN, ESSCI, SEIF_READONLY)
+   */
+  async getFilterOptions(req, res) {
+    try {
+      const { role } = req.user;
+
+      const options = await partnerService.getFilterOptions({ role });
+
+      return successResponse(res, 'Filter options fetched successfully', options);
+    } catch (error) {
+      console.error('Error in getFilterOptions:', error);
+      return errorResponse(res, 'Failed to fetch filter options', 500);
+    }
+  }
+
+  /**
+   * Get all countries
+   * @route GET /api/v1/partners/reference/countries
+   * @access Private
+   */
+  async getCountries(req, res) {
+    try {
+      const countries = await partnerService.getCountries();
+      return successResponse(res, 'Countries fetched successfully', countries);
+    } catch (error) {
+      console.error('Error in getCountries:', error);
+      return errorResponse(res, 'Failed to fetch countries', 500);
+    }
+  }
+
+  /**
+   * Get states by country
+   * @route GET /api/v1/partners/reference/states/:countryId
+   * @access Private
+   */
+  async getStatesByCountry(req, res) {
+    try {
+      const { countryId } = req.params;
+      const states = await partnerService.getStatesByCountry(countryId);
+      return successResponse(res, 'States fetched successfully', states);
+    } catch (error) {
+      console.error('Error in getStatesByCountry:', error);
+      return errorResponse(res, 'Failed to fetch states', 500);
+    }
+  }
+
+  /**
+   * Get cities by state and country
+   * @route GET /api/v1/partners/reference/cities
+   * @access Private
+   */
+  async getCitiesByStateAndCountry(req, res) {
+    try {
+      const { stateId, countryId } = req.query;
+
+      if (!countryId) {
+        return errorResponse(res, 'Country ID is required', 400);
+      }
+
+      const cities = await partnerService.getCitiesByStateAndCountry(stateId, countryId);
+      return successResponse(res, 'Cities fetched successfully', cities);
+    } catch (error) {
+      console.error('Error in getCitiesByStateAndCountry:', error);
+      return errorResponse(res, 'Failed to fetch cities', 500);
+    }
+  }
+
+  /**
+   * Get all regions
+   * @route GET /api/v1/partners/reference/regions
+   * @access Private
+   */
+  async getRegions(req, res) {
+    try {
+      const regions = await partnerService.getRegions();
+      return successResponse(res, 'Regions fetched successfully', regions);
+    } catch (error) {
+      console.error('Error in getRegions:', error);
+      return errorResponse(res, 'Failed to fetch regions', 500);
+    }
+  }
+
+  /**
+   * Get registered_as options
+   * @route GET /api/v1/partners/reference/registered-as
+   * @access Private
+   */
+  async getRegisteredAsOptions(req, res) {
+    try {
+      const options = partnerService.getRegisteredAsOptions();
+      return successResponse(res, 'Registered as options fetched successfully', options);
+    } catch (error) {
+      console.error('Error in getRegisteredAsOptions:', error);
+      return errorResponse(res, 'Failed to fetch registered as options', 500);
+    }
+  }
+
+  /**
+   * Get organization type options
+   * @route GET /api/v1/partners/reference/organization-types
+   * @access Private
+   */
+  async getOrganizationTypeOptions(req, res) {
+    try {
+      const options = partnerService.getOrganizationTypeOptions();
+      return successResponse(res, 'Organization types fetched successfully', options);
+    } catch (error) {
+      console.error('Error in getOrganizationTypeOptions:', error);
+      return errorResponse(res, 'Failed to fetch organization types', 500);
+    }
+  }
+
+  /**
+   * Resend welcome email to partner
+   * @route POST /api/v1/partners/:id/resend-email
+   * @access Admin, SUPER_ADMIN
+   */
+  async resendWelcomeEmail(req, res) {
+    try {
+      const { id } = req.params;
+
+      await partnerService.resendWelcomeEmail(id);
+
+      return successResponse(res, 'Welcome email sent successfully', null);
+    } catch (error) {
+      console.error('Error in resendWelcomeEmail:', error);
+      if (error.message === 'Partner not found') {
+        return errorResponse(res, 'Partner not found', 404);
+      }
+      if (error.message.includes('No user account found')) {
+        return errorResponse(res, error.message, 404);
+      }
+      return errorResponse(res, 'Failed to send welcome email', 500);
+    }
+  }
+
+  /**
+   * Bulk delete partners
+   * @route POST /api/v1/partners/bulk-delete
+   * @access Admin, SUPER_ADMIN
+   */
+  async bulkDeletePartners(req, res) {
+    try {
+      const { ids } = req.body;
+      const { role, partner_id } = req.user;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return errorResponse(res, 'Please provide an array of partner IDs to delete', 400);
+      }
+
+      const results = await partnerService.bulkDeletePartners(ids, role, partner_id);
+
+      // Return appropriate status code
+      if (results.summary.failed === 0) {
+        return successResponse(
+          res,
+          `Successfully deleted ${results.summary.successful} partner(s)`,
+          results
+        );
+      } else if (results.summary.successful === 0) {
+        return errorResponse(res, 'Failed to delete any partners', 400, results);
+      } else {
+        // Partial success
+        return res.status(207).json({
+          success: true,
+          message: `Deleted ${results.summary.successful} partner(s), ${results.summary.failed} failed`,
+          data: results,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error('Error in bulkDeletePartners:', error);
+      return errorResponse(res, error.message || 'Failed to delete partners', 500);
     }
   }
 }

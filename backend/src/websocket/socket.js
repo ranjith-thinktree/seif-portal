@@ -36,16 +36,20 @@ const initializeWebSocket = (httpServer) => {
       // Attach user info to socket
       socket.userId = decoded.id;
       socket.userRole = decoded.role;
-      socket.userName = decoded.userName;
+      socket.userName = decoded.full_name;
       socket.tokenExp = decoded.exp; // Store token expiration
 
       next();
     } catch (error) {
-      console.error('Socket authentication error:', error.message);
-
       // Provide specific error message for expired tokens
       if (error.name === 'TokenExpiredError') {
+        // Don't log - this is expected when tokens expire
         return next(new Error('Authentication error: Token expired'));
+      }
+
+      // Only log unexpected authentication errors
+      if (error.name !== 'JsonWebTokenError') {
+        console.error('Socket authentication error:', error.message);
       }
 
       next(new Error('Authentication error: Invalid token'));

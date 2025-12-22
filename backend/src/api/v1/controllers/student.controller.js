@@ -23,25 +23,34 @@ class StudentController {
         city = '',
         state = '',
         course_name = '',
-        placement_status = '',
+        training_status = '',
         sort_by = 'created_at',
         sort_order = 'desc',
       } = req.query;
 
       const { role, partner_id: userPartnerId } = req.user;
 
+      // Handle center_id, batch_id, and partner_id as arrays (multi-select support)
+      const centerIdFilter = center_id ? (Array.isArray(center_id) ? center_id : [center_id]) : '';
+      const batchIdFilter = batch_id ? (Array.isArray(batch_id) ? batch_id : [batch_id]) : '';
+      const partnerIdFilter = partner_id
+        ? Array.isArray(partner_id)
+          ? partner_id
+          : [partner_id]
+        : '';
+
       const result = await studentService.getAllStudents({
         page: parseInt(page),
         limit: parseInt(limit),
         search,
-        center_id,
-        batch_id,
-        partner_id,
+        center_id: centerIdFilter,
+        batch_id: batchIdFilter,
+        partner_id: partnerIdFilter,
         gender,
         city,
         state,
         course_name,
-        placement_status,
+        training_status,
         sort_by,
         sort_order,
         role,
@@ -82,7 +91,7 @@ class StudentController {
         return errorResponse(res, 'Access denied', 403);
       }
 
-      return successResponse(res, student, 'Student retrieved successfully');
+      return successResponse(res, 'Student retrieved successfully', student);
     } catch (error) {
       console.error('Error in getStudentById controller:', error);
       return errorResponse(res, 'Failed to retrieve student', 500);
@@ -98,11 +107,20 @@ class StudentController {
 
       const { role, partner_id: userPartnerId } = req.user;
 
+      // Handle center_id, batch_id, and partner_id as arrays (multi-select support)
+      const centerIdFilter = center_id ? (Array.isArray(center_id) ? center_id : [center_id]) : '';
+      const batchIdFilter = batch_id ? (Array.isArray(batch_id) ? batch_id : [batch_id]) : '';
+      const partnerIdFilter = partner_id
+        ? Array.isArray(partner_id)
+          ? partner_id
+          : [partner_id]
+        : '';
+
       const csv = await studentService.exportStudents({
         search,
-        center_id,
-        batch_id,
-        partner_id,
+        center_id: centerIdFilter,
+        batch_id: batchIdFilter,
+        partner_id: partnerIdFilter,
         role,
         user_partner_id: userPartnerId,
       });
@@ -134,7 +152,7 @@ class StudentController {
         }
       }
 
-      return successResponse(res, students, 'Students retrieved successfully');
+      return successResponse(res, 'Students retrieved successfully', students);
     } catch (error) {
       console.error('Error in getStudentsByBatch controller:', error);
       return errorResponse(res, 'Failed to retrieve students', 500);
@@ -159,6 +177,46 @@ class StudentController {
     } catch (error) {
       console.error('Error in getFilterOptions:', error);
       return errorResponse(res, 'Failed to fetch filter options', 500);
+    }
+  }
+
+  /**
+   * Bulk delete students
+   * @route POST /api/v1/students/bulk-delete
+   * @access Admin, SUPER_ADMIN, PARTNER
+   */
+  async bulkDeleteStudents(req, res) {
+    try {
+      const { ids } = req.body;
+      const { role, partner_id } = req.user;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return errorResponse(res, 'Please provide an array of student IDs to delete', 400);
+      }
+
+      const results = await studentService.bulkDeleteStudents(ids, role, partner_id);
+
+      // Return appropriate status code
+      if (results.summary.failed === 0) {
+        return successResponse(
+          res,
+          `Successfully deleted ${results.summary.successful} student(s)`,
+          results
+        );
+      } else if (results.summary.successful === 0) {
+        return errorResponse(res, 'Failed to delete any students', 400, results);
+      } else {
+        // Partial success
+        return res.status(207).json({
+          success: true,
+          message: `Deleted ${results.summary.successful} student(s), ${results.summary.failed} failed`,
+          data: results,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error('Error in bulkDeleteStudents:', error);
+      return errorResponse(res, error.message || 'Failed to delete students', 500);
     }
   }
 }

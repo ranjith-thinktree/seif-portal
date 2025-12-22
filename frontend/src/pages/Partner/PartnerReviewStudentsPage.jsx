@@ -16,9 +16,13 @@ import {
   CheckIcon,
 } from "@heroicons/react/24/outline";
 import { AgGridReact } from "ag-grid-react";
-import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
-import "ag-grid-community/styles/ag-theme-quartz.css";
+import {
+  ModuleRegistry,
+  AllCommunityModule,
+  themeQuartz,
+} from "ag-grid-community";
 import "../../styles/ag-grid-custom.css";
+import DatePickerCellEditor from "../../components/grid/DatePickerCellEditor";
 import apiClient from "../../api/client";
 import { toast } from "react-toastify";
 import Breadcrumb from "../../components/common/Breadcrumb";
@@ -498,7 +502,7 @@ const PartnerReviewStudentsPage = () => {
           // Get the actual row index from the displayed rows (after filtering/sorting)
           return params.node.rowIndex + 1;
         },
-        width: 100,
+        width: 80,
         editable: false,
         pinned: "left",
         cellClass: "text-sm text-gray-900 text-center",
@@ -506,7 +510,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Student ID",
         field: "student_id",
-        width: 160,
+        width: 180,
         editable: false,
         pinned: "left",
         cellClass: "text-sm font-medium text-gray-900",
@@ -515,7 +519,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Student Name",
         field: "student_name",
-        width: 200,
+        width: 220,
         editable: isEditMode,
         cellClass: "text-sm text-gray-900",
         cellStyle: (params) => ({
@@ -527,13 +531,23 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Date of Birth",
         field: "date_of_birth",
-        width: 150,
+        width: 140,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
-        cellEditor: "agTextCellEditor",
+        cellEditor: DatePickerCellEditor,
+        cellEditorPopup: true,
         valueFormatter: (params) => {
           if (!params.value) return "-";
-          return new Date(params.value).toLocaleDateString("en-IN");
+          try {
+            const date = new Date(params.value);
+            return date.toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            });
+          } catch {
+            return params.value || "-";
+          }
         },
         cellStyle: (params) => ({
           backgroundColor: params.data.edited_fields?.date_of_birth
@@ -544,7 +558,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Gender",
         field: "gender",
-        width: 120,
+        width: 100,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellEditor: "agSelectCellEditor",
@@ -560,7 +574,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Mobile Number",
         field: "mobile_number",
-        width: 160,
+        width: 150,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellStyle: (params) => ({
@@ -572,7 +586,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Email",
         field: "email",
-        width: 220,
+        width: 240,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellStyle: (params) => ({
@@ -584,7 +598,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Address",
         field: "address",
-        width: 250,
+        width: 300,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellStyle: (params) => ({
@@ -596,7 +610,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "City",
         field: "city",
-        width: 140,
+        width: 130,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellStyle: (params) => ({
@@ -608,7 +622,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "State",
         field: "state",
-        width: 140,
+        width: 130,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellStyle: (params) => ({
@@ -620,7 +634,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Course Name",
         field: "course_name",
-        width: 180,
+        width: 200,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellStyle: (params) => ({
@@ -632,7 +646,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Course Duration (Months)",
         field: "course_duration_months",
-        width: 220,
+        width: 200,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellEditor: "agNumberCellEditor",
@@ -650,7 +664,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Batch Number",
         field: "batch_number",
-        width: 160,
+        width: 140,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellStyle: (params) => ({
@@ -662,12 +676,23 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Enrollment Date",
         field: "enrollment_date",
-        width: 160,
+        width: 150,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
+        cellEditor: DatePickerCellEditor,
+        cellEditorPopup: true,
         valueFormatter: (params) => {
           if (!params.value) return "-";
-          return new Date(params.value).toLocaleDateString("en-IN");
+          try {
+            const date = new Date(params.value);
+            return date.toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            });
+          } catch {
+            return params.value || "-";
+          }
         },
         cellStyle: (params) => ({
           backgroundColor: params.data.edited_fields?.enrollment_date
@@ -678,7 +703,7 @@ const PartnerReviewStudentsPage = () => {
       {
         headerName: "Training Status",
         field: "training_status",
-        width: 160,
+        width: 170,
         editable: isEditMode,
         cellClass: "text-sm text-gray-600",
         cellEditor: "agSelectCellEditor",
@@ -1034,30 +1059,6 @@ const PartnerReviewStudentsPage = () => {
   return (
     <MainLayout>
       <style>{`
-        /* Vertical center alignment for cells */
-        .ag-theme-quartz .ag-cell {
-          display: flex;
-          align-items: center;
-        }
-        
-        /* Column dividers */
-        .ag-theme-quartz .ag-cell {
-          border-right: 1px solid #e5e7eb;
-        }
-        
-        .ag-theme-quartz .ag-header-cell {
-          border-right: 1px solid #e5e7eb;
-        }
-        
-        /* Remove filter icons */
-        .ag-theme-quartz .ag-header-cell-menu-button {
-          display: none;
-        }
-        
-        .ag-theme-quartz .ag-icon-menu {
-          display: none;
-        }
-        
         /* Context menu styling */
         .context-menu-container {
           position: fixed;
@@ -1284,12 +1285,10 @@ const PartnerReviewStudentsPage = () => {
               <div className="text-gray-500">No students in this center</div>
             </div>
           ) : (
-            <div
-              className="ag-theme-quartz"
-              style={{ height: 600, width: "100%" }}
-            >
+            <div style={{ height: 600, width: "100%" }}>
               <AgGridReact
                 ref={gridRef}
+                theme={themeQuartz}
                 rowData={filteredAndSortedStudents}
                 columnDefs={columnDefs}
                 getRowId={(params) => params.data.id}
@@ -1300,13 +1299,18 @@ const PartnerReviewStudentsPage = () => {
                   suppressMovable: true,
                   wrapText: false,
                   autoHeight: false,
-                  wrapHeaderText: true,
-                  autoHeaderHeight: true,
+                  wrapHeaderText: false,
+                  autoHeaderHeight: false,
                   cellEditor: "agTextCellEditor",
                   cellEditorParams: {
                     maxLength: 500,
                   },
                   suppressMenu: true,
+                  cellStyle: {
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  },
                 }}
                 // Basic Features
                 undoRedoCellEditing={true}

@@ -1,18 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { AgGridReact } from "ag-grid-react";
-import "ag-grid-community/styles/ag-theme-alpine.css";
-import {
-  PencilIcon,
-  CheckIcon,
-  ArrowPathIcon,
-  ExclamationTriangleIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { MainLayout } from "../../components/layout";
 import Breadcrumb from "../../components/common/Breadcrumb";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
+import EditableStudentGrid from "../../components/EditableStudentGrid";
 import reviewService from "../../services/review.service";
+import partnerService from "../../services/partner.service";
 import { showToast } from "../../utils/toast.util";
 import { ROUTES } from "../../constants/routes";
 
@@ -23,14 +18,11 @@ import { ROUTES } from "../../constants/routes";
 const PartnerReviewEditPage = () => {
   const { uploadId } = useParams();
   const navigate = useNavigate();
-  const gridRef = useRef(null);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedCenter, setSelectedCenter] = useState(null);
   const [students, setStudents] = useState([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedRows, setEditedRows] = useState(new Set());
   const [submitting, setSubmitting] = useState(false);
 
   // Breadcrumb items
@@ -113,177 +105,42 @@ const PartnerReviewEditPage = () => {
     fetchStudents();
   }, [uploadId, selectedCenter]);
 
-  // Column definitions for ag-grid
-  const columnDefs = useMemo(
-    () => [
-      {
-        headerName: "S.No",
-        valueGetter: "node.rowIndex + 1",
-        width: 80,
-        pinned: "left",
-        editable: false,
-      },
-      {
-        field: "student_name",
-        headerName: "Student Name",
-        width: 200,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "gender",
-        headerName: "Gender",
-        width: 120,
-        editable: isEditing,
-        cellEditor: "agSelectCellEditor",
-        cellEditorParams: {
-          values: ["Male", "Female", "Other"],
-        },
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "date_of_birth",
-        headerName: "Date of Birth",
-        width: 140,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "mobile_number",
-        headerName: "Mobile Number",
-        width: 150,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "email",
-        headerName: "Email",
-        width: 220,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "father_name",
-        headerName: "Father's Name",
-        width: 200,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "mother_name",
-        headerName: "Mother's Name",
-        width: 200,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "address",
-        headerName: "Address",
-        width: 250,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "qualification",
-        headerName: "Qualification",
-        width: 150,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "batch_number",
-        headerName: "Batch Number",
-        width: 140,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "batch_start_date",
-        headerName: "Batch Start Date",
-        width: 150,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-      {
-        field: "batch_completion_date",
-        headerName: "Batch Completion Date",
-        width: 180,
-        editable: isEditing,
-        cellClass: (params) =>
-          editedRows.has(params.node.id) ? "bg-yellow-50" : "",
-      },
-    ],
-    [isEditing, editedRows]
-  );
+  // Handle save changes from EditableStudentGrid
+  const handleSaveChanges = async (updatedStudents, changes) => {
+    try {
+      // Save edited data to backend
+      await partnerService.saveEditedStudents(uploadId, selectedCenter.id, {
+        students: updatedStudents,
+        changes: changes,
+      });
 
-  // Handle cell value change
-  const onCellValueChanged = (params) => {
-    setEditedRows((prev) => new Set([...prev, params.node.id]));
-  };
+      showToast.success("Changes saved successfully");
 
-  // Toggle edit mode
-  const handleEditToggle = () => {
-    if (isEditing) {
-      // Done editing - disable edit mode
-      setIsEditing(false);
-      showToast.info(
-        "Editing disabled. Review your changes before re-submitting."
+      // Refresh students data
+      const response = await reviewService.getCenterStudents(
+        uploadId,
+        selectedCenter.id
       );
-    } else {
-      // Start editing
-      setIsEditing(true);
-      setEditedRows(new Set()); // Clear previous edits
-      showToast.info("Editing enabled. Click on cells to modify data.");
+      setStudents(response.data.students || []);
+    } catch (error) {
+      console.error("Error saving changes:", error);
+      throw error; // Let EditableStudentGrid handle the error toast
     }
   };
 
-  // Handle resubmit
+  // Handle resubmit from EditableStudentGrid
   const handleResubmit = async () => {
-    if (editedRows.size === 0) {
-      showToast.warning(
-        "No changes detected. Please edit the data before re-submitting."
-      );
-      return;
-    }
-
-    if (isEditing) {
-      showToast.warning(
-        "Please click 'Done' to finish editing before re-submitting."
-      );
-      return;
-    }
-
-    // Collect all edited data
-    const editedData = [];
-    gridRef.current.api.forEachNode((node) => {
-      if (editedRows.has(node.id)) {
-        editedData.push(node.data);
-      }
-    });
-
     setSubmitting(true);
     try {
-      const response = await reviewService.resubmitUpload(uploadId, editedData);
-      showToast.success(
-        `Data resubmitted successfully! Version ${response.data.version} created.`
-      );
+      await partnerService.resubmitUpload(uploadId);
+      showToast.success("Data resubmitted successfully! New version created.");
       navigate(ROUTES.UPLOAD_HISTORY);
     } catch (error) {
       console.error("Error resubmitting data:", error);
       showToast.error(
         error.response?.data?.message || "Failed to resubmit data"
       );
+      throw error;
     } finally {
       setSubmitting(false);
     }
@@ -421,74 +278,35 @@ const PartnerReviewEditPage = () => {
         {/* Students Table */}
         {selectedCenter && (
           <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Students - {selectedCenter.center_name}
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  {students.length} students • {editedRows.size} edited rows
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={handleEditToggle}
-                  variant={isEditing ? "default" : "outline"}
-                  className="flex items-center gap-2"
-                >
-                  {isEditing ? (
-                    <>
-                      <CheckIcon className="h-4 w-4" />
-                      Done
-                    </>
-                  ) : (
-                    <>
-                      <PencilIcon className="h-4 w-4" />
-                      Edit
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={handleResubmit}
-                  disabled={isEditing || submitting || editedRows.size === 0}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                >
-                  <ArrowPathIcon className="h-4 w-4" />
-                  Re-submit
-                </Button>
-              </div>
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Students - {selectedCenter.center_name}
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {students.length} students • Edit data and click "Save Changes"
+                or "Resubmit"
+              </p>
+              {selectedCenter.review_status === "rejected" &&
+                selectedCenter.rejection_reason && (
+                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded">
+                    <p className="text-sm text-red-700">
+                      <strong>Rejection Reason:</strong>{" "}
+                      {selectedCenter.rejection_reason}
+                    </p>
+                  </div>
+                )}
             </div>
-            <div className="p-6">
-              <div
-                className="ag-theme-alpine"
-                style={{ height: 500, width: "100%" }}
-              >
-                <AgGridReact
-                  ref={gridRef}
-                  rowData={students}
-                  columnDefs={columnDefs}
-                  defaultColDef={{
-                    sortable: true,
-                    filter: true,
-                    resizable: true,
-                  }}
-                  onCellValueChanged={onCellValueChanged}
-                  singleClickEdit={true}
-                  stopEditingWhenCellsLoseFocus={true}
-                  animateRows={true}
-                />
-              </div>
-              {editedRows.size > 0 && (
-                <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <p className="text-sm text-yellow-800">
-                    <span className="font-semibold">
-                      {editedRows.size} rows modified.
-                    </span>{" "}
-                    Click "Done" when finished editing, then "Re-submit" to
-                    create a new version.
-                  </p>
-                </div>
-              )}
+            <div className="p-4">
+              <EditableStudentGrid
+                students={students}
+                onSave={handleSaveChanges}
+                onResubmit={handleResubmit}
+                readOnly={false}
+                showResubmit={data?.centers?.some(
+                  (c) => c.review_status === "rejected"
+                )}
+                uploadId={uploadId}
+              />
             </div>
           </div>
         )}

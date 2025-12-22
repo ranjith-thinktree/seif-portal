@@ -25,14 +25,22 @@ exports.createCenterValidator = [
   body('center_type')
     .optional()
     .trim()
-    .isIn(['Short Term', 'Long Term', 'ITI', 'Polytechnic'])
+    .isIn(['Short term', 'ITI', 'Polytechnic', 'COE'])
     .withMessage('Invalid center type'),
 
-  body('region')
+  body('region').optional().trim().isIn(['N', 'S', 'E', 'W', 'UT']).withMessage('Invalid region'),
+
+  body('country_id').optional().isInt().withMessage('Country ID must be an integer'),
+
+  body('state_id').optional().isInt().withMessage('State ID must be an integer'),
+
+  body('city_id').optional().isInt().withMessage('City ID must be an integer'),
+
+  body('country')
     .optional()
     .trim()
-    .isIn(['North', 'South', 'East', 'West', 'Central'])
-    .withMessage('Invalid region'),
+    .isLength({ max: 100 })
+    .withMessage('Country must not exceed 100 characters'),
 
   body('city')
     .optional()
@@ -57,10 +65,14 @@ exports.createCenterValidator = [
     .isInt({ min: 1900, max: new Date().getFullYear() })
     .withMessage('Invalid year of establishment'),
 
-  body('status')
+  body('status').optional().isIn(['active', 'inactive', 'closed']).withMessage('Invalid status'),
+
+  body('course_ids').optional().isArray().withMessage('Course IDs must be an array'),
+
+  body('course_ids.*')
     .optional()
-    .isIn(['active', 'inactive', 'under_maintenance'])
-    .withMessage('Invalid status'),
+    .matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .withMessage('Invalid course ID format'),
 
   body('center_head')
     .optional()
@@ -117,14 +129,22 @@ exports.updateCenterValidator = [
   body('center_type')
     .optional()
     .trim()
-    .isIn(['Short Term', 'Long Term', 'ITI', 'Polytechnic'])
+    .isIn(['Short term', 'ITI', 'Polytechnic', 'COE'])
     .withMessage('Invalid center type'),
 
-  body('region')
+  body('region').optional().trim().isIn(['N', 'S', 'E', 'W', 'UT']).withMessage('Invalid region'),
+
+  body('country_id').optional().isInt().withMessage('Country ID must be an integer'),
+
+  body('state_id').optional().isInt().withMessage('State ID must be an integer'),
+
+  body('city_id').optional().isInt().withMessage('City ID must be an integer'),
+
+  body('country')
     .optional()
     .trim()
-    .isIn(['North', 'South', 'East', 'West', 'Central'])
-    .withMessage('Invalid region'),
+    .isLength({ max: 100 })
+    .withMessage('Country must not exceed 100 characters'),
 
   body('city')
     .optional()
@@ -149,10 +169,14 @@ exports.updateCenterValidator = [
     .isInt({ min: 1900, max: new Date().getFullYear() })
     .withMessage('Invalid year of establishment'),
 
-  body('status')
+  body('status').optional().isIn(['active', 'inactive', 'closed']).withMessage('Invalid status'),
+
+  body('course_ids').optional().isArray().withMessage('Course IDs must be an array'),
+
+  body('course_ids.*')
     .optional()
-    .isIn(['active', 'inactive', 'under_maintenance'])
-    .withMessage('Invalid status'),
+    .matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    .withMessage('Invalid course ID format'),
 
   body('center_head')
     .optional()

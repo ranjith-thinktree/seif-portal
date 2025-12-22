@@ -18,5 +18,6 @@ export const useAuth = () => {
     userId: user?.id,
     userEmail: user?.email,
     userName: user?.full_name,
+    partnerId: user?.partner_id,
   };
 };
