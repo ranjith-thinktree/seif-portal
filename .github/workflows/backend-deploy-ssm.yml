@@ -62,14 +62,18 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters 'commands=[
+              "mkdir -p /home/ubuntu/seif-backend",
               "cd /home/ubuntu/seif-backend",
               "pm2 stop seif-backend || true",
               "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deployments/backend-latest.tar.gz /tmp/backend-deploy.tar.gz",
-              "rm -rf /home/ubuntu/seif-backend/*",
               "tar -xzf /tmp/backend-deploy.tar.gz -C /home/ubuntu/seif-backend",
+              "FILE_COUNT=\$(find /home/ubuntu/seif-backend/src -type f | wc -l)",
+              "if [ \"\$FILE_COUNT\" -lt 50 ]; then echo \"Deployment verification failed\"; exit 1; fi",
               "cd /home/ubuntu/seif-backend",
-              "pm2 restart seif-backend || pm2 start ecosystem.config.js",
+              "pm2 restart seif-backend || pm2 start ecosystem.config.js --name seif-backend",
               "pm2 save",
+              "sleep 5",
+              "curl -f http://localhost:5000/health || exit 1",
               "rm /tmp/backend-deploy.tar.gz"
             ]' \
             --output text \
