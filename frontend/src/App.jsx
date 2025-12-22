@@ -6,6 +6,8 @@ import { NotificationProvider } from "./context/NotificationContext";
 import { verifyTokenOnMount, updateUser } from "./store/slices/authSlice";
 import { PageLoader } from "./components/common";
 
+// CI/CD Automated Deployment Active
+
 /**
  * App Initializer - Verifies auth on mount
  */
