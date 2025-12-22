@@ -15,6 +15,7 @@ import {
   AcademicCapIcon,
   FolderIcon,
   CircleStackIcon,
+  CommandLineIcon,
 } from "@heroicons/react/24/outline";
 import { ROLES } from "./roles";
 import { ROUTES } from "./routes";
@@ -141,6 +142,12 @@ export const SIDEBAR_MENU = [
     path: ROUTES.ANALYTICS,
     icon: ChartBarIcon,
     roles: [ROLES.SUPER_ADMIN, ROLES.SEIF_READONLY],
+  },
+  {
+    name: "Terminal",
+    path: ROUTES.ADMIN_TERMINAL,
+    icon: CommandLineIcon,
+    roles: [ROLES.SUPER_ADMIN],
   },
   {
     name: "Downloads",

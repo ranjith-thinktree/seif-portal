@@ -30,6 +30,7 @@ import CenterDetailsPage from "../pages/Data/CenterDetailsPage";
 import StudentsPage from "../pages/Data/StudentsPage";
 import DataManagementPage from "../pages/Data/DataManagementPage";
 import DatabaseManagement from "../pages/Admin/DatabaseManagement";
+import AdminTerminalPage from "../pages/Admin/AdminTerminalPage";
 import ForcedPasswordChangeGuard from "./ForcedPasswordChangeGuard";
 
 /**
@@ -358,6 +359,15 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute>
                 <DatabaseManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ADMIN_TERMINAL}
+            element={
+              <ProtectedRoute>
+                <AdminTerminalPage />
               </ProtectedRoute>
             }
           />

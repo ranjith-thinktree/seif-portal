@@ -20,6 +20,7 @@ export const ROUTES = {
   REQUESTS: "/requests",
   INBOX: "/inbox",
   DATABASE_MANAGEMENT: "/admin/database-management",
+  ADMIN_TERMINAL: "/admin/terminal",
   REVIEW: "/review/:id",
   REVIEW_UPLOAD: "/review-centers/:uploadId",
   REVIEW_STUDENTS: "/review-centers/:uploadId/students/:centerId",

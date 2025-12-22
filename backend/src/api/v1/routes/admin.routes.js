@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
+const adminLogsController = require('../controllers/admin.logs.controller');
 const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 
@@ -39,6 +40,30 @@ router.post(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   adminController.resetPartnerPassword
+);
+
+// Get application logs (SUPER_ADMIN only)
+router.get(
+  '/logs',
+  authenticate,
+  checkRole(['SUPER_ADMIN']),
+  adminLogsController.getLogs
+);
+
+// Get system information (SUPER_ADMIN only)
+router.get(
+  '/system-info',
+  authenticate,
+  checkRole(['SUPER_ADMIN']),
+  adminLogsController.getSystemInfo
+);
+
+// Clear logs (SUPER_ADMIN only)
+router.post(
+  '/logs/clear',
+  authenticate,
+  checkRole(['SUPER_ADMIN']),
+  adminLogsController.clearLogs
 );
 
 module.exports = router;
