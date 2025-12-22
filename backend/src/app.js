@@ -6,9 +6,16 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const config = require('./config');
 const { errorHandler, notFoundHandler } = require('./middleware/error.middleware');
+const Sentry = require('@sentry/node');
 
 // Create Express app
 const app = express();
+
+// Sentry request handler - must be first middleware
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.requestHandler());
+  app.use(Sentry.Handlers.tracingHandler());
+}
 
 // ===================================
 // SECURITY MIDDLEWARE
@@ -144,6 +151,11 @@ app.get('/api/v1/test', (req, res) => {
 
 // 404 Handler - Must be after all routes
 app.use(notFoundHandler);
+
+// Sentry error handler - must be before other error handlers
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
 
 // Global Error Handler - Must be last
 app.use(errorHandler);
