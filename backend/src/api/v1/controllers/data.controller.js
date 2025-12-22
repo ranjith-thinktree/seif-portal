@@ -20,7 +20,8 @@ class DataController {
         partner_id,
       });
 
-      return successResponse(res, 'Overview statistics retrieved successfully', stats);
+      // Wrap stats in summary object for frontend compatibility
+      return successResponse(res, 'Overview statistics retrieved successfully', { summary: stats });
     } catch (error) {
       console.error('Error in getOverviewStats controller:', error);
       return errorResponse(res, 'Failed to retrieve overview statistics', 500);
