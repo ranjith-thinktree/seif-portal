@@ -30,7 +30,11 @@ class CenterService {
     sort_order = 'desc',
   }) {
     try {
-      const offset = (page - 1) * limit;
+      // Ensure page and limit are valid integers
+      const validPage = Math.max(1, parseInt(page) || 1);
+      const validLimit = Math.max(1, Math.min(1000, parseInt(limit) || 10));
+      const offset = (validPage - 1) * validLimit;
+      
       let whereConditions = [];
       let queryParams = [];
 
@@ -153,10 +157,10 @@ class CenterService {
       return {
         data: centers,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page: validPage,
+          limit: validLimit,
           total,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.ceil(total / validLimit),
         },
       };
     } catch (error) {
