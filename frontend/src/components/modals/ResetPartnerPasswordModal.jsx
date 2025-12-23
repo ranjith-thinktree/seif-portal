@@ -84,20 +84,31 @@ const ResetPartnerPasswordModal = ({ isOpen, onClose, partner }) => {
   };
 
   const handleCopyCredentials = () => {
-    if (resetResult) {
-      const text = `Partner ID: ${loginDetails?.partnerId}
+    if (resetResult && loginDetails) {
+      const text = `=== SEIF Portal Login Credentials ===
+
+Partner Name: ${partner.name}
+Partner ID: ${loginDetails.partnerId}
 Email: ${resetResult.email}
 Temporary Password: ${resetResult.tempPassword}
 
 Portal URL: ${window.location.origin}/login
 
-Please reset your password after first login.`;
+IMPORTANT:
+- Please change your password after first login
+- This is a temporary password for security
+- Keep these credentials confidential
 
-      navigator.clipboard.writeText(text);
-      setCopied(true);
-      toast.success("Credentials copied to clipboard!");
+Generated on: ${new Date().toLocaleString()}`;
 
-      setTimeout(() => setCopied(false), 3000);
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        toast.success("All credentials copied to clipboard!");
+        setTimeout(() => setCopied(false), 3000);
+      }).catch((err) => {
+        console.error('Failed to copy:', err);
+        toast.error("Failed to copy credentials");
+      });
     }
   };
 
@@ -105,8 +116,8 @@ Please reset your password after first login.`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <KeyIcon className="h-5 w-5 text-primary-600" />
             Reset Partner Password
@@ -116,7 +127,7 @@ Please reset your password after first login.`;
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1 pr-2">
           {/* Login Details Section */}
           {loadingDetails ? (
             <div className="text-center py-4 text-gray-500">
@@ -173,50 +184,60 @@ Please reset your password after first login.`;
           {resetResult && resetResult.tempPassword && (
             <Alert className="bg-blue-50 border-blue-200">
               <AlertDescription className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1">
-                    <p className="font-semibold text-blue-900">
-                      🔑 New Credentials Generated
+                <div className="space-y-3">
+                  <p className="font-semibold text-blue-900">
+                    🔑 New Credentials Generated
+                  </p>
+                  {resetResult.warning && (
+                    <p className="text-sm text-orange-700">
+                      {resetResult.warning}
                     </p>
-                    {resetResult.warning && (
-                      <p className="text-sm text-orange-700">
-                        {resetResult.warning}
+                  )}
+                  <div className="space-y-2 text-sm">
+                    <div className="bg-white p-3 rounded border border-blue-200">
+                      <span className="text-gray-600 block mb-1">Partner ID:</span>
+                      <p className="font-mono font-medium text-base">
+                        {loginDetails?.partnerId}
                       </p>
-                    )}
-                    <div className="mt-3 space-y-2 text-sm">
-                      <div className="bg-white p-2 rounded border border-blue-200">
-                        <span className="text-gray-600">Email:</span>
-                        <p className="font-mono font-medium">
-                          {resetResult.email}
-                        </p>
-                      </div>
-                      <div className="bg-white p-2 rounded border border-blue-200">
-                        <span className="text-gray-600">Password:</span>
-                        <p className="font-mono font-medium break-all">
-                          {resetResult.tempPassword}
-                        </p>
-                      </div>
+                    </div>
+                    <div className="bg-white p-3 rounded border border-blue-200">
+                      <span className="text-gray-600 block mb-1">Email:</span>
+                      <p className="font-mono font-medium text-base break-all">
+                        {resetResult.email}
+                      </p>
+                    </div>
+                    <div className="bg-white p-3 rounded border border-blue-200">
+                      <span className="text-gray-600 block mb-1">Temporary Password:</span>
+                      <p className="font-mono font-medium text-base break-all">
+                        {resetResult.tempPassword}
+                      </p>
+                    </div>
+                    <div className="bg-white p-3 rounded border border-blue-200">
+                      <span className="text-gray-600 block mb-1">Portal URL:</span>
+                      <p className="font-mono font-medium text-sm break-all text-blue-600">
+                        {window.location.origin}/login
+                      </p>
                     </div>
                   </div>
+                  <Button
+                    onClick={handleCopyCredentials}
+                    variant="outline"
+                    size="default"
+                    className="w-full bg-white hover:bg-blue-50 border-blue-300"
+                  >
+                    {copied ? (
+                      <>
+                        <CheckIcon className="h-4 w-4 mr-2" />
+                        Copied to Clipboard!
+                      </>
+                    ) : (
+                      <>
+                        <ClipboardDocumentIcon className="h-4 w-4 mr-2" />
+                        Copy All Credentials
+                      </>
+                    )}
+                  </Button>
                 </div>
-                <Button
-                  onClick={handleCopyCredentials}
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-2"
-                >
-                  {copied ? (
-                    <>
-                      <CheckIcon className="h-4 w-4 mr-2" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <ClipboardDocumentIcon className="h-4 w-4 mr-2" />
-                      Copy Credentials
-                    </>
-                  )}
-                </Button>
               </AlertDescription>
             </Alert>
           )}
@@ -238,7 +259,7 @@ Please reset your password after first login.`;
           </Alert>
         </div>
 
-        <DialogFooter className="flex justify-between items-center">
+        <DialogFooter className="flex-shrink-0 flex-row justify-between items-center gap-2 pt-4 border-t">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             Close
           </Button>
