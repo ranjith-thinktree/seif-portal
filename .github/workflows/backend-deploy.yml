@@ -108,7 +108,7 @@ jobs:
               "pm2 stop seif-backend || true",
               "echo \"Creating backup...\"",
               "mkdir -p /tmp/seif-backup",
-              "if [ -d \"/home/ubuntu/seif-backend/src\" ]; then cp -r /home/ubuntu/seif-backend /tmp/seif-backup/backend-$(date +%Y%m%d-%H%M%S) || true; fi",
+              "if [ -d /home/ubuntu/seif-backend/src ]; then TIMESTAMP=`date +%Y%m%d-%H%M%S` && cp -r /home/ubuntu/seif-backend /tmp/seif-backup/backend-$TIMESTAMP || true; fi",
               "echo \"Downloading deployment package...\"",
               "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deployments/backend-latest.tar.gz /tmp/backend-deploy.tar.gz",
               "echo \"Extracting files...\"",
