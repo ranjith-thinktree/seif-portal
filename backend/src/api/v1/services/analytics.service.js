@@ -59,18 +59,17 @@ class AnalyticsService {
           (SELECT COUNT(*) FROM centers WHERE status = 'active') as total_centers,
           COALESCE((SELECT SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as total_employments
         FROM dual`;
-      
+
       console.log('📊 Analytics Query:', summaryQuery);
       console.log('📊 Query Params:', queryParams.concat(queryParams, queryParams, queryParams));
-      
+
       const summaryStats = await db.query(
         summaryQuery,
         queryParams.concat(queryParams, queryParams, queryParams)
       );
 
-      // 2. Get Partner-wise Breakdown
-      const partnerBreakdown = await db.query(
-        `SELECT 
+      console.log('📊 Summary Stats Result:', JSON.stringify(summaryStats));
+      console.log('📊 Summary Stats [0]:', JSON.stringify(summaryStats[0]));
           p.id as partner_id,
           p.name as partner_name,
           COUNT(*) as total_students,
