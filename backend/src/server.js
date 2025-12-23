@@ -8,10 +8,10 @@ if (process.env.SENTRY_DSN) {
     dsn: process.env.SENTRY_DSN,
     environment: process.env.NODE_ENV || 'development',
     release: `seif-portal@${require('../package.json').version}`,
-    
+
     // Performance Monitoring
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    
+
     // Filter sensitive data
     beforeSend(event, hint) {
       if (event.request) {
@@ -24,7 +24,7 @@ if (process.env.SENTRY_DSN) {
       return event;
     },
   });
-  
+
   console.log('✅ Sentry error tracking initialized');
 }
 

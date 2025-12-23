@@ -15,6 +15,7 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Checkbox } from "../ui/checkbox";
+import { cn } from "../../utils/cn";
 
 /**
  * Enhanced DataTable Component with TanStack Table
@@ -302,7 +303,7 @@ const EnhancedDataTable = ({
       `}</style>
 
       {/* Table */}
-      <div className="enhanced-data-table rounded-md border bg-white overflow-x-auto custom-scrollbar">
+      <div className="enhanced-data-table rounded-md border bg-white overflow-x-auto overflow-y-visible custom-scrollbar">
         <Table
           className="table-fixed"
           style={{
@@ -365,7 +366,12 @@ const EnhancedDataTable = ({
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
-                      className="px-6 py-4 text-sm truncate"
+                      className={cn(
+                        "px-6 py-4 text-sm",
+                        cell.column.id === "actions"
+                          ? "overflow-visible relative"
+                          : "truncate"
+                      )}
                     >
                       {flexRender(
                         cell.column.columnDef.cell,

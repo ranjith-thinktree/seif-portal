@@ -6,7 +6,11 @@ import EnhancedDataTable, {
 } from "../../components/common/EnhancedDataTable";
 import CenterForm from "../../components/forms/CenterForm";
 import BulkCenterUpload from "../../components/forms/BulkCenterUpload";
-import { SuccessModal, RejectionModal } from "../../components/common";
+import {
+  SuccessModal,
+  RejectionModal,
+  ActionDropdown,
+} from "../../components/common";
 import ConfirmDeleteCenterModal from "../../components/common/ConfirmDeleteCenterModal";
 import Breadcrumb from "../../components/common/Breadcrumb";
 import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
@@ -511,59 +515,60 @@ const CentersPage = ({ embedded = false }) => {
     {
       id: "actions",
       header: "Actions",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          {isAdmin && row.original.approval_status === "pending" && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleApproveCenter(row.original.id);
-                }}
-                className="text-green-600 hover:text-green-800"
-                title="Approve"
-              >
-                <CheckIcon className="h-5 w-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRejectCenter(row.original.id);
-                }}
-                className="text-red-600 hover:text-red-800"
-                title="Reject"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </>
-          )}
-          {(isAdmin || role === "PARTNER") && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEditClick(e, row.original);
-              }}
-              className="text-blue-600 hover:text-blue-800"
-              title="Edit"
-            >
-              <PencilIcon className="h-5 w-5" />
-            </button>
-          )}
-          {isAdmin && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteCenter(row.original.id);
-              }}
-              className="text-red-600 hover:text-red-800"
-              title="Delete"
-            >
-              <TrashIcon className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const center = row.original;
+        const isPending = center.approval_status === "pending";
+
+        const actions = [
+          // Approve action
+          {
+            label: "Approve Center",
+            icon: CheckIcon,
+            onClick: () => handleApproveCenter(center.id),
+            variant: "success",
+            show: isAdmin && isPending,
+            divider: isPending,
+          },
+          // Reject action
+          {
+            label: "Reject Center",
+            icon: XMarkIcon,
+            onClick: () => handleRejectCenter(center.id),
+            variant: "danger",
+            show: isAdmin && isPending,
+            divider: true,
+          },
+          // Edit action
+          {
+            label: "Edit Center",
+            icon: PencilIcon,
+            onClick: (e) => handleEditClick(e, center),
+            variant: "default",
+            show: isAdmin || role === "PARTNER",
+            divider: true,
+          },
+          // Delete action
+          {
+            label: "Delete Center",
+            icon: TrashIcon,
+            onClick: () => handleDeleteCenter(center.id),
+            variant: "danger",
+            show: isAdmin,
+          },
+        ];
+
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex justify-center"
+          >
+            <ActionDropdown actions={actions} align="right" size="sm" />
+          </div>
+        );
+      },
       size: 180,
+      minSize: 150,
+      maxSize: 250,
       enableHiding: false,
       enableResizing: false,
     },

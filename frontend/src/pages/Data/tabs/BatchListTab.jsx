@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import EnhancedDataTable, {
   StatusBadge,
 } from "../../../components/common/EnhancedDataTable";
+import { ActionDropdown } from "../../../components/common";
 import AdvancedSearchBar from "../../../components/common/AdvancedSearchBar";
 import BulkDeleteButton from "../../../components/common/BulkDeleteButton";
 import ConfirmationModal from "../../../components/common/ConfirmationModal";
@@ -384,35 +385,41 @@ const BatchListTab = () => {
     {
       id: "actions",
       header: "Actions",
-      cell: ({ row }) => (
-        <div className="flex gap-2">
-          {canEdit && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/batches/edit/${row.original.id}`);
-              }}
-              className="text-blue-600 hover:text-blue-800"
-              title="Edit"
-            >
-              <PencilIcon className="h-5 w-5" />
-            </button>
-          )}
-          {canDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(row.original.id);
-              }}
-              className="text-red-600 hover:text-red-800"
-              title="Delete"
-            >
-              <TrashIcon className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-      ),
-      size: 120,
+      cell: ({ row }) => {
+        const batch = row.original;
+
+        const actions = [
+          // Edit action
+          {
+            label: "Edit Batch",
+            icon: PencilIcon,
+            onClick: () => navigate(`/batches/edit/${batch.id}`),
+            variant: "default",
+            show: canEdit,
+            divider: true,
+          },
+          // Delete action
+          {
+            label: "Delete Batch",
+            icon: TrashIcon,
+            onClick: () => handleDelete(batch.id),
+            variant: "danger",
+            show: canDelete,
+          },
+        ];
+
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex justify-center"
+          >
+            <ActionDropdown actions={actions} align="right" size="sm" />
+          </div>
+        );
+      },
+      size: 180,
+      minSize: 150,
+      maxSize: 250,
       enableHiding: false,
       enableResizing: false,
     },

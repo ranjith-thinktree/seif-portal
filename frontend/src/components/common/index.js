@@ -17,3 +17,4 @@ export { default as SuccessModal } from "./SuccessModal";
 export { default as RejectionModal } from "./RejectionModal";
 export { default as PasswordInput } from "./PasswordInput";
 export { default as PasswordStrengthMeter } from "./PasswordStrengthMeter";
+export { default as ActionDropdown } from "./ActionDropdown";

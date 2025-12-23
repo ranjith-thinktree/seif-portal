@@ -101,14 +101,41 @@ IMPORTANT:
 
 Generated on: ${new Date().toLocaleString()}`;
 
-      navigator.clipboard.writeText(text).then(() => {
-        setCopied(true);
-        toast.success("All credentials copied to clipboard!");
-        setTimeout(() => setCopied(false), 3000);
-      }).catch((err) => {
-        console.error('Failed to copy:', err);
-        toast.error("Failed to copy credentials");
-      });
+      // Try modern clipboard API first, fallback to execCommand for HTTP
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            setCopied(true);
+            toast.success("All credentials copied to clipboard!");
+            setTimeout(() => setCopied(false), 3000);
+          })
+          .catch((err) => {
+            console.error("Failed to copy:", err);
+            toast.error("Failed to copy credentials");
+          });
+      } else {
+        // Fallback for HTTP or older browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand("copy");
+          textArea.remove();
+          setCopied(true);
+          toast.success("All credentials copied to clipboard!");
+          setTimeout(() => setCopied(false), 3000);
+        } catch (err) {
+          console.error("Failed to copy:", err);
+          textArea.remove();
+          toast.error("Failed to copy credentials");
+        }
+      }
     }
   };
 
@@ -195,7 +222,9 @@ Generated on: ${new Date().toLocaleString()}`;
                   )}
                   <div className="space-y-2 text-sm">
                     <div className="bg-white p-3 rounded border border-blue-200">
-                      <span className="text-gray-600 block mb-1">Partner ID:</span>
+                      <span className="text-gray-600 block mb-1">
+                        Partner ID:
+                      </span>
                       <p className="font-mono font-medium text-base">
                         {loginDetails?.partnerId}
                       </p>
@@ -207,13 +236,17 @@ Generated on: ${new Date().toLocaleString()}`;
                       </p>
                     </div>
                     <div className="bg-white p-3 rounded border border-blue-200">
-                      <span className="text-gray-600 block mb-1">Temporary Password:</span>
+                      <span className="text-gray-600 block mb-1">
+                        Temporary Password:
+                      </span>
                       <p className="font-mono font-medium text-base break-all">
                         {resetResult.tempPassword}
                       </p>
                     </div>
                     <div className="bg-white p-3 rounded border border-blue-200">
-                      <span className="text-gray-600 block mb-1">Portal URL:</span>
+                      <span className="text-gray-600 block mb-1">
+                        Portal URL:
+                      </span>
                       <p className="font-mono font-medium text-sm break-all text-blue-600">
                         {window.location.origin}/login
                       </p>

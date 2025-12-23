@@ -55,8 +55,8 @@ class AnalyticsService {
           COUNT(*) as total_students,
           SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) as male_students,
           SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) as female_students,
-          COUNT(DISTINCT s.partner_id) as total_partners,
-          COUNT(DISTINCT s.center_id) as total_centers,
+          (SELECT COUNT(*) FROM partners WHERE status = 'active') as total_partners,
+          (SELECT COUNT(*) FROM centers WHERE status = 'active') as total_centers,
           SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) as total_employments
         FROM students s
         ${whereClause}`,
@@ -169,21 +169,18 @@ class AnalyticsService {
    */
   async getFilterOptions() {
     try {
-      // Get active partners
+      // Get all partners (not just active - show all for filtering)
       const partners = await db.query(
         `SELECT id, name 
          FROM partners 
-         WHERE status = 'active' 
          ORDER BY name ASC`
       );
 
-      // Get active AND APPROVED centers
+      // Get all centers (show all for filtering, not just approved)
       const centers = await db.query(
         `SELECT c.id, c.center_name, p.name as partner_name 
          FROM centers c
          LEFT JOIN partners p ON c.partner_id = p.id
-         WHERE c.status = 'active' 
-         AND c.approval_status = 'approved'
          ORDER BY c.center_name ASC`
       );
 

@@ -6,7 +6,11 @@ import EnhancedDataTable, {
 } from "../../components/common/EnhancedDataTable";
 import PartnerForm from "../../components/forms/PartnerForm";
 import BulkPartnerUpload from "../../components/forms/BulkPartnerUpload";
-import { SuccessModal, RejectionModal } from "../../components/common";
+import {
+  SuccessModal,
+  RejectionModal,
+  ActionDropdown,
+} from "../../components/common";
 import ResetPartnerPasswordModal from "../../components/modals/ResetPartnerPasswordModal";
 import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
 import BulkDeleteButton from "../../components/common/BulkDeleteButton";
@@ -493,78 +497,73 @@ const PartnersPage = ({ embedded = false }) => {
     {
       id: "actions",
       header: "Actions",
-      cell: ({ row }) => (
-        <div
-          className="flex items-center gap-2"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {isAdmin && row.original.approval_status === "pending" && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleApprovePartner(row.original.id);
-                }}
-                className="text-green-600 hover:text-green-800"
-                title="Approve"
-              >
-                <CheckIcon className="h-5 w-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRejectPartner(row.original.id);
-                }}
-                className="text-red-600 hover:text-red-800"
-                title="Reject"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </>
-          )}
-          {isAdmin && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleResetPassword(row.original);
-                }}
-                className="text-orange-600 hover:text-orange-800"
-                title="Reset Password"
-              >
-                <KeyIcon className="h-5 w-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleResendWelcomeEmail(row.original.id);
-                }}
-                className="text-purple-600 hover:text-purple-800"
-                title="Resend Welcome Email"
-              >
-                <EnvelopeIcon className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() => handleEditClick(row.original)}
-                className="text-blue-600 hover:text-blue-800"
-                title="Edit"
-              >
-                <PencilIcon className="h-5 w-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeletePartner(row.original.id);
-                }}
-                className="text-red-600 hover:text-red-800"
-                title="Delete"
-              >
-                <TrashIcon className="h-5 w-5" />
-              </button>
-            </>
-          )}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const partner = row.original;
+        const isPending = partner.approval_status === "pending";
+
+        const actions = [
+          // Approve action
+          {
+            label: "Approve Partner",
+            icon: CheckIcon,
+            onClick: () => handleApprovePartner(partner.id),
+            variant: "success",
+            show: isAdmin && isPending,
+            divider: isPending,
+          },
+          // Reject action
+          {
+            label: "Reject Partner",
+            icon: XMarkIcon,
+            onClick: () => handleRejectPartner(partner.id),
+            variant: "danger",
+            show: isAdmin && isPending,
+            divider: true,
+          },
+          // Edit action
+          {
+            label: "Edit Partner",
+            icon: PencilIcon,
+            onClick: () => handleEditClick(partner),
+            variant: "default",
+            show: isAdmin,
+          },
+          // Reset Password action
+          {
+            label: "Reset Password",
+            icon: KeyIcon,
+            onClick: () => handleResetPassword(partner),
+            variant: "warning",
+            show: isAdmin,
+          },
+          // Resend Welcome Email action
+          {
+            label: "Resend Welcome Email",
+            icon: EnvelopeIcon,
+            onClick: () => handleResendWelcomeEmail(partner.id),
+            variant: "default",
+            show: isAdmin,
+            divider: true,
+          },
+          // Delete action
+          {
+            label: "Delete Partner",
+            icon: TrashIcon,
+            onClick: () => handleDeletePartner(partner.id),
+            variant: "danger",
+            show: isAdmin,
+          },
+        ];
+
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex justify-center"
+          >
+            <ActionDropdown actions={actions} align="right" size="sm" />
+          </div>
+        );
+      },
       size: 180,
       minSize: 150,
       maxSize: 250,

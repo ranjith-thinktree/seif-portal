@@ -34,7 +34,7 @@ class CenterService {
       const validPage = Math.max(1, parseInt(page) || 1);
       const validLimit = Math.max(1, Math.min(1000, parseInt(limit) || 10));
       const offset = (validPage - 1) * validLimit;
-      
+
       let whereConditions = [];
       let queryParams = [];
 
