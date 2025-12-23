@@ -50,17 +50,17 @@ class AnalyticsService {
         whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
       // 1. Get Summary Statistics
+      // Use UNION to ensure subqueries always execute even with 0 students
       const summaryStats = await db.query(
         `SELECT 
-          COUNT(*) as total_students,
-          SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) as male_students,
-          SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) as female_students,
+          COALESCE((SELECT COUNT(*) FROM students s ${whereClause}), 0) as total_students,
+          COALESCE((SELECT SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as male_students,
+          COALESCE((SELECT SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as female_students,
           (SELECT COUNT(*) FROM partners WHERE status = 'active') as total_partners,
           (SELECT COUNT(*) FROM centers WHERE status = 'active') as total_centers,
-          SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) as total_employments
-        FROM students s
-        ${whereClause}`,
-        queryParams
+          COALESCE((SELECT SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as total_employments
+        FROM dual`,
+        queryParams.concat(queryParams, queryParams, queryParams)
       );
 
       // 2. Get Partner-wise Breakdown
