@@ -151,7 +151,7 @@ class AdminLogsController {
         files: {},
         pm2: {},
         tests: [],
-        criticalIssues: []
+        criticalIssues: [],
       };
 
       // Deployment Info
@@ -162,12 +162,12 @@ class AdminLogsController {
           name: packageJson.name || 'SEIF Backend',
           nodeVersion: process.version,
           environment: process.env.NODE_ENV || 'development',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
       } catch (err) {
         diagnostics.deployment = {
           version: 'unknown',
-          error: 'Failed to read package.json'
+          error: 'Failed to read package.json',
         };
       }
 
@@ -176,12 +176,16 @@ class AdminLogsController {
         const dbStart = Date.now();
         const [rows] = await db.query('SELECT 1 as test');
         const dbResponseTime = Date.now() - dbStart;
-        
+
         // Get counts
-        const [[partnerCount]] = await db.query('SELECT COUNT(*) as count FROM partners WHERE status = "active"');
-        const [[centerCount]] = await db.query('SELECT COUNT(*) as count FROM centers WHERE status = "active"');
+        const [[partnerCount]] = await db.query(
+          'SELECT COUNT(*) as count FROM partners WHERE status = "active"'
+        );
+        const [[centerCount]] = await db.query(
+          'SELECT COUNT(*) as count FROM centers WHERE status = "active"'
+        );
         const [[studentCount]] = await db.query('SELECT COUNT(*) as count FROM students');
-        
+
         diagnostics.database = {
           connected: true,
           responseTime: dbResponseTime,
@@ -190,18 +194,18 @@ class AdminLogsController {
           counts: {
             partners: partnerCount.count,
             centers: centerCount.count,
-            students: studentCount.count
-          }
+            students: studentCount.count,
+          },
         };
       } catch (err) {
         diagnostics.database = {
           connected: false,
-          error: err.message
+          error: err.message,
         };
         diagnostics.criticalIssues.push({
           title: 'Database Connection Failed',
           description: err.message,
-          solution: 'Check database credentials and ensure MySQL is running'
+          solution: 'Check database credentials and ensure MySQL is running',
         });
       }
 
@@ -210,9 +214,9 @@ class AdminLogsController {
         const analyticsServicePath = path.join(__dirname, '../services/analytics.service.js');
         const content = await fs.readFile(analyticsServicePath, 'utf-8');
         const hash = crypto.createHash('md5').update(content).digest('hex');
-        
+
         diagnostics.files = {
-          'analytics.service.js': hash
+          'analytics.service.js': hash,
         };
 
         // Check if file has expected code
@@ -220,12 +224,12 @@ class AdminLogsController {
           diagnostics.criticalIssues.push({
             title: 'Analytics Service Outdated',
             description: 'analytics.service.js does not contain expected FROM dual query',
-            solution: 'Redeploy the latest code or check if old cached version is running'
+            solution: 'Redeploy the latest code or check if old cached version is running',
           });
         }
       } catch (err) {
         diagnostics.files = {
-          error: 'Failed to verify files'
+          error: 'Failed to verify files',
         };
       }
 
@@ -233,8 +237,8 @@ class AdminLogsController {
       try {
         const { stdout } = await execPromise('pm2 jlist');
         const pm2List = JSON.parse(stdout);
-        const seifBackend = pm2List.find(p => p.name === 'seif-backend');
-        
+        const seifBackend = pm2List.find((p) => p.name === 'seif-backend');
+
         if (seifBackend) {
           diagnostics.pm2 = {
             name: seifBackend.name,
@@ -242,13 +246,13 @@ class AdminLogsController {
             uptime: Math.floor((Date.now() - seifBackend.pm2_env.pm_uptime) / 1000),
             restarts: seifBackend.pm2_env.restart_time,
             memory: `${Math.round(seifBackend.monit.memory / 1024 / 1024)}MB`,
-            cpu: `${seifBackend.monit.cpu}%`
+            cpu: `${seifBackend.monit.cpu}%`,
           };
         }
       } catch (err) {
         diagnostics.pm2 = {
           status: 'unavailable',
-          message: 'PM2 info not available (may not be running under PM2)'
+          message: 'PM2 info not available (may not be running under PM2)',
         };
       }
 
@@ -257,18 +261,18 @@ class AdminLogsController {
         const testStart = Date.now();
         const [[healthCheck]] = await db.query('SELECT COUNT(*) as count FROM partners LIMIT 1');
         const healthTime = Date.now() - testStart;
-        
+
         diagnostics.tests.push({
           endpoint: 'Database Query Test',
           passed: healthCheck !== undefined,
-          responseTime: healthTime
+          responseTime: healthTime,
         });
       } catch (err) {
         diagnostics.tests.push({
           endpoint: 'Database Query Test',
           passed: false,
           responseTime: 0,
-          error: err.message
+          error: err.message,
         });
       }
 

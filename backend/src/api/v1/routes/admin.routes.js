@@ -56,6 +56,15 @@ router.get(
 // Clear logs (SUPER_ADMIN only)
 router.post('/logs/clear', authenticate, checkRole(['SUPER_ADMIN']), adminLogsController.clearLogs);
 
+// TEST ENDPOINT - Remove after testing
+router.get('/test-diagnostics-route', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Diagnostics route is working!',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Get comprehensive system diagnostics (SUPER_ADMIN only)
 router.get(
   '/diagnostics',
