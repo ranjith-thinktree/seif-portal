@@ -49,6 +49,13 @@ class AnalyticsService {
       const whereClause =
         whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
+      // Write to file to prove this code is executing
+      const fs = require('fs');
+      fs.appendFileSync('/tmp/analytics-debug.log', `\n[${new Date().toISOString()}] getConsolidatedAnalytics called\n`);
+      fs.appendFileSync('/tmp/analytics-debug.log', `whereConditions: ${JSON.stringify(whereConditions)}\n`);
+      fs.appendFileSync('/tmp/analytics-debug.log', `queryParams: ${JSON.stringify(queryParams)}\n`);
+      fs.appendFileSync('/tmp/analytics-debug.log', `whereClause: "${whereClause}"\n`);
+
       // 1. Get Summary Statistics
       // Use FROM dual to ensure subqueries always execute even with 0 students
       const summaryQuery = `SELECT 
@@ -60,16 +67,15 @@ class AnalyticsService {
           COALESCE((SELECT SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as total_employments
         FROM dual`;
 
-      console.log('📊 Analytics Query:', summaryQuery);
-      console.log('📊 Query Params:', queryParams.concat(queryParams, queryParams, queryParams));
+      fs.appendFileSync('/tmp/analytics-debug.log', `Query: ${summaryQuery}\n`);
 
       const summaryStats = await db.query(
         summaryQuery,
         queryParams.concat(queryParams, queryParams, queryParams)
       );
 
-      console.log('📊 Summary Stats Result:', JSON.stringify(summaryStats));
-      console.log('📊 Summary Stats [0]:', JSON.stringify(summaryStats[0]));
+      fs.appendFileSync('/tmp/analytics-debug.log', `Result: ${JSON.stringify(summaryStats)}\n`);
+      fs.appendFileSync('/tmp/analytics-debug.log', `First Row: ${JSON.stringify(summaryStats[0])}\n`);
           p.id as partner_id,
           p.name as partner_name,
           COUNT(*) as total_students,
