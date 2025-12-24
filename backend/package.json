@@ -1,7 +1,7 @@
 {
   "name": "seif-portal-backend",
-  "version": "1.0.0",
-  "description": "SEIF Portal Backend API - Training Center Management System",
+  "version": "1.0.1",
+  "description": "SEIF Portal Backend API - Training Center Management System with Diagnostics",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
