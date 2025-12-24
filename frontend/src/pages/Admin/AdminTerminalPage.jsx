@@ -249,8 +249,6 @@ const AdminTerminalPage = () => {
           </div>
         </div>
 
-        </div>
-
         {/* Diagnostics View */}
         {selectedView === "diagnostics" && diagnostics && (
           <div className="space-y-6">
