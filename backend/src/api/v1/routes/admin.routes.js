@@ -56,4 +56,12 @@ router.get(
 // Clear logs (SUPER_ADMIN only)
 router.post('/logs/clear', authenticate, checkRole(['SUPER_ADMIN']), adminLogsController.clearLogs);
 
+// Get comprehensive system diagnostics (SUPER_ADMIN only)
+router.get(
+  '/diagnostics',
+  authenticate,
+  checkRole(['SUPER_ADMIN']),
+  adminLogsController.getDiagnostics
+);
+
 module.exports = router;
