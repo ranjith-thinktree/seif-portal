@@ -441,11 +441,19 @@ const AdminTerminalPageV2 = () => {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Status:</span>
+                          <span className="text-muted-foreground">Environment:</span>
                           <span className="font-mono">
-                            {diagnostics.deployment?.status}
+                            {diagnostics.deployment?.environment || diagnostics.deployment?.status || "N/A"}
                           </span>
                         </div>
+                        {diagnostics.deployment?.nodeVersion && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Node Version:</span>
+                            <span className="font-mono">
+                              {diagnostics.deployment.nodeVersion}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -495,7 +503,7 @@ const AdminTerminalPageV2 = () => {
 
                     {/* System Info */}
                     {systemInfo && (
-                      <div>
+                      <div className="border-b pb-4">
                         <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                           <CpuChipIcon className="h-4 w-4" />
                           System Information
@@ -526,6 +534,71 @@ const AdminTerminalPageV2 = () => {
                               {systemInfo.cpuUsage?.toFixed(2)}%
                             </span>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PM2 Info */}
+                    {diagnostics.pm2 && diagnostics.pm2.status !== 'unavailable' && (
+                      <div className="border-b pb-4">
+                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                          <ServerIcon className="h-4 w-4" />
+                          PM2 Process
+                        </h4>
+                        <div className="grid gap-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Status:</span>
+                            <Badge className={diagnostics.pm2.status === 'online' ? 'bg-green-500' : 'bg-yellow-500'}>
+                              {diagnostics.pm2.status}
+                            </Badge>
+                          </div>
+                          {diagnostics.pm2.uptime && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Uptime:</span>
+                              <span className="font-mono">{formatUptime(diagnostics.pm2.uptime)}</span>
+                            </div>
+                          )}
+                          {diagnostics.pm2.restarts !== undefined && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Restarts:</span>
+                              <span className="font-mono">{diagnostics.pm2.restarts}</span>
+                            </div>
+                          )}
+                          {diagnostics.pm2.memory && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Memory:</span>
+                              <span className="font-mono">{diagnostics.pm2.memory}</span>
+                            </div>
+                          )}
+                          {diagnostics.pm2.cpu && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">CPU:</span>
+                              <span className="font-mono">{diagnostics.pm2.cpu}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Critical Issues */}
+                    {diagnostics.criticalIssues && diagnostics.criticalIssues.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2 text-red-600">
+                          <ExclamationTriangleIcon className="h-4 w-4" />
+                          Critical Issues
+                        </h4>
+                        <div className="space-y-3">
+                          {diagnostics.criticalIssues.map((issue, index) => (
+                            <div key={index} className="rounded-lg border border-red-200 bg-red-50 p-3">
+                              <p className="font-medium text-sm text-red-900">{issue.title}</p>
+                              <p className="text-xs text-red-700 mt-1">{issue.description}</p>
+                              {issue.solution && (
+                                <p className="text-xs text-red-600 mt-2">
+                                  <strong>Solution:</strong> {issue.solution}
+                                </p>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
