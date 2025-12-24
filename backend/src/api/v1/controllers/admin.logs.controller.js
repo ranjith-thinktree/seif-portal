@@ -138,7 +138,7 @@ class AdminLogsController {
     try {
       const os = require('os');
       const crypto = require('crypto');
-      const db = require('../../../config/database');
+      const db = require('../../../database/connection');
       const { exec } = require('child_process');
       const util = require('util');
       const execPromise = util.promisify(exec);

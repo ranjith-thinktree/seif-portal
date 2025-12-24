@@ -77,6 +77,23 @@ class AnalyticsService {
       fs.appendFileSync('/tmp/analytics-debug.log', `Result: ${JSON.stringify(summaryStats)}\n`);
       fs.appendFileSync('/tmp/analytics-debug.log', `First Row: ${JSON.stringify(summaryStats[0])}\n`);
 
+      // 2. Get Partner-wise Breakdown
+      const partnerBreakdown = await db.query(
+        `SELECT 
+          p.id as partner_id,
+          p.name as partner_name,
+          COUNT(*) as total_students,
+          SUM(CASE WHEN s.gender = 'Male' THEN 1 ELSE 0 END) as male_students,
+          SUM(CASE WHEN s.gender = 'Female' THEN 1 ELSE 0 END) as female_students,
+          COUNT(DISTINCT s.center_id) as centers_count
+        FROM students s
+        LEFT JOIN partners p ON s.partner_id = p.id
+        ${whereClause}
+        GROUP BY p.id, p.name
+        ORDER BY total_students DESC`,
+        queryParams
+      );
+
       // 3. Get Center-wise Breakdown
       const centerBreakdown = await db.query(
         `SELECT 
