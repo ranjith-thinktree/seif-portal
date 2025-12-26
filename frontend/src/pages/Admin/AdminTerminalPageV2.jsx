@@ -194,6 +194,7 @@ const AdminTerminalPageV2 = () => {
     if (activeTab === 'logs' || activeTab === 'errors') {
       fetchLogs();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, lines]);
 
   // Auto-scroll to bottom
@@ -224,19 +225,26 @@ const AdminTerminalPageV2 = () => {
     );
   }
 
-  const formatUptime = (seconds) => {
-    if (!seconds) return "N/A";
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${days}d ${hours}h ${minutes}m`;
-  };
-
-  const formatBytes = (bytes) => {
-    if (!bytes) return "N/A";
-    const mb = (bytes / 1024 / 1024).toFixed(2);
-    return `${mb} MB`;
-  };
+  // Check if user is SUPER_ADMIN
+  if (user?.role !== "SUPER_ADMIN") {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-full">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="text-red-600 flex items-center gap-2">
+                <XCircleIcon className="h-6 w-6" />
+                Access Denied
+              </CardTitle>
+              <CardDescription>
+                This page is only accessible to SUPER_ADMIN users.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      </MainLayout>
+    );
+  }
 
   const getSeverityColor = (severity) => {
     switch (severity) {
