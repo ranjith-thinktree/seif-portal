@@ -31,8 +31,10 @@ const getConnection = async () => {
 const query = async (sql, params = []) => {
   const connection = await getConnection();
   try {
-    const [results] = await connection.execute(sql, params);
-    return results;
+    // Return [results, fields] to match mysql2 promise format
+    // This allows destructuring: const [rows] = await db.query(...)
+    const result = await connection.execute(sql, params);
+    return result; // Returns [rows, fields] array
   } catch (error) {
     console.error('Database query error:', error);
     throw error;

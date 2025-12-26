@@ -178,13 +178,13 @@ class AdminLogsController {
         const dbResponseTime = Date.now() - dbStart;
 
         // Get counts
-        const [[partnerCount]] = await db.query(
+        const [partnerCountResult] = await db.query(
           'SELECT COUNT(*) as count FROM partners WHERE status = "active"'
         );
-        const [[centerCount]] = await db.query(
+        const [centerCountResult] = await db.query(
           'SELECT COUNT(*) as count FROM centers WHERE status = "active"'
         );
-        const [[studentCount]] = await db.query('SELECT COUNT(*) as count FROM students');
+        const [studentCountResult] = await db.query('SELECT COUNT(*) as count FROM students');
 
         diagnostics.database = {
           connected: true,
@@ -192,9 +192,9 @@ class AdminLogsController {
           host: process.env.DB_HOST || 'localhost',
           database: process.env.DB_NAME || 'seif_db',
           counts: {
-            partners: partnerCount.count,
-            centers: centerCount.count,
-            students: studentCount.count,
+            partners: partnerCountResult[0]?.count || 0,
+            centers: centerCountResult[0]?.count || 0,
+            students: studentCountResult[0]?.count || 0,
           },
         };
       } catch (err) {
@@ -259,12 +259,12 @@ class AdminLogsController {
       // API Health Tests
       try {
         const testStart = Date.now();
-        const [[healthCheck]] = await db.query('SELECT COUNT(*) as count FROM partners LIMIT 1');
+        const [healthCheckResult] = await db.query('SELECT COUNT(*) as count FROM partners LIMIT 1');
         const healthTime = Date.now() - testStart;
 
         diagnostics.tests.push({
           endpoint: 'Database Query Test',
-          passed: healthCheck !== undefined,
+          passed: healthCheckResult && healthCheckResult.length > 0,
           responseTime: healthTime,
         });
       } catch (err) {
