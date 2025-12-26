@@ -51,9 +51,18 @@ class AnalyticsService {
 
       // Write to file to prove this code is executing
       const fs = require('fs');
-      fs.appendFileSync('/tmp/analytics-debug.log', `\n[${new Date().toISOString()}] getConsolidatedAnalytics called\n`);
-      fs.appendFileSync('/tmp/analytics-debug.log', `whereConditions: ${JSON.stringify(whereConditions)}\n`);
-      fs.appendFileSync('/tmp/analytics-debug.log', `queryParams: ${JSON.stringify(queryParams)}\n`);
+      fs.appendFileSync(
+        '/tmp/analytics-debug.log',
+        `\n[${new Date().toISOString()}] getConsolidatedAnalytics called\n`
+      );
+      fs.appendFileSync(
+        '/tmp/analytics-debug.log',
+        `whereConditions: ${JSON.stringify(whereConditions)}\n`
+      );
+      fs.appendFileSync(
+        '/tmp/analytics-debug.log',
+        `queryParams: ${JSON.stringify(queryParams)}\n`
+      );
       fs.appendFileSync('/tmp/analytics-debug.log', `whereClause: "${whereClause}"\n`);
 
       // 1. Get Summary Statistics
@@ -67,18 +76,13 @@ class AnalyticsService {
           COALESCE((SELECT SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as total_employments
         FROM dual`;
 
-      fs.appendFileSync('/tmp/analytics-debug.log', `Query: ${summaryQuery}\n`);
-
-      const summaryStats = await db.query(
+      const [summaryStats] = await db.query(
         summaryQuery,
         queryParams.concat(queryParams, queryParams, queryParams)
       );
 
-      fs.appendFileSync('/tmp/analytics-debug.log', `Result: ${JSON.stringify(summaryStats)}\n`);
-      fs.appendFileSync('/tmp/analytics-debug.log', `First Row: ${JSON.stringify(summaryStats[0])}\n`);
-
-      // 2. Get Partner-wise Breakdown
-      const partnerBreakdown = await db.query(
+      // 2. Get Partner-wise Breakdown (Top 10 partners only for performance)
+      const [partnerBreakdown] = await db.query(
         `SELECT 
           p.id as partner_id,
           p.name as partner_name,
@@ -90,12 +94,13 @@ class AnalyticsService {
         LEFT JOIN partners p ON s.partner_id = p.id
         ${whereClause}
         GROUP BY p.id, p.name
-        ORDER BY total_students DESC`,
+        ORDER BY total_students DESC
+        LIMIT 10`,
         queryParams
       );
 
-      // 3. Get Center-wise Breakdown
-      const centerBreakdown = await db.query(
+      // 3. Get Center-wise Breakdown (Top 20 centers only for performance)
+      const [centerBreakdown] = await db.query(
         `SELECT 
           c.id as center_id,
           c.center_name,
@@ -110,12 +115,13 @@ class AnalyticsService {
         LEFT JOIN partners p ON s.partner_id = p.id
         ${whereClause}
         GROUP BY c.id, c.center_name, p.name, c.city, c.state
-        ORDER BY total_students DESC`,
+        ORDER BY total_students DESC
+        LIMIT 20`,
         queryParams
       );
 
       // 4. Get Year-wise Trend (Last 5 financial years)
-      const yearlyTrend = await db.query(
+      const [yearlyTrend] = await db.query(
         `SELECT 
           CASE 
             WHEN MONTH(enrollment_date) >= 4 THEN CONCAT(YEAR(enrollment_date), '-', YEAR(enrollment_date) + 1)
@@ -134,7 +140,7 @@ class AnalyticsService {
       );
 
       // 5. Get Gender Distribution for Chart
-      const genderDistribution = await db.query(
+      const [genderDistribution] = await db.query(
         `SELECT 
           gender,
           COUNT(*) as count
@@ -145,7 +151,7 @@ class AnalyticsService {
       );
 
       // 6. Get Available Financial Years
-      const availableYears = await db.query(
+      const [availableYears] = await db.query(
         `SELECT DISTINCT
           CASE 
             WHEN MONTH(enrollment_date) >= 4 THEN CONCAT(YEAR(enrollment_date), '-', YEAR(enrollment_date) + 1)

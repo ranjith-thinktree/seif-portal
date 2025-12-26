@@ -42,7 +42,7 @@ const AdminTerminalPageV2 = () => {
   const [loading, setLoading] = useState(false);
   const [lines, setLines] = useState(100);
   const [errorSummary, setErrorSummary] = useState([]);
-  const [activeTab, setActiveTab] = useState('health');
+  const [activeTab, setActiveTab] = useState("health");
   const terminalRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
 
@@ -168,7 +168,7 @@ const AdminTerminalPageV2 = () => {
 
   // Refresh all data
   const handleRefresh = () => {
-    if (activeTab === 'logs') {
+    if (activeTab === "logs") {
       fetchLogs();
     }
     fetchDiagnostics();
@@ -191,7 +191,7 @@ const AdminTerminalPageV2 = () => {
 
   // Fetch logs only when logs or errors tab is accessed
   useEffect(() => {
-    if (activeTab === 'logs' || activeTab === 'errors') {
+    if (activeTab === "logs" || activeTab === "errors") {
       fetchLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,27 +203,6 @@ const AdminTerminalPageV2 = () => {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, [logs]);
-
-  // Check if user is SUPER_ADMIN
-  if (user?.role !== "SUPER_ADMIN") {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-full">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle className="text-red-600 flex items-center gap-2">
-                <XCircleIcon className="h-6 w-6" />
-                Access Denied
-              </CardTitle>
-              <CardDescription>
-                This page is only accessible to SUPER_ADMIN users.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
-      </MainLayout>
-    );
-  }
 
   // Check if user is SUPER_ADMIN
   if (user?.role !== "SUPER_ADMIN") {

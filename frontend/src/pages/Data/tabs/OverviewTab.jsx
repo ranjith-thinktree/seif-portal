@@ -577,7 +577,7 @@ const OverviewTab = () => {
                 {/* Partner-wise Breakdown Table */}
                 <div className="bg-white rounded-lg p-6 shadow-sm mb-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    Partner-wise Breakdown
+                    Partner-wise Breakdown (Top 10)
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -643,7 +643,7 @@ const OverviewTab = () => {
                 {/* Center-wise Breakdown Table */}
                 <div className="bg-white rounded-lg p-6 shadow-sm">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    Center-wise Breakdown
+                    Center-wise Breakdown (Top 20)
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">

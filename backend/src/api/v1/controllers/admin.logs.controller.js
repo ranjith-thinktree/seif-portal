@@ -164,12 +164,12 @@ class AdminLogsController {
       // Database Connection Test (optimized - parallel queries)
       try {
         const dbStart = Date.now();
-        
+
         // Get all counts in parallel for better performance
         const [partnersResult, centersResult, studentsResult] = await Promise.all([
           db.query('SELECT COUNT(*) as count FROM partners WHERE status = "active"'),
           db.query('SELECT COUNT(*) as count FROM centers WHERE status = "active"'),
-          db.query('SELECT COUNT(*) as count FROM students')
+          db.query('SELECT COUNT(*) as count FROM students'),
         ]);
 
         const dbResponseTime = Date.now() - dbStart;
