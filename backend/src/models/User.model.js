@@ -21,7 +21,7 @@ class UserModel {
       FROM users 
       WHERE email = ?
     `;
-    const results = await query(sql, [email]);
+    const [results] = await query(sql, [email]);
     return results.length > 0 ? results[0] : null;
   }
 
@@ -40,7 +40,7 @@ class UserModel {
       FROM users 
       WHERE id = ?
     `;
-    const results = await query(sql, [id]);
+    const [results] = await query(sql, [id]);
     return results.length > 0 ? results[0] : null;
   }
 
@@ -186,7 +186,7 @@ class UserModel {
 
     // Get total count
     const countSQL = `SELECT COUNT(*) as total FROM users ${whereSQL}`;
-    const countResult = await query(countSQL, params);
+    const [countResult] = await query(countSQL, params);
     const total = countResult[0].total;
 
     // Get paginated data
@@ -199,7 +199,7 @@ class UserModel {
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `;
-    const users = await query(dataSQL, [...params, limit, offset]);
+    const [users] = await query(dataSQL, [...params, limit, offset]);
 
     return { users, total };
   }
@@ -219,7 +219,7 @@ class UserModel {
       params.push(excludeId);
     }
 
-    const results = await query(sql, params);
+    const [results] = await query(sql, params);
     return results.length > 0;
   }
 
@@ -237,7 +237,8 @@ class UserModel {
       WHERE role = ?
       ORDER BY full_name ASC
     `;
-    return await query(sql, [role]);
+    const [results] = await query(sql, [role]);
+    return results;
   }
 
   /**
@@ -254,7 +255,8 @@ class UserModel {
       WHERE partner_id = ?
       ORDER BY full_name ASC
     `;
-    return await query(sql, [partnerId]);
+    const [results] = await query(sql, [partnerId]);
+    return results;
   }
 
   /**
@@ -304,7 +306,8 @@ class UserModel {
       ORDER BY created_at DESC
       LIMIT ?
     `;
-    return await query(sql, [userId, limit]);
+    const [results] = await query(sql, [userId, limit]);
+    return results;
   }
 
   /**
