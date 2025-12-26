@@ -49,22 +49,6 @@ class AnalyticsService {
       const whereClause =
         whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      // Write to file to prove this code is executing
-      const fs = require('fs');
-      fs.appendFileSync(
-        '/tmp/analytics-debug.log',
-        `\n[${new Date().toISOString()}] getConsolidatedAnalytics called\n`
-      );
-      fs.appendFileSync(
-        '/tmp/analytics-debug.log',
-        `whereConditions: ${JSON.stringify(whereConditions)}\n`
-      );
-      fs.appendFileSync(
-        '/tmp/analytics-debug.log',
-        `queryParams: ${JSON.stringify(queryParams)}\n`
-      );
-      fs.appendFileSync('/tmp/analytics-debug.log', `whereClause: "${whereClause}"\n`);
-
       // 1. Get Summary Statistics
       // Use FROM dual to ensure subqueries always execute even with 0 students
       const summaryQuery = `SELECT 
@@ -189,18 +173,20 @@ class AnalyticsService {
    */
   async getFilterOptions() {
     try {
-      // Get all partners (not just active - show all for filtering)
-      const partners = await db.query(
+      // Get all active partners for filtering
+      const [partners] = await db.query(
         `SELECT id, name 
          FROM partners 
+         WHERE status = 'active'
          ORDER BY name ASC`
       );
 
-      // Get all centers (show all for filtering, not just approved)
-      const centers = await db.query(
+      // Get all approved centers for filtering
+      const [centers] = await db.query(
         `SELECT c.id, c.center_name, p.name as partner_name 
          FROM centers c
          LEFT JOIN partners p ON c.partner_id = p.id
+         WHERE c.status = 'approved'
          ORDER BY c.center_name ASC`
       );
 
