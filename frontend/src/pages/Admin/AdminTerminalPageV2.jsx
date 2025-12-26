@@ -36,13 +36,13 @@ import {
  */
 const AdminTerminalPageV2 = () => {
   const [logs, setLogs] = useState({ error: [], output: [], combined: [] });
-  const [systemInfo, setSystemInfo] = useState(null);
   const [diagnostics, setDiagnostics] = useState(null);
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lines, setLines] = useState(100);
   const [errorSummary, setErrorSummary] = useState([]);
+  const [activeTab, setActiveTab] = useState('health');
   const terminalRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
 
@@ -122,40 +122,31 @@ const AdminTerminalPageV2 = () => {
         console.log("⏳ Authentication in progress, will retry automatically");
         return; // Don't set error state, keep previous state or loading
       }
-      
+
       setDiagnostics({
         deployment: {
           status: "error",
           message: "Unable to fetch deployment info",
-          version: error.response?.status 
+          version: error.response?.status
             ? `HTTP ${error.response.status}`
             : "Connection Error",
         },
         database: {
           connected: false,
-          message: error.response?.data?.message || error.message || "Connection failed",
+          message:
+            error.response?.data?.message ||
+            error.message ||
+            "Connection failed",
         },
         api: {
           healthy: false,
-          endpoint: error.response?.status 
-            ? `HTTP ${error.response.status} Error` 
+          endpoint: error.response?.status
+            ? `HTTP ${error.response.status} Error`
             : "Network Error",
         },
       });
     } finally {
       setDiagnosticsLoading(false);
-    }
-  };
-
-  // Fetch system info
-  const fetchSystemInfo = async () => {
-    try {
-      const response = await apiClient.get("/admin/system-info");
-      if (response.data.success) {
-        setSystemInfo(response.data.data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch system info:", error);
     }
   };
 
@@ -177,8 +168,9 @@ const AdminTerminalPageV2 = () => {
 
   // Refresh all data
   const handleRefresh = () => {
-    fetchLogs();
-    fetchSystemInfo();
+    if (activeTab === 'logs') {
+      fetchLogs();
+    }
     fetchDiagnostics();
   };
 
@@ -186,20 +178,23 @@ const AdminTerminalPageV2 = () => {
   useEffect(() => {
     if (autoRefresh) {
       const interval = setInterval(() => {
-        fetchLogs();
-        fetchSystemInfo();
         fetchDiagnostics();
       }, 5000);
       return () => clearInterval(interval);
     }
-  }, [autoRefresh, lines]);
+  }, [autoRefresh]);
 
   // Initial fetch
   useEffect(() => {
-    fetchLogs();
-    fetchSystemInfo();
     fetchDiagnostics();
-  }, [lines]);
+  }, []);
+
+  // Fetch logs only when logs or errors tab is accessed
+  useEffect(() => {
+    if (activeTab === 'logs' || activeTab === 'errors') {
+      fetchLogs();
+    }
+  }, [activeTab, lines]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -302,7 +297,7 @@ const AdminTerminalPageV2 = () => {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="health" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 lg:w-auto">
             <TabsTrigger value="health" className="gap-2">
               <ChartBarIcon className="h-4 w-4" />
@@ -321,7 +316,7 @@ const AdminTerminalPageV2 = () => {
           {/* System Health Tab */}
           <TabsContent value="health" className="space-y-6 mt-6">
             {/* Quick Stats Row */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-3">
               {/* Deployment Status */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -332,14 +327,18 @@ const AdminTerminalPageV2 = () => {
                 </CardHeader>
                 <CardContent>
                   {diagnosticsLoading && !diagnostics ? (
-                    <div className="text-sm text-muted-foreground">Loading...</div>
+                    <div className="text-sm text-muted-foreground">
+                      Loading...
+                    </div>
                   ) : (
                     <>
                       <div className="text-2xl font-bold">
                         {diagnostics?.deployment?.version || "Unknown"}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {diagnostics?.deployment?.message || diagnostics?.deployment?.name || "No info available"}
+                        {diagnostics?.deployment?.message ||
+                          diagnostics?.deployment?.name ||
+                          "No info available"}
                       </p>
                     </>
                   )}
@@ -356,15 +355,19 @@ const AdminTerminalPageV2 = () => {
                 </CardHeader>
                 <CardContent>
                   {diagnosticsLoading && !diagnostics ? (
-                    <div className="text-sm text-muted-foreground">Loading...</div>
+                    <div className="text-sm text-muted-foreground">
+                      Loading...
+                    </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2 mb-2">
                         {getStatusBadge(diagnostics?.database?.connected)}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {diagnostics?.database?.message || 
-                         (diagnostics?.database?.connected ? "Connected" : "Status unknown")}
+                        {diagnostics?.database?.message ||
+                          (diagnostics?.database?.connected
+                            ? "Connected"
+                            : "Status unknown")}
                       </p>
                     </>
                   )}
@@ -381,7 +384,9 @@ const AdminTerminalPageV2 = () => {
                 </CardHeader>
                 <CardContent>
                   {diagnosticsLoading && !diagnostics ? (
-                    <div className="text-sm text-muted-foreground">Loading...</div>
+                    <div className="text-sm text-muted-foreground">
+                      Loading...
+                    </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2 mb-2">
@@ -392,24 +397,6 @@ const AdminTerminalPageV2 = () => {
                       </p>
                     </>
                   )}
-                </CardContent>
-              </Card>
-
-              {/* System Info */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Uptime
-                  </CardTitle>
-                  <CpuChipIcon className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {formatUptime(systemInfo?.uptime)}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Node {systemInfo?.nodeVersion || "N/A"}
-                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -441,14 +428,20 @@ const AdminTerminalPageV2 = () => {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Environment:</span>
+                          <span className="text-muted-foreground">
+                            Environment:
+                          </span>
                           <span className="font-mono">
-                            {diagnostics.deployment?.environment || diagnostics.deployment?.status || "N/A"}
+                            {diagnostics.deployment?.environment ||
+                              diagnostics.deployment?.status ||
+                              "N/A"}
                           </span>
                         </div>
                         {diagnostics.deployment?.nodeVersion && (
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Node Version:</span>
+                            <span className="text-muted-foreground">
+                              Node Version:
+                            </span>
                             <span className="font-mono">
                               {diagnostics.deployment.nodeVersion}
                             </span>
@@ -500,108 +493,6 @@ const AdminTerminalPageV2 = () => {
                         )}
                       </div>
                     </div>
-
-                    {/* System Info */}
-                    {systemInfo && (
-                      <div className="border-b pb-4">
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                          <CpuChipIcon className="h-4 w-4" />
-                          System Information
-                        </h4>
-                        <div className="grid gap-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">
-                              Platform:
-                            </span>
-                            <span className="font-mono">
-                              {systemInfo.platform}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">
-                              Memory:
-                            </span>
-                            <span className="font-mono">
-                              {formatBytes(systemInfo.memory?.used)} /{" "}
-                              {formatBytes(systemInfo.memory?.total)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">
-                              CPU Usage:
-                            </span>
-                            <span className="font-mono">
-                              {systemInfo.cpuUsage?.toFixed(2)}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* PM2 Info */}
-                    {diagnostics.pm2 && diagnostics.pm2.status !== 'unavailable' && (
-                      <div className="border-b pb-4">
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                          <ServerIcon className="h-4 w-4" />
-                          PM2 Process
-                        </h4>
-                        <div className="grid gap-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Status:</span>
-                            <Badge className={diagnostics.pm2.status === 'online' ? 'bg-green-500' : 'bg-yellow-500'}>
-                              {diagnostics.pm2.status}
-                            </Badge>
-                          </div>
-                          {diagnostics.pm2.uptime && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Uptime:</span>
-                              <span className="font-mono">{formatUptime(diagnostics.pm2.uptime)}</span>
-                            </div>
-                          )}
-                          {diagnostics.pm2.restarts !== undefined && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Restarts:</span>
-                              <span className="font-mono">{diagnostics.pm2.restarts}</span>
-                            </div>
-                          )}
-                          {diagnostics.pm2.memory && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Memory:</span>
-                              <span className="font-mono">{diagnostics.pm2.memory}</span>
-                            </div>
-                          )}
-                          {diagnostics.pm2.cpu && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">CPU:</span>
-                              <span className="font-mono">{diagnostics.pm2.cpu}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Critical Issues */}
-                    {diagnostics.criticalIssues && diagnostics.criticalIssues.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2 text-red-600">
-                          <ExclamationTriangleIcon className="h-4 w-4" />
-                          Critical Issues
-                        </h4>
-                        <div className="space-y-3">
-                          {diagnostics.criticalIssues.map((issue, index) => (
-                            <div key={index} className="rounded-lg border border-red-200 bg-red-50 p-3">
-                              <p className="font-medium text-sm text-red-900">{issue.title}</p>
-                              <p className="text-xs text-red-700 mt-1">{issue.description}</p>
-                              {issue.solution && (
-                                <p className="text-xs text-red-600 mt-2">
-                                  <strong>Solution:</strong> {issue.solution}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -672,11 +563,11 @@ const AdminTerminalPageV2 = () => {
                   </TabsContent>
 
                   <TabsContent value="output" className="mt-4">
-                    <div
-                      className="bg-black text-blue-400 p-4 rounded-lg font-mono text-sm h-[500px] overflow-y-auto"
-                    >
+                    <div className="bg-black text-blue-400 p-4 rounded-lg font-mono text-sm h-[500px] overflow-y-auto">
                       {logs.output.length === 0 ? (
-                        <div className="text-gray-500">No output logs found</div>
+                        <div className="text-gray-500">
+                          No output logs found
+                        </div>
                       ) : (
                         logs.output.map((line, idx) => (
                           <div key={idx} className="mb-1">
@@ -688,9 +579,7 @@ const AdminTerminalPageV2 = () => {
                   </TabsContent>
 
                   <TabsContent value="combined" className="mt-4">
-                    <div
-                      className="bg-black text-white p-4 rounded-lg font-mono text-sm h-[500px] overflow-y-auto"
-                    >
+                    <div className="bg-black text-white p-4 rounded-lg font-mono text-sm h-[500px] overflow-y-auto">
                       {logs.combined.length === 0 ? (
                         <div className="text-gray-500">No logs found</div>
                       ) : (

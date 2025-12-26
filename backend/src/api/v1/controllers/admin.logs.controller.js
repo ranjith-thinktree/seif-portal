@@ -136,25 +136,16 @@ class AdminLogsController {
    */
   async getDiagnostics(req, res) {
     try {
-      const os = require('os');
-      const crypto = require('crypto');
       const db = require('../../../database/connection');
-      const { exec } = require('child_process');
-      const util = require('util');
-      const execPromise = util.promisify(exec);
 
       const diagnostics = {
         timestamp: new Date().toISOString(),
         deployment: {},
         database: {},
         api: {},
-        files: {},
-        pm2: {},
-        tests: [],
-        criticalIssues: [],
       };
 
-      // Deployment Info
+      // Deployment Info (lightweight - just package.json data)
       try {
         const packageJson = require('../../../../package.json');
         diagnostics.deployment = {
@@ -162,127 +153,52 @@ class AdminLogsController {
           name: packageJson.name || 'SEIF Backend',
           nodeVersion: process.version,
           environment: process.env.NODE_ENV || 'development',
-          timestamp: new Date().toISOString(),
         };
       } catch (err) {
         diagnostics.deployment = {
           version: 'unknown',
-          error: 'Failed to read package.json',
+          environment: 'unknown',
         };
       }
 
-      // Database Connection Test
+      // Database Connection Test (optimized - parallel queries)
       try {
         const dbStart = Date.now();
-        const [rows] = await db.query('SELECT 1 as test');
-        const dbResponseTime = Date.now() - dbStart;
+        
+        // Get all counts in parallel for better performance
+        const [partnersResult, centersResult, studentsResult] = await Promise.all([
+          db.query('SELECT COUNT(*) as count FROM partners WHERE status = "active"'),
+          db.query('SELECT COUNT(*) as count FROM centers WHERE status = "active"'),
+          db.query('SELECT COUNT(*) as count FROM students')
+        ]);
 
-        // Get counts
-        const [partnerCountResult] = await db.query(
-          'SELECT COUNT(*) as count FROM partners WHERE status = "active"'
-        );
-        const [centerCountResult] = await db.query(
-          'SELECT COUNT(*) as count FROM centers WHERE status = "active"'
-        );
-        const [studentCountResult] = await db.query('SELECT COUNT(*) as count FROM students');
+        const dbResponseTime = Date.now() - dbStart;
 
         diagnostics.database = {
           connected: true,
           responseTime: dbResponseTime,
           host: process.env.DB_HOST || 'localhost',
-          database: process.env.DB_NAME || 'seif_db',
+          database: process.env.DB_NAME || 'seif',
           counts: {
-            partners: partnerCountResult[0]?.count || 0,
-            centers: centerCountResult[0]?.count || 0,
-            students: studentCountResult[0]?.count || 0,
+            partners: partnersResult[0][0]?.count || 0,
+            centers: centersResult[0][0]?.count || 0,
+            students: studentsResult[0][0]?.count || 0,
           },
+        };
+
+        diagnostics.api = {
+          healthy: true,
+          endpoint: 'All systems operational',
         };
       } catch (err) {
         diagnostics.database = {
           connected: false,
           error: err.message,
         };
-        diagnostics.criticalIssues.push({
-          title: 'Database Connection Failed',
-          description: err.message,
-          solution: 'Check database credentials and ensure MySQL is running',
-        });
-      }
-
-      // File Hash Verification
-      try {
-        const analyticsServicePath = path.join(__dirname, '../services/analytics.service.js');
-        const content = await fs.readFile(analyticsServicePath, 'utf-8');
-        const hash = crypto.createHash('md5').update(content).digest('hex');
-
-        diagnostics.files = {
-          'analytics.service.js': hash,
+        diagnostics.api = {
+          healthy: false,
+          endpoint: 'Database connection required',
         };
-
-        // Check if file has expected code
-        if (!content.includes('FROM dual')) {
-          diagnostics.criticalIssues.push({
-            title: 'Analytics Service Outdated',
-            description: 'analytics.service.js does not contain expected FROM dual query',
-            solution: 'Redeploy the latest code or check if old cached version is running',
-          });
-        }
-      } catch (err) {
-        diagnostics.files = {
-          error: 'Failed to verify files',
-        };
-      }
-
-      // PM2 Status (if available)
-      try {
-        const { stdout } = await execPromise('pm2 jlist');
-        const pm2List = JSON.parse(stdout);
-        const seifBackend = pm2List.find((p) => p.name === 'seif-backend');
-
-        if (seifBackend) {
-          diagnostics.pm2 = {
-            name: seifBackend.name,
-            status: seifBackend.pm2_env.status,
-            uptime: Math.floor((Date.now() - seifBackend.pm2_env.pm_uptime) / 1000),
-            restarts: seifBackend.pm2_env.restart_time,
-            memory: `${Math.round(seifBackend.monit.memory / 1024 / 1024)}MB`,
-            cpu: `${seifBackend.monit.cpu}%`,
-          };
-        }
-      } catch (err) {
-        diagnostics.pm2 = {
-          status: 'unavailable',
-          message: 'PM2 info not available (may not be running under PM2)',
-        };
-      }
-
-      // API Health Tests
-      try {
-        const testStart = Date.now();
-        const [healthCheckResult] = await db.query('SELECT COUNT(*) as count FROM partners LIMIT 1');
-        const healthTime = Date.now() - testStart;
-
-        diagnostics.tests.push({
-          endpoint: 'Database Query Test',
-          passed: healthCheckResult && healthCheckResult.length > 0,
-          responseTime: healthTime,
-        });
-      } catch (err) {
-        diagnostics.tests.push({
-          endpoint: 'Database Query Test',
-          passed: false,
-          responseTime: 0,
-          error: err.message,
-        });
-      }
-
-      // Check for common issues
-      if (!diagnostics.database.connected) {
-        diagnostics.api.healthy = false;
-        diagnostics.api.endpoint = 'Database connection required';
-      } else {
-        diagnostics.api.healthy = true;
-        diagnostics.api.endpoint = 'All systems operational';
       }
 
       return successResponse(res, 'Diagnostics fetched successfully', diagnostics);

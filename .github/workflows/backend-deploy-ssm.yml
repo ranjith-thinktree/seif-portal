@@ -46,8 +46,8 @@ jobs:
 
       - name: Upload to S3 (temporary storage)
         run: |
-          aws s3 cp backend-deploy.tar.gz s3://${{ secrets.S3_BUCKET_NAME }}/deployments/backend-$(date +%Y%m%d-%H%M%S).tar.gz
-          aws s3 cp backend-deploy.tar.gz s3://${{ secrets.S3_BUCKET_NAME }}/deployments/backend-latest.tar.gz
+          aws s3 cp backend-deploy.tar.gz s3://seif-portal-backend/deployments/backend-$(date +%Y%m%d-%H%M%S).tar.gz
+          aws s3 cp backend-deploy.tar.gz s3://seif-portal-backend/deployments/backend-latest.tar.gz
 
       - name: Deploy via AWS Systems Manager
         run: |
@@ -66,7 +66,7 @@ jobs:
               'mkdir -p /home/ubuntu/seif-backend',
               'cd /home/ubuntu/seif-backend',
               'pm2 stop seif-backend || true',
-              'aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deployments/backend-latest.tar.gz /tmp/backend-deploy.tar.gz',
+              'aws s3 cp s3://seif-portal-backend/deployments/backend-latest.tar.gz /tmp/backend-deploy.tar.gz',
               'tar -xzf /tmp/backend-deploy.tar.gz -C /home/ubuntu/seif-backend',
               'FILE_COUNT=\\$(find /home/ubuntu/seif-backend/src -type f 2>/dev/null | wc -l)',
               'echo \"File count: \\$FILE_COUNT\"',
