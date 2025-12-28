@@ -1,0 +1,136 @@
+name: Deploy Backend to EC2 (FIXED)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-deploy-new.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci --production --legacy-peer-deps
+
+      - name: Create .env
+        working-directory: ./backend
+        run: |
+          cat > .env << 'ENVEOF'
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=3306
+          DB_NAME=seif
+          DB_USER=admin
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRY=24h
+          REFRESH_TOKEN_EXPIRY=7d
+          PORT=5000
+          NODE_ENV=production
+          FRONTEND_URL=http://seif-portal-frontend.s3-website.ap-south-2.amazonaws.com
+          SMTP_HOST=smtp.gmail.com
+          SMTP_PORT=587
+          SMTP_SECURE=false
+          SMTP_USER=${{ secrets.GMAIL_USER }}
+          SMTP_PASSWORD=${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_FROM=${{ secrets.GMAIL_USER }}
+          UPLOAD_DIR=./uploads
+          MAX_FILE_SIZE=10485760
+          ALLOWED_ORIGINS=http://seif-portal-frontend.s3-website.ap-south-2.amazonaws.com
+          ENVEOF
+
+      - name: Package
+        run: |
+          cd backend
+          tar -czf ../backend.tar.gz --exclude=logs --exclude=uploads --exclude=.git --exclude='*.log' .
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-2
+
+      - name: Upload to S3
+        run: aws s3 cp backend.tar.gz s3://seif-portal-backend/backend.tar.gz
+
+      - name: Create deploy script
+        run: |
+          cat > deploy.sh << 'DEPLOYEOF'
+          #!/bin/bash
+          set -ex
+          export HOME=/home/ubuntu
+          export PATH=/home/ubuntu/.nvm/versions/node/v20.18.0/bin:/usr/local/bin:/usr/bin:/bin
+          pm2 stop seif-backend || true
+          pm2 delete seif-backend || true
+          rm -rf /tmp/backend-new
+          mkdir -p /tmp/backend-new
+          aws s3 cp s3://seif-portal-backend/backend.tar.gz /tmp/backend.tar.gz
+          tar -xzf /tmp/backend.tar.gz -C /tmp/backend-new
+          test -d /tmp/backend-new/src || exit 1
+          test -f /tmp/backend-new/.env || exit 1
+          rm -rf /home/ubuntu/seif-backend-backup
+          mv /home/ubuntu/seif-backend /home/ubuntu/seif-backend-backup || true
+          mv /tmp/backend-new /home/ubuntu/seif-backend
+          cd /home/ubuntu/seif-backend
+          pm2 start src/server.js --name seif-backend
+          pm2 save
+          sleep 8
+          curl -f http://localhost:5000/health || exit 1
+          rm /tmp/backend.tar.gz
+          DEPLOYEOF
+
+      - name: Upload deploy script
+        run: aws s3 cp deploy.sh s3://seif-portal-backend/deploy.sh
+
+      - name: Execute deployment
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=ip-address,Values=${{ secrets.EC2_HOST }}" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+          
+          echo "Instance: $INSTANCE_ID"
+          
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters '{"commands":["aws s3 cp s3://seif-portal-backend/deploy.sh /tmp/d.sh","bash /tmp/d.sh"]}' \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          echo "Command: $CMD_ID"
+          sleep 10
+          
+          for i in {1..30}; do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'Status' --output text 2>/dev/null || echo "Pending")
+            echo "[$i/30] Status: $STATUS"
+            
+            if [ "$STATUS" = "Success" ]; then
+              echo "✅ Deployment successful"
+              exit 0
+            elif [ "$STATUS" = "Failed" ]; then
+              echo "❌ Deployment failed"
+              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'StandardErrorContent' --output text || true
+              exit 1
+            fi
+            
+            sleep 5
+          done
+          
+          echo "⏱️ Timeout"
+          exit 1
