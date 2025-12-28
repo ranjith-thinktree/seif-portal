@@ -45,10 +45,8 @@ class PartnerController {
       return res.status(200).json({
         success: true,
         message: 'Partners fetched successfully',
-        data: {
-          data: result.data,
-          pagination: result.pagination,
-        },
+        data: result.data,
+        pagination: result.pagination,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
