@@ -128,8 +128,8 @@ const PartnersPage = ({ embedded = false }) => {
       );
 
       const response = await getPartners(params);
-      setPartners(response.data.data);
-      setPagination(response.data.pagination);
+      setPartners(response.data);
+      setPagination(response.pagination);
     } catch (error) {
       console.error("Error fetching partners:", error);
       toast.error("Failed to load partners");

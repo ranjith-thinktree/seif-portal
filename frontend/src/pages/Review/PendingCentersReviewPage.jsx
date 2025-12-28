@@ -109,8 +109,8 @@ const PendingCentersReviewPage = () => {
       );
 
       const response = await getCenters(params);
-      setCenters(response.data.data);
-      setPagination(response.data.pagination);
+      setCenters(response.data);
+      setPagination(response.pagination);
     } catch (error) {
       console.error("Error fetching centers:", error);
       toast.error("Failed to load pending centers");
