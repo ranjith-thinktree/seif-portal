@@ -58,10 +58,8 @@ class CenterController {
       return res.status(200).json({
         success: true,
         message: 'Centers fetched successfully',
-        data: {
-          data: result.data,
-          pagination: result.pagination,
-        },
+        data: result.data,
+        pagination: result.pagination,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -113,10 +111,8 @@ class CenterController {
       return res.status(200).json({
         success: true,
         message: 'Centers fetched successfully',
-        data: {
-          data: result.data,
-          pagination: result.pagination,
-        },
+        data: result.data,
+        pagination: result.pagination,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
