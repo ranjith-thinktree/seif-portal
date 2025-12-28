@@ -114,17 +114,18 @@ jobs:
           echo "=== Installing new version ==="
           mv /tmp/backend-new /home/ubuntu/seif-backend
           cd /home/ubuntu/seif-backend
+          chown -R ubuntu:ubuntu /home/ubuntu/seif-backend
           
           echo "=== Starting PM2 ==="
-          pm2 start src/server.js --name seif-backend --log /home/ubuntu/seif-backend/logs/pm2.log --error /home/ubuntu/seif-backend/logs/error.log --output /home/ubuntu/seif-backend/logs/output.log
-          pm2 save
+          sudo -u ubuntu bash -c 'export HOME=/home/ubuntu && export PATH=/home/ubuntu/.nvm/versions/node/v20.18.0/bin:$PATH && pm2 start /home/ubuntu/seif-backend/src/server.js --name seif-backend'
+          sudo -u ubuntu bash -c 'export HOME=/home/ubuntu && pm2 save'
           
           echo "=== Waiting for backend to start ==="
           sleep 5
           
           echo "=== PM2 Status ==="
-          pm2 list
-          pm2 info seif-backend
+          sudo -u ubuntu bash -c 'export HOME=/home/ubuntu && pm2 list'
+          sudo -u ubuntu bash -c 'export HOME=/home/ubuntu && pm2 info seif-backend'
           
           echo "=== Health check (15 attempts) ==="
           for i in {1..15}; do
@@ -139,9 +140,7 @@ jobs:
           
           echo "ERROR: Health check failed after 15 attempts"
           echo "=== PM2 Logs ==="
-          pm2 logs seif-backend --lines 50 --nostream || true
-          echo "=== Error Log ==="
-          tail -50 /home/ubuntu/seif-backend/logs/error.log 2>/dev/null || echo "No error log"
+          sudo -u ubuntu bash -c 'export HOME=/home/ubuntu && pm2 logs seif-backend --lines 50 --nostream' || true
           echo "=== Server check ==="
           netstat -tlnp | grep :5000 || echo "Port 5000 not listening"
           exit 1
