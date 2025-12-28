@@ -111,14 +111,14 @@ class PartnerService {
       const sortDirection = sort_order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
       // Get total count
-      const countResult = await db.query(
+      const [countResult] = await db.query(
         `SELECT COUNT(*) as total FROM partners p ${whereClause}`,
         queryParams
       );
       const total = countResult[0].total;
 
       // Get paginated data - use direct integers for LIMIT/OFFSET to avoid mysql2 parameter issues
-      const partners = await db.query(
+      const [partners] = await db.query(
         `SELECT
           p.*,
           u.full_name as approved_by_name,
@@ -158,7 +158,7 @@ class PartnerService {
     try {
       const partnerId = convertToUUID(id);
 
-      const partners = await db.query(
+      const [partners] = await db.query(
         `SELECT 
           p.*,
           u.full_name as approved_by_name,
@@ -237,34 +237,34 @@ class PartnerService {
       let cityName = null;
 
       if (country_id) {
-        const countryResult = await connection.query('SELECT name FROM countries WHERE id = ?', [
+        const [countryResult] = await connection.query('SELECT name FROM countries WHERE id = ?', [
           country_id,
         ]);
-        if (countryResult[0] && countryResult[0].length > 0) {
-          countryName = countryResult[0][0].name;
+        if (countryResult && countryResult.length > 0) {
+          countryName = countryResult[0].name;
         }
       }
 
       if (state_id) {
-        const stateResult = await connection.query('SELECT name FROM states WHERE id = ?', [
+        const [stateResult] = await connection.query('SELECT name FROM states WHERE id = ?', [
           state_id,
         ]);
-        if (stateResult[0] && stateResult[0].length > 0) {
-          stateName = stateResult[0][0].name;
+        if (stateResult && stateResult.length > 0) {
+          stateName = stateResult[0].name;
         }
       }
 
       if (city_id) {
-        const cityResult = await connection.query('SELECT name FROM cities WHERE id = ?', [
+        const [cityResult] = await connection.query('SELECT name FROM cities WHERE id = ?', [
           city_id,
         ]);
-        if (cityResult[0] && cityResult[0].length > 0) {
-          cityName = cityResult[0][0].name;
+        if (cityResult && cityResult.length > 0) {
+          cityName = cityResult[0].name;
         }
       }
 
       // Generate readable partner_id
-      const countResult = await connection.query(
+      const [countResult] = await connection.query(
         'SELECT COALESCE(MAX(CAST(SUBSTRING(partner_id, 6) AS UNSIGNED)), 0) + 1 as next_id FROM partners'
       );
 
@@ -272,11 +272,11 @@ class PartnerService {
       console.log('Count result:', countResult);
 
       // Extract next_id from query result
-      // Result format: [ [ { next_id: '2' } ], metadata ]
+      // Result format: [ { next_id: '2' } ]
       let nextNumber = 1; // Default to 1 if no partners exist
 
-      if (countResult && countResult.length > 0 && countResult[0].length > 0) {
-        const result = countResult[0][0];
+      if (countResult && countResult.length > 0) {
+        const result = countResult[0];
         nextNumber = result?.next_id;
 
         // Convert to number and validate
@@ -507,12 +507,12 @@ class PartnerService {
 
         // Get country name
         if (country_id) {
-          const countryResult = await connection.query('SELECT name FROM countries WHERE id = ?', [
+          const [countryResult] = await connection.query('SELECT name FROM countries WHERE id = ?', [
             country_id,
           ]);
-          if (countryResult[0].length > 0) {
+          if (countryResult.length > 0) {
             updates.push('country = ?');
-            values.push(countryResult[0][0].name);
+            values.push(countryResult[0].name);
           }
         } else {
           updates.push('country = ?');
@@ -526,12 +526,12 @@ class PartnerService {
 
         // Get state name
         if (state_id) {
-          const stateResult = await connection.query('SELECT name FROM states WHERE id = ?', [
+          const [stateResult] = await connection.query('SELECT name FROM states WHERE id = ?', [
             state_id,
           ]);
-          if (stateResult[0].length > 0) {
+          if (stateResult.length > 0) {
             updates.push('state = ?');
-            values.push(stateResult[0][0].name);
+            values.push(stateResult[0].name);
           }
         } else {
           updates.push('state = ?');
@@ -545,12 +545,12 @@ class PartnerService {
 
         // Get city name
         if (city_id) {
-          const cityResult = await connection.query('SELECT name FROM cities WHERE id = ?', [
+          const [cityResult] = await connection.query('SELECT name FROM cities WHERE id = ?', [
             city_id,
           ]);
-          if (cityResult[0].length > 0) {
+          if (cityResult.length > 0) {
             updates.push('city = ?');
-            values.push(cityResult[0][0].name);
+            values.push(cityResult[0].name);
           }
         } else {
           updates.push('city = ?');
@@ -645,7 +645,7 @@ class PartnerService {
       }
 
       // Check if partner has centers
-      const centers = await db.query('SELECT COUNT(*) as count FROM centers WHERE partner_id = ?', [
+      const [centers] = await db.query('SELECT COUNT(*) as count FROM centers WHERE partner_id = ?', [
         partnerId,
       ]);
 
@@ -775,7 +775,7 @@ class PartnerService {
       const whereClause =
         whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      const partners = await db.query(
+      const [partners] = await db.query(
         `SELECT 
           name as 'Partner Name',
           organization_type as 'Organization Type',
@@ -831,7 +831,7 @@ class PartnerService {
       const whereClause = whereConditions.join(' AND ');
 
       // Get uploads that have at least one rejected center
-      const countResult = await db.query(
+      const [countResult] = await db.query(
         `SELECT COUNT(DISTINCT du.id) as total 
         FROM data_uploads du
         INNER JOIN uploaded_centers uc ON du.id = uc.data_upload_id
@@ -841,7 +841,7 @@ class PartnerService {
       const total = countResult[0].total;
 
       // Get paginated data
-      const uploads = await db.query(
+      const [uploads] = await db.query(
         `SELECT 
           du.*,
           u.full_name as uploaded_by_name,
@@ -888,7 +888,7 @@ class PartnerService {
       const partnerUuid = convertToUUID(partnerId);
 
       // Verify upload belongs to partner and get upload details
-      const upload = await db.query(
+      const [upload] = await db.query(
         `SELECT 
           du.*,
           u.full_name as uploaded_by_name
@@ -903,7 +903,7 @@ class PartnerService {
       }
 
       // Get ALL centers with student count and review status
-      const centers = await db.query(
+      const [centers] = await db.query(
         `SELECT 
           uc.*,
           (SELECT COUNT(*) FROM uploaded_students WHERE uploaded_center_id = uc.id) as student_count,
@@ -946,7 +946,7 @@ class PartnerService {
       const partnerUuid = convertToUUID(partnerId);
 
       // Verify upload and center belong to partner
-      const center = await db.query(
+      const [center] = await db.query(
         `SELECT uc.*, du.partner_id
         FROM uploaded_centers uc
         INNER JOIN data_uploads du ON uc.data_upload_id = du.id
@@ -981,7 +981,7 @@ class PartnerService {
       const whereClause = whereConditions.join(' AND ');
 
       // Get total count
-      const countResult = await db.query(
+      const [countResult] = await db.query(
         `SELECT COUNT(*) as total 
         FROM uploaded_students us
         WHERE ${whereClause}`,
@@ -990,7 +990,7 @@ class PartnerService {
       const total = countResult[0].total;
 
       // Get paginated students
-      const students = await db.query(
+      const [students] = await db.query(
         `SELECT 
           us.*,
           ub.batch_number
@@ -1030,7 +1030,7 @@ class PartnerService {
       const partnerUuid = convertToUUID(partnerId);
 
       // Get batches from production centers table
-      const batches = await db.query(
+      const [batches] = await db.query(
         `SELECT 
           b.id,
           b.batch_number,
@@ -1725,7 +1725,7 @@ class PartnerService {
     try {
       const uploadUuid = convertToUUID(uploadId);
 
-      const editLogs = await db.query(
+      const [editLogs] = await db.query(
         `SELECT 
           del.*,
           us.student_name,
@@ -1852,7 +1852,7 @@ class PartnerService {
    */
   async getCountries() {
     try {
-      const countries = await db.query(
+      const [countries] = await db.query(
         `SELECT id, name, code FROM countries WHERE is_active = 1 ORDER BY name ASC`
       );
       return countries;
@@ -1869,7 +1869,7 @@ class PartnerService {
    */
   async getStatesByCountry(countryId) {
     try {
-      const states = await db.query(
+      const [states] = await db.query(
         `SELECT id, name, code FROM states WHERE country_id = ? AND is_active = 1 ORDER BY name ASC`,
         [countryId]
       );
@@ -1899,7 +1899,7 @@ class PartnerService {
         params.push(stateId);
       } else {
         // Check if country has any states
-        const stateCount = await db.query(
+        const [stateCount] = await db.query(
           'SELECT COUNT(*) as count FROM states WHERE country_id = ? AND is_active = 1',
           [countryId]
         );
@@ -1915,7 +1915,7 @@ class PartnerService {
 
       query += ' ORDER BY name ASC LIMIT 1000'; // Limit for performance
 
-      const cities = await db.query(query, params);
+      const [cities] = await db.query(query, params);
       return cities;
     } catch (error) {
       console.error('Error in getCitiesByStateAndCountry:', error);
@@ -1929,7 +1929,7 @@ class PartnerService {
    */
   async getRegions() {
     try {
-      const regions = await db.query(
+      const [regions] = await db.query(
         `SELECT id, code, name FROM regions WHERE is_active = 1 ORDER BY code ASC`
       );
       return regions;
@@ -1973,7 +1973,7 @@ class PartnerService {
   async resendWelcomeEmail(partnerId) {
     try {
       // Get partner details
-      const partnerRows = await db.query(
+      const [partnerRows] = await db.query(
         `SELECT id, partner_id, name, contact_email 
          FROM partners 
          WHERE id = ?`,
@@ -1987,7 +1987,7 @@ class PartnerService {
       const partner = partnerRows[0];
 
       // Get user account details
-      const userRows = await db.query(
+      const [userRows] = await db.query(
         `SELECT email, password_hash 
          FROM users 
          WHERE partner_id = ? AND role = 'PARTNER'`,
@@ -2067,7 +2067,7 @@ class PartnerService {
           }
 
           // Check for dependencies
-          const centers = await db.query(
+          const [centers] = await db.query(
             'SELECT COUNT(*) as count FROM centers WHERE partner_id = ?',
             [partnerId]
           );

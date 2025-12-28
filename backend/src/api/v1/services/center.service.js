@@ -126,7 +126,7 @@ class CenterService {
       const sortDirection = sort_order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
       // Get total count
-      const countResult = await db.query(
+      const [countResult] = await db.query(
         `SELECT COUNT(*) as total 
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
@@ -136,7 +136,7 @@ class CenterService {
       const total = countResult[0].total;
 
       // Get paginated data - use direct integers for LIMIT/OFFSET
-      const centers = await db.query(
+      const [centers] = await db.query(
         `SELECT 
           c.*,
           p.name as partner_name,
@@ -198,7 +198,7 @@ class CenterService {
     try {
       const centerId = convertToUUID(id);
 
-      const centers = await db.query(
+      const [centers] = await db.query(
         `SELECT 
           c.*,
           p.name as partner_name,
@@ -219,7 +219,7 @@ class CenterService {
       const center = centers[0];
 
       // Get batches for this center
-      const batches = await db.query(
+      const [batches] = await db.query(
         `SELECT 
           b.*,
           (SELECT COUNT(*) FROM students WHERE batch_id = b.id) as enrolled_students
@@ -232,7 +232,7 @@ class CenterService {
       center.batches = batches;
 
       // Get courses for this center
-      const courses = await db.query(
+      const [courses] = await db.query(
         `SELECT 
           c.id, c.course_name, c.course_code
         FROM center_courses cc
@@ -821,7 +821,7 @@ class CenterService {
       const whereClause =
         whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      const centers = await db.query(
+      const [centers] = await db.query(
         `SELECT 
           c.center_name as 'Center Name',
           p.name as 'Partner Name',
@@ -857,7 +857,7 @@ class CenterService {
    */
   async getAllCourses() {
     try {
-      const courses = await db.query(
+      const [courses] = await db.query(
         `SELECT id, course_name, course_code, description, duration_months
         FROM courses
         WHERE is_active = 1
