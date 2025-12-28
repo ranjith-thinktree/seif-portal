@@ -72,26 +72,79 @@ jobs:
         run: |
           cat > deploy.sh << 'DEPLOYEOF'
           #!/bin/bash
-          set -ex
+          set -e
+          
+          echo "=== Setting environment ==="
           export HOME=/home/ubuntu
           export PATH=/home/ubuntu/.nvm/versions/node/v20.18.0/bin:/usr/local/bin:/usr/bin:/bin
-          pm2 stop seif-backend || true
-          pm2 delete seif-backend || true
+          
+          echo "=== Stopping old backend ==="
+          pm2 stop seif-backend 2>/dev/null || echo "Not running"
+          pm2 delete seif-backend 2>/dev/null || echo "Not found"
+          
+          echo "=== Preparing deployment ==="
           rm -rf /tmp/backend-new
           mkdir -p /tmp/backend-new
+          
+          echo "=== Downloading from S3 ==="
           aws s3 cp s3://seif-portal-backend/backend.tar.gz /tmp/backend.tar.gz
+          
+          echo "=== Extracting ==="
           tar -xzf /tmp/backend.tar.gz -C /tmp/backend-new
-          test -d /tmp/backend-new/src || exit 1
-          test -f /tmp/backend-new/.env || exit 1
+          
+          echo "=== Verifying files ==="
+          if [ ! -d /tmp/backend-new/src ]; then
+            echo "ERROR: src directory missing"
+            ls -la /tmp/backend-new/
+            exit 1
+          fi
+          
+          if [ ! -f /tmp/backend-new/.env ]; then
+            echo "ERROR: .env file missing"
+            ls -la /tmp/backend-new/
+            exit 1
+          fi
+          
+          echo "=== Backing up old version ==="
           rm -rf /home/ubuntu/seif-backend-backup
-          mv /home/ubuntu/seif-backend /home/ubuntu/seif-backend-backup || true
+          if [ -d /home/ubuntu/seif-backend ]; then
+            mv /home/ubuntu/seif-backend /home/ubuntu/seif-backend-backup
+          fi
+          
+          echo "=== Installing new version ==="
           mv /tmp/backend-new /home/ubuntu/seif-backend
           cd /home/ubuntu/seif-backend
-          pm2 start src/server.js --name seif-backend
+          
+          echo "=== Starting PM2 ==="
+          pm2 start src/server.js --name seif-backend --log /home/ubuntu/seif-backend/logs/pm2.log --error /home/ubuntu/seif-backend/logs/error.log --output /home/ubuntu/seif-backend/logs/output.log
           pm2 save
-          sleep 8
-          curl -f http://localhost:5000/health || exit 1
-          rm /tmp/backend.tar.gz
+          
+          echo "=== Waiting for backend to start ==="
+          sleep 5
+          
+          echo "=== PM2 Status ==="
+          pm2 list
+          pm2 info seif-backend
+          
+          echo "=== Health check (15 attempts) ==="
+          for i in {1..15}; do
+            echo "Attempt $i/15..."
+            if curl -f http://localhost:5000/health 2>/dev/null; then
+              echo "SUCCESS: Backend is healthy"
+              rm /tmp/backend.tar.gz
+              exit 0
+            fi
+            sleep 2
+          done
+          
+          echo "ERROR: Health check failed after 15 attempts"
+          echo "=== PM2 Logs ==="
+          pm2 logs seif-backend --lines 50 --nostream || true
+          echo "=== Error Log ==="
+          tail -50 /home/ubuntu/seif-backend/logs/error.log 2>/dev/null || echo "No error log"
+          echo "=== Server check ==="
+          netstat -tlnp | grep :5000 || echo "Port 5000 not listening"
+          exit 1
           DEPLOYEOF
 
       - name: Upload deploy script
@@ -116,16 +169,18 @@ jobs:
           echo "Command: $CMD_ID"
           sleep 10
           
-          for i in {1..30}; do
+          for i in {1..40}; do
             STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'Status' --output text 2>/dev/null || echo "Pending")
-            echo "[$i/30] Status: $STATUS"
+            echo "[$i/40] Status: $STATUS"
             
             if [ "$STATUS" = "Success" ]; then
               echo "✅ Deployment successful"
               exit 0
             elif [ "$STATUS" = "Failed" ]; then
-              echo "❌ Deployment failed"
-              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'StandardErrorContent' --output text || true
+              echo "❌ Deployment failed - Fetching logs..."
+              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'StandardOutputContent' --output text 2>/dev/null || echo "Could not fetch output"
+              echo "=== Error Output ==="
+              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'StandardErrorContent' --output text 2>/dev/null || echo "Could not fetch errors"
               exit 1
             fi
             
