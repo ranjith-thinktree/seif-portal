@@ -89,7 +89,7 @@ jobs:
           echo "✅ Upload completed successfully"
 
       - name: Invalidate CloudFront cache (optional)
-        if: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID != '' }}
+        if: secrets.CLOUDFRONT_DISTRIBUTION_ID != ''
         run: |
           echo "🔄 Invalidating CloudFront cache..."
           aws cloudfront create-invalidation \
