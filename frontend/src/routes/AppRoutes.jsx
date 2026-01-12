@@ -30,8 +30,9 @@ import CenterDetailsPage from "../pages/Data/CenterDetailsPage";
 import StudentsPage from "../pages/Data/StudentsPage";
 import DataManagementPage from "../pages/Data/DataManagementPage";
 import DatabaseManagement from "../pages/Admin/DatabaseManagement";
-import AdminTerminalPage from "../pages/Admin/AdminTerminalPage";
+import AdminTerminalPageV2 from "../pages/Admin/AdminTerminalPageV2";
 import ForcedPasswordChangeGuard from "./ForcedPasswordChangeGuard";
+import UserManagementPage from "../pages/UserManagement/UserManagementPage";
 
 /**
  * Placeholder page wrapper with MainLayout
@@ -89,6 +90,33 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute>
                 <ChangePasswordPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.USER_MANAGEMENT}
+            element={
+              <ProtectedRoute>
+                <UserManagementPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ORGANIZATION_PARTNERS}
+            element={
+              <ProtectedRoute>
+                <PlaceholderPage title="Organization Partners" />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ORGANIZATION_CENTERS}
+            element={
+              <ProtectedRoute>
+                <PlaceholderPage title="Organization Centers" />
               </ProtectedRoute>
             }
           />
@@ -367,7 +395,7 @@ const AppRoutes = () => {
             path={ROUTES.ADMIN_TERMINAL}
             element={
               <ProtectedRoute>
-                <AdminTerminalPage />
+                <AdminTerminalPageV2 />
               </ProtectedRoute>
             }
           />

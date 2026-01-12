@@ -10,6 +10,9 @@ export const ROUTES = {
 
   // Admin Routes
   USERS: "/users",
+  USER_MANAGEMENT: "/user-management",
+  ORGANIZATION_PARTNERS: "/organization/partners",
+  ORGANIZATION_CENTERS: "/organization/centers",
   DATA_MANAGEMENT: "/data-management",
   PARTNERS: "/data/partners",
   PARTNER_CENTERS: "/data/partners/:partnerId/centers",

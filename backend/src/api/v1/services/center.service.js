@@ -682,85 +682,94 @@ class CenterService {
       }
 
       // Get unique values for each filterable field
-      const [partners, regions, cities, states, centerTypes, years, statuses, approvalStatuses] =
-        await Promise.all([
-          // Partners (only for non-partner roles)
-          role !== 'PARTNER'
-            ? db.query(
-                `SELECT DISTINCT p.id as value, p.name as label 
+      // MySQL db.query() returns [rows, fields], so we need to destructure the rows
+      const [
+        [partners],
+        [regions],
+        [cities],
+        [states],
+        [centerTypes],
+        [years],
+        [statuses],
+        [approvalStatuses],
+      ] = await Promise.all([
+        // Partners (only for non-partner roles)
+        role !== 'PARTNER'
+          ? db.query(
+              `SELECT DISTINCT p.id as value, p.name as label 
                FROM centers c 
                INNER JOIN partners p ON c.partner_id = p.id
                ${whereCondition}
                ORDER BY p.name ASC`,
-                queryParams
-              )
-            : Promise.resolve([]),
-          // Regions
-          db.query(
-            `SELECT DISTINCT region as value, region as label 
+              queryParams
+            )
+          : Promise.resolve([[]]),
+        // Regions
+        db.query(
+          `SELECT DISTINCT region as value, region as label 
            FROM centers c 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} region IS NOT NULL AND region != ''
            ORDER BY region ASC`,
-            queryParams
-          ),
-          // Cities
-          db.query(
-            `SELECT DISTINCT city as value, city as label 
+          queryParams
+        ),
+        // Cities
+        db.query(
+          `SELECT DISTINCT city as value, city as label 
            FROM centers c 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} city IS NOT NULL AND city != ''
            ORDER BY city ASC`,
-            queryParams
-          ),
-          // States
-          db.query(
-            `SELECT DISTINCT state as value, state as label 
+          queryParams
+        ),
+        // States
+        db.query(
+          `SELECT DISTINCT state as value, state as label 
            FROM centers c 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} state IS NOT NULL AND state != ''
            ORDER BY state ASC`,
-            queryParams
-          ),
-          // Center Types
-          db.query(
-            `SELECT DISTINCT center_type as value, center_type as label 
+          queryParams
+        ),
+        // Center Types
+        db.query(
+          `SELECT DISTINCT center_type as value, center_type as label 
            FROM centers c 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} center_type IS NOT NULL AND center_type != ''
            ORDER BY center_type ASC`,
-            queryParams
-          ),
-          // Years
-          db.query(
-            `SELECT DISTINCT year_of_establishment as value, year_of_establishment as label 
+          queryParams
+        ),
+        // Years
+        db.query(
+          `SELECT DISTINCT year_of_establishment as value, year_of_establishment as label 
            FROM centers c 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} year_of_establishment IS NOT NULL
            ORDER BY year_of_establishment DESC`,
-            queryParams
-          ),
-          // Status
-          db.query(
-            `SELECT DISTINCT status as value, 
+          queryParams
+        ),
+        // Status
+        db.query(
+          `SELECT DISTINCT status as value, 
            CONCAT(UPPER(SUBSTRING(status, 1, 1)), SUBSTRING(status, 2)) as label 
            FROM centers c 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} status IS NOT NULL
            ORDER BY status ASC`,
-            queryParams
-          ),
-          // Approval Status (only for admins)
-          role === 'ADMIN' || role === 'SUPER_ADMIN'
-            ? db.query(
-                `SELECT DISTINCT approval_status as value, 
+          queryParams
+        ),
+        // Approval Status (only for admins)
+        role === 'ADMIN' || role === 'SUPER_ADMIN'
+          ? db.query(
+              `SELECT DISTINCT approval_status as value, 
                CONCAT(UPPER(SUBSTRING(approval_status, 1, 1)), SUBSTRING(approval_status, 2)) as label 
                FROM centers 
                WHERE approval_status IS NOT NULL
                ORDER BY approval_status ASC`
-              )
-            : Promise.resolve([]),
-        ]);
+            )
+          : Promise.resolve([[]]),
+      ]);
 
       return {
         partners: partners.map((p) => ({ value: p.value, label: p.label })),

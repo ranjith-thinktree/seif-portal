@@ -299,14 +299,17 @@ class UserModel {
    * @returns {Array} Array of password history records
    */
   static async getPasswordHistory(userId, limit = 3) {
+    // MySQL has issues with parameterized LIMIT in some versions
+    // Using string interpolation for LIMIT after validating it's a number
+    const safeLimit = parseInt(limit) || 3;
     const sql = `
       SELECT password_hash, created_at
       FROM password_history
       WHERE user_id = ?
       ORDER BY created_at DESC
-      LIMIT ?
+      LIMIT ${safeLimit}
     `;
-    const [results] = await query(sql, [userId, limit]);
+    const [results] = await query(sql, [userId]);
     return results;
   }
 

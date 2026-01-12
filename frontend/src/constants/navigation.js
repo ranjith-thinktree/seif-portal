@@ -54,6 +54,28 @@ export const SIDEBAR_MENU = [
     roles: [ROLES.PARTNER],
   },
   {
+    name: "User Management",
+    path: ROUTES.USER_MANAGEMENT,
+    icon: UsersIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+  },
+  {
+    name: "Organization Management",
+    path: "#",
+    icon: BuildingOfficeIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+    submenu: [
+      {
+        name: "Partners",
+        path: ROUTES.ORGANIZATION_PARTNERS,
+      },
+      {
+        name: "Centers",
+        path: ROUTES.ORGANIZATION_CENTERS,
+      },
+    ],
+  },
+  {
     name: "Data",
     path: ROUTES.DATA_MANAGEMENT,
     icon: FolderIcon,
@@ -64,12 +86,6 @@ export const SIDEBAR_MENU = [
       ROLES.SEIF_READONLY,
       ROLES.PARTNER,
     ],
-  },
-  {
-    name: "User Management",
-    path: ROUTES.USERS,
-    icon: UsersIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {
     name: "Reportings",

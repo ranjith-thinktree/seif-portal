@@ -507,9 +507,10 @@ class PartnerService {
 
         // Get country name
         if (country_id) {
-          const [countryResult] = await connection.query('SELECT name FROM countries WHERE id = ?', [
-            country_id,
-          ]);
+          const [countryResult] = await connection.query(
+            'SELECT name FROM countries WHERE id = ?',
+            [country_id]
+          );
           if (countryResult.length > 0) {
             updates.push('country = ?');
             values.push(countryResult[0].name);
@@ -645,9 +646,10 @@ class PartnerService {
       }
 
       // Check if partner has centers
-      const [centers] = await db.query('SELECT COUNT(*) as count FROM centers WHERE partner_id = ?', [
-        partnerId,
-      ]);
+      const [centers] = await db.query(
+        'SELECT COUNT(*) as count FROM centers WHERE partner_id = ?',
+        [partnerId]
+      );
 
       if (centers[0].count > 0) {
         throw new Error(
@@ -1783,7 +1785,8 @@ class PartnerService {
       }
 
       // Get unique values for each filterable field
-      const [types, cities, states, statuses, approvalStatuses] = await Promise.all([
+      // MySQL db.query() returns [rows, fields], so we need to destructure the rows
+      const [[types], [cities], [states], [statuses], [approvalStatuses]] = await Promise.all([
         // Partner Types (organization_type column)
         db.query(
           `SELECT DISTINCT organization_type as value, organization_type as label 
@@ -1830,7 +1833,7 @@ class PartnerService {
                WHERE approval_status IS NOT NULL
                ORDER BY approval_status ASC`
             )
-          : Promise.resolve([]),
+          : Promise.resolve([[]]),
       ]);
 
       return {

@@ -416,98 +416,107 @@ class StudentService {
       }
 
       // Get unique values for each filterable field
-      const [partners, centers, batches, genders, cities, states, courses, placements] =
-        await Promise.all([
-          // Partners - get ALL partners (not just those with students)
-          role !== 'PARTNER'
-            ? db.query(
-                `SELECT id as value, name as label 
+      // MySQL db.query() returns [rows, fields], so we need to destructure the rows
+      const [
+        [partners],
+        [centers],
+        [batches],
+        [genders],
+        [cities],
+        [states],
+        [courses],
+        [placements],
+      ] = await Promise.all([
+        // Partners - get ALL partners (not just those with students)
+        role !== 'PARTNER'
+          ? db.query(
+              `SELECT id as value, name as label 
                FROM partners
                ORDER BY name ASC`
-              )
-            : Promise.resolve([]),
-          // Centers - get ALL centers (optionally filtered by center_id or partner)
-          db.query(
-            center_id
-              ? `SELECT id as value, center_name as label 
+            )
+          : Promise.resolve([[]]),
+        // Centers - get ALL centers (optionally filtered by center_id or partner)
+        db.query(
+          center_id
+            ? `SELECT id as value, center_name as label 
                FROM centers
                WHERE id = ?
                ORDER BY center_name ASC`
-              : role === 'PARTNER'
-                ? `SELECT id as value, center_name as label 
+            : role === 'PARTNER'
+              ? `SELECT id as value, center_name as label 
                FROM centers
                WHERE partner_id = ?
                ORDER BY center_name ASC`
-                : `SELECT id as value, center_name as label 
+              : `SELECT id as value, center_name as label 
                FROM centers
                ORDER BY center_name ASC`,
-            center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
-          ),
-          // Batches - get ALL batches (optionally filtered by center or partner)
-          db.query(
-            center_id
-              ? `SELECT id as value, batch_number as label 
+          center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
+        ),
+        // Batches - get ALL batches (optionally filtered by center or partner)
+        db.query(
+          center_id
+            ? `SELECT id as value, batch_number as label 
                FROM batches
                WHERE center_id = ?
                ORDER BY batch_number ASC`
-              : role === 'PARTNER'
-                ? `SELECT id as value, batch_number as label 
+            : role === 'PARTNER'
+              ? `SELECT id as value, batch_number as label 
                FROM batches
                WHERE partner_id = ?
                ORDER BY batch_number ASC`
-                : `SELECT id as value, batch_number as label 
+              : `SELECT id as value, batch_number as label 
                FROM batches
                ORDER BY batch_number ASC`,
-            center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
-          ),
-          // Genders
-          db.query(
-            `SELECT DISTINCT gender as value, 
+          center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
+        ),
+        // Genders
+        db.query(
+          `SELECT DISTINCT gender as value, 
            CONCAT(UPPER(SUBSTRING(gender, 1, 1)), SUBSTRING(gender, 2)) as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} gender IS NOT NULL AND gender != ''
            ORDER BY gender ASC`,
-            queryParams
-          ),
-          // Cities
-          db.query(
-            `SELECT DISTINCT city as value, city as label 
+          queryParams
+        ),
+        // Cities
+        db.query(
+          `SELECT DISTINCT city as value, city as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} city IS NOT NULL AND city != ''
            ORDER BY city ASC`,
-            queryParams
-          ),
-          // States
-          db.query(
-            `SELECT DISTINCT state as value, state as label 
+          queryParams
+        ),
+        // States
+        db.query(
+          `SELECT DISTINCT state as value, state as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} state IS NOT NULL AND state != ''
            ORDER BY state ASC`,
-            queryParams
-          ),
-          // Courses
-          db.query(
-            `SELECT DISTINCT course_name as value, course_name as label 
+          queryParams
+        ),
+        // Courses
+        db.query(
+          `SELECT DISTINCT course_name as value, course_name as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} course_name IS NOT NULL AND course_name != ''
            ORDER BY course_name ASC`,
-            queryParams
-          ),
-          // Training Status
-          db.query(
-            `SELECT DISTINCT s.training_status as value, 
+          queryParams
+        ),
+        // Training Status
+        db.query(
+          `SELECT DISTINCT s.training_status as value, 
            CONCAT(UPPER(SUBSTRING(s.training_status, 1, 1)), SUBSTRING(s.training_status, 2)) as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} s.training_status IS NOT NULL AND s.training_status != ''
            ORDER BY s.training_status ASC`,
-            queryParams
-          ),
-        ]);
+          queryParams
+        ),
+      ]);
 
       return {
         partners: (partners || []).map((p) => ({ value: p.value, label: p.label })),
