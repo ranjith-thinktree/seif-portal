@@ -294,7 +294,8 @@ class UserService {
       ORDER BY u.created_at DESC
       LIMIT ? OFFSET ?
     `;
-    const [users] = await db.query(dataSQL, [...params, limit, offset]);
+    const queryParams = [...params, parseInt(limit), parseInt(offset)];
+    const [users] = await db.query(dataSQL, queryParams);
 
     return { users, total, page, limit };
   }
