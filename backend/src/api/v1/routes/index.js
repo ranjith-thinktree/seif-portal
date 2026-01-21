@@ -16,6 +16,7 @@ const analyticsRoutes = require('./analytics.routes');
 const employmentRoutes = require('./employment.routes');
 const commentRoutes = require('../../../routes/commentRoutes');
 const userRoutes = require('./user.routes');
+const packageRoutes = require('./package.routes');
 
 /**
  * API v1 Routes Index
@@ -37,6 +38,7 @@ router.use('/analytics', analyticsRoutes);
 router.use('/employment', employmentRoutes);
 router.use('/comments', commentRoutes);
 router.use('/users', userRoutes);
+router.use('/admin/packages', packageRoutes);
 
 // Future routes will be added here:
 // router.use('/requests', requestRoutes);
