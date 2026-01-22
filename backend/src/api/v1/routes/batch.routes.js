@@ -8,7 +8,7 @@ const {
   centerIdValidator,
   listBatchesValidator,
 } = require('../validators/batch.validator');
-const validate = require('../../../middleware/validate.middleware');
+const { validate } = require('../../../middleware/validate.middleware');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 

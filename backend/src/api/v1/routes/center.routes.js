@@ -5,7 +5,7 @@ const centerController = require('../controllers/center.controller');
 const centerBulkController = require('../controllers/center.bulk.controller');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
-const validate = require('../../../middleware/validate.middleware');
+const { validate } = require('../../../middleware/validate.middleware');
 const {
   createCenterValidator,
   updateCenterValidator,

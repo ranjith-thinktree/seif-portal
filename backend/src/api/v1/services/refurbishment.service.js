@@ -17,8 +17,25 @@ class RefurbishmentService {
    * 
    * @returns {Promise<Object>} Object with centers array and totalCount
    */
-  static async getEligibleCenters() {
+  static async getEligibleCenters(limit = 50, offset = 0) {
     try {
+      // First, get total count of eligible centers
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM centers c
+        WHERE c.status = 'active'
+        AND (
+          (c.last_refurbishment_date IS NOT NULL 
+            AND TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) >= c.refurbishment_frequency_months)
+          OR
+          (c.last_refurbishment_date IS NULL 
+            AND TIMESTAMPDIFF(MONTH, DATE(CONCAT(c.year_of_establishment, '-01-01')), CURDATE()) >= c.refurbishment_frequency_months)
+        )
+      `;
+
+      const [[{ total }]] = await db.query(countQuery);
+
+      // Then get paginated results
       const query = `
         SELECT 
           c.id,
@@ -50,13 +67,14 @@ class RefurbishmentService {
         WHERE c.status = 'active'
         HAVING is_eligible = 1
         ORDER BY months_since_last_refurbishment DESC
+        LIMIT ? OFFSET ?
       `;
 
-      const [centers] = await db.query(query);
+      const [centers] = await db.query(query, [limit, offset]);
 
       return {
         centers,
-        totalCount: centers.length,
+        totalCount: total,
       };
     } catch (error) {
       console.error('Error fetching eligible centers:', error);

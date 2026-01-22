@@ -3,7 +3,7 @@ const router = express.Router();
 const reviewController = require('../controllers/review.controller');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
-const validate = require('../../../middleware/validate.middleware');
+const { validate } = require('../../../middleware/validate.middleware');
 const {
   uploadIdValidator,
   centerIdValidator,

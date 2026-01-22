@@ -18,6 +18,7 @@ const commentRoutes = require('../../../routes/commentRoutes');
 const userRoutes = require('./user.routes');
 const packageRoutes = require('./package.routes');
 const dashboardRoutes = require('./dashboard.routes');
+const refurbishmentRoutes = require('./refurbishment.routes');
 
 /**
  * API v1 Routes Index
@@ -41,9 +42,9 @@ router.use('/comments', commentRoutes);
 router.use('/users', userRoutes);
 router.use('/admin/packages', packageRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/admin/refurbishment', refurbishmentRoutes);
 
 // Future routes will be added here:
 // router.use('/requests', requestRoutes);
-// router.use('/refurbishment', refurbishmentRoutes);
 
 module.exports = router;

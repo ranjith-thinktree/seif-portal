@@ -3,23 +3,31 @@ const ApiResponse = require('../utils/response.util');
 
 /**
  * Validation Middleware
- * Handles express-validator validation errors
+ * Wraps express-validator validation rules
+ * @param {Array} validations - Array of express-validator validation rules
+ * @returns {Function} Express middleware function
  */
 
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
+const validate = (validations) => {
+  return async (req, res, next) => {
+    // Run all validations
+    await Promise.all(validations.map((validation) => validation.run(req)));
 
-  if (!errors.isEmpty()) {
-    const formattedErrors = errors.array().map((error) => ({
-      field: error.path || error.param,
-      message: error.msg,
-      value: error.value,
-    }));
+    // Check for errors
+    const errors = validationResult(req);
 
-    return ApiResponse.validationError(res, formattedErrors, 'Validation failed');
-  }
+    if (!errors.isEmpty()) {
+      const formattedErrors = errors.array().map((error) => ({
+        field: error.path || error.param,
+        message: error.msg,
+        value: error.value,
+      }));
 
-  next();
+      return ApiResponse.validationError(res, formattedErrors, 'Validation failed');
+    }
+
+    next();
+  };
 };
 
-module.exports = validate;
+module.exports = { validate };

@@ -5,7 +5,7 @@ const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 const { validate } = require('../../../middleware/validate.middleware');
 const dashboardValidator = require('../validators/dashboard.validator');
-const { ROLES } = require('../../../constants');
+const { USER_ROLES } = require('../../../constants');
 
 /**
  * Dashboard Routes
@@ -20,7 +20,7 @@ const { ROLES } = require('../../../constants');
 router.get(
   '/partner',
   authenticate,
-  checkRole([ROLES.PARTNER]),
+  checkRole([USER_ROLES.PARTNER]),
   DashboardController.getPartnerDashboard
 );
 
@@ -32,7 +32,7 @@ router.get(
 router.get(
   '/admin',
   authenticate,
-  checkRole([ROLES.ADMIN, ROLES.SUPER_ADMIN]),
+  checkRole([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]),
   DashboardController.getAdminDashboard
 );
 
@@ -44,7 +44,7 @@ router.get(
 router.get(
   '/seif',
   authenticate,
-  checkRole([ROLES.SEIF_READONLY, ROLES.ESSCI, ROLES.ADMIN, ROLES.SUPER_ADMIN]),
+  checkRole([USER_ROLES.SEIF_READONLY, USER_ROLES.ESSCI, USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]),
   validate(dashboardValidator.seifDashboardFilters),
   DashboardController.getSEIFDashboard
 );
