@@ -12,6 +12,7 @@ module.exports = {
     queueLimit: 0,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
+    multipleStatements: true, // Enable multiple SQL statements in one query
   },
 
   jwt: {

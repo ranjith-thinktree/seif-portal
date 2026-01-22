@@ -30,9 +30,22 @@ class UserService {
 
   /**
    * Get users by role
+   * @param {string} role - Role to filter by
+   * @param {string} requesterRole - Role of the user making the request
    */
-  static async getByRole(role) {
+  static async getByRole(role, requesterRole = null) {
+    // CRITICAL SECURITY: Prevent non-Super Admins from querying Super Admin users
+    if (role === 'SUPER_ADMIN' && requesterRole !== 'SUPER_ADMIN') {
+      return []; // Return empty array instead of actual Super Admin users
+    }
+
     const users = await UserModel.findByRole(role);
+
+    // CRITICAL SECURITY: Filter out Super Admins from results for non-Super Admin requesters
+    if (requesterRole !== 'SUPER_ADMIN') {
+      return users.filter((user) => user.role !== 'SUPER_ADMIN');
+    }
+
     return users;
   }
 
@@ -199,16 +212,25 @@ class UserService {
   /**
    * Get filter options for users
    * Returns available roles, statuses, partners for filter dropdowns
+   * @param {string} requesterRole - Role of the user making the request
    */
-  static async getFilterOptions() {
+  static async getFilterOptions(requesterRole = null) {
     try {
-      // Get distinct roles
-      const [roles] = await db.query(`
+      // Get distinct roles - CRITICAL SECURITY: Hide SUPER_ADMIN from non-Super Admins
+      let roleQuery = `
         SELECT DISTINCT role 
         FROM users 
-        WHERE role IS NOT NULL 
-        ORDER BY role
-      `);
+        WHERE role IS NOT NULL
+      `;
+
+      // Exclude SUPER_ADMIN role for non-Super Admin users
+      if (requesterRole !== 'SUPER_ADMIN') {
+        roleQuery += " AND role != 'SUPER_ADMIN'";
+      }
+
+      roleQuery += ' ORDER BY role';
+
+      const [roles] = await db.query(roleQuery);
 
       // Get distinct statuses
       const [statuses] = await db.query(`
@@ -243,11 +265,20 @@ class UserService {
 
   /**
    * Get users with partner details (for table display)
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @param {object} filters - Filter criteria
+   * @param {string} requesterRole - Role of the user making the request
    */
-  static async getUsersWithPartners(page = 1, limit = 10, filters = {}) {
+  static async getUsersWithPartners(page = 1, limit = 10, filters = {}, requesterRole = null) {
     const offset = (page - 1) * limit;
     const whereClauses = [];
     const params = [];
+
+    // CRITICAL SECURITY: Hide Super Admins from non-Super Admin users
+    if (requesterRole !== 'SUPER_ADMIN') {
+      whereClauses.push("u.role != 'SUPER_ADMIN'");
+    }
 
     // Build WHERE clause based on filters
     if (filters.role) {

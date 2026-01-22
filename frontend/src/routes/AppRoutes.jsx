@@ -31,8 +31,10 @@ import StudentsPage from "../pages/Data/StudentsPage";
 import DataManagementPage from "../pages/Data/DataManagementPage";
 import DatabaseManagement from "../pages/Admin/DatabaseManagement";
 import AdminTerminalPageV2 from "../pages/Admin/AdminTerminalPageV2";
+import RefurbishmentDashboard from "../pages/Admin/RefurbishmentDashboard";
 import ForcedPasswordChangeGuard from "./ForcedPasswordChangeGuard";
 import UserManagementPage from "../pages/UserManagement/UserManagementPage";
+import OrganizationManagementPage from "../pages/OrganizationManagementPage";
 
 /**
  * Placeholder page wrapper with MainLayout
@@ -99,6 +101,16 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute>
                 <UserManagementPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Organization Management - Tabbed Interface */}
+          <Route
+            path={ROUTES.ORGANIZATION_MANAGEMENT}
+            element={
+              <ProtectedRoute>
+                <OrganizationManagementPage />
               </ProtectedRoute>
             }
           />
@@ -396,6 +408,15 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute>
                 <AdminTerminalPageV2 />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.REFURBISHMENT}
+            element={
+              <ProtectedRoute>
+                <RefurbishmentDashboard />
               </ProtectedRoute>
             }
           />

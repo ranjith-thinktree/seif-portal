@@ -36,7 +36,7 @@ class AnalyticsService {
 
       // Center filter
       if (centerId && centerId !== 'all') {
-        whereConditions.push('s.center_id = ?');
+        whereConditions.push('s.uploaded_center_id = ?');
         queryParams.push(centerId);
       }
 
@@ -52,12 +52,12 @@ class AnalyticsService {
       // 1. Get Summary Statistics
       // Use FROM dual to ensure subqueries always execute even with 0 students
       const summaryQuery = `SELECT 
-          COALESCE((SELECT COUNT(*) FROM students s ${whereClause}), 0) as total_students,
-          COALESCE((SELECT SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as male_students,
-          COALESCE((SELECT SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as female_students,
+          COALESCE((SELECT COUNT(*) FROM uploaded_students s ${whereClause}), 0) as total_students,
+          COALESCE((SELECT SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) FROM uploaded_students s ${whereClause}), 0) as male_students,
+          COALESCE((SELECT SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) FROM uploaded_students s ${whereClause}), 0) as female_students,
           (SELECT COUNT(*) FROM partners WHERE status = 'active') as total_partners,
           (SELECT COUNT(*) FROM centers WHERE status = 'active') as total_centers,
-          COALESCE((SELECT SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) FROM students s ${whereClause}), 0) as total_employments
+          COALESCE((SELECT SUM(CASE WHEN s.training_status = 'completed' THEN 1 ELSE 0 END) FROM uploaded_students s ${whereClause}), 0) as total_completed_training
         FROM dual`;
 
       const [summaryStats] = await db.query(
@@ -73,8 +73,8 @@ class AnalyticsService {
           COUNT(*) as total_students,
           SUM(CASE WHEN s.gender = 'Male' THEN 1 ELSE 0 END) as male_students,
           SUM(CASE WHEN s.gender = 'Female' THEN 1 ELSE 0 END) as female_students,
-          COUNT(DISTINCT s.center_id) as centers_count
-        FROM students s
+          COUNT(DISTINCT s.uploaded_center_id) as centers_count
+        FROM uploaded_students s
         LEFT JOIN partners p ON s.partner_id = p.id
         ${whereClause}
         GROUP BY p.id, p.name
@@ -96,27 +96,32 @@ class AnalyticsService {
           c.state
         FROM students s
         LEFT JOIN centers c ON s.center_id = c.id
-        LEFT JOIN partners p ON s.partner_id = p.id
-        ${whereClause}
+        LEFT JOIN partners p ON c.partner_id = p.id
+        WHERE c.approval_status = 'approved'
+        ${whereClause ? 'AND ' + whereClause.replace('WHERE', '').trim() : ''}
         GROUP BY c.id, c.center_name, p.name, c.city, c.state
         ORDER BY total_students DESC
         LIMIT 20`,
         queryParams
       );
 
-      // 4. Get Year-wise Trend (Last 5 financial years)
+      // 4. Get Year-wise Trend (Last 5 financial years) with employment data
       const [yearlyTrend] = await db.query(
         `SELECT 
           CASE 
-            WHEN MONTH(enrollment_date) >= 4 THEN CONCAT(YEAR(enrollment_date), '-', YEAR(enrollment_date) + 1)
-            ELSE CONCAT(YEAR(enrollment_date) - 1, '-', YEAR(enrollment_date))
+            WHEN MONTH(s.enrollment_date) >= 4 THEN CONCAT(YEAR(s.enrollment_date), '-', YEAR(s.enrollment_date) + 1)
+            ELSE CONCAT(YEAR(s.enrollment_date) - 1, '-', YEAR(s.enrollment_date))
           END as financial_year,
-          COUNT(*) as total_students,
-          SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) as male_students,
-          SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) as female_students,
-          SUM(CASE WHEN employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) as total_employments
-        FROM students
-        ${whereClause ? whereClause.replace(/s\./g, '') : ''}
+          COUNT(DISTINCT s.id) as total_students,
+          SUM(CASE WHEN s.gender = 'Male' THEN 1 ELSE 0 END) as male_students,
+          SUM(CASE WHEN s.gender = 'Female' THEN 1 ELSE 0 END) as female_students,
+          COUNT(DISTINCT CASE 
+            WHEN e.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') 
+            THEN e.id 
+          END) as total_employments
+        FROM uploaded_students s
+        LEFT JOIN employment e ON s.approved_student_id = e.student_id
+        ${whereClause ? whereClause : ''}
         GROUP BY financial_year
         ORDER BY financial_year DESC
         LIMIT 5`,
@@ -128,7 +133,7 @@ class AnalyticsService {
         `SELECT 
           gender,
           COUNT(*) as count
-        FROM students s
+        FROM uploaded_students s
         ${whereClause}
         GROUP BY gender`,
         queryParams
@@ -141,7 +146,7 @@ class AnalyticsService {
             WHEN MONTH(enrollment_date) >= 4 THEN CONCAT(YEAR(enrollment_date), '-', YEAR(enrollment_date) + 1)
             ELSE CONCAT(YEAR(enrollment_date) - 1, '-', YEAR(enrollment_date))
           END as financial_year
-        FROM students
+        FROM uploaded_students
         ORDER BY financial_year DESC`
       );
 
@@ -186,7 +191,7 @@ class AnalyticsService {
         `SELECT c.id, c.center_name, p.name as partner_name 
          FROM centers c
          LEFT JOIN partners p ON c.partner_id = p.id
-         WHERE c.status = 'approved'
+         WHERE c.approval_status = 'approved' AND c.status = 'active'
          ORDER BY c.center_name ASC`
       );
 

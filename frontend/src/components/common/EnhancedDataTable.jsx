@@ -29,8 +29,8 @@ import { cn } from "../../utils/cn";
  * - Row Selection with Checkboxes (Optional)
  */
 const EnhancedDataTable = ({
-  columns,
-  data,
+  columns = [],
+  data = [],
   pagination,
   onPageChange,
   onRowClick, // Callback when row is clicked
@@ -65,11 +65,13 @@ const EnhancedDataTable = ({
 
     // Default: all columns visible
     const defaultVisibility = {};
-    columns.forEach((col) => {
-      if (col.id || col.accessorKey) {
-        defaultVisibility[col.id || col.accessorKey] = true;
-      }
-    });
+    if (columns && Array.isArray(columns)) {
+      columns.forEach((col) => {
+        if (col.id || col.accessorKey) {
+          defaultVisibility[col.id || col.accessorKey] = true;
+        }
+      });
+    }
     return defaultVisibility;
   };
 

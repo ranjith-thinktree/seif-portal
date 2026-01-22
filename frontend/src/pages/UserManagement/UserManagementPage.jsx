@@ -102,15 +102,31 @@ const UserManagementPage = () => {
   });
   const [formErrors, setFormErrors] = useState({});
 
-  // Tab configuration
-  const tabs = [
-    { id: "all", label: "All Users", role: null },
-    { id: "admins", label: "Admins", role: ["ADMIN", "SUPER_ADMIN"] },
-    { id: "partners", label: "Partners", role: "PARTNER" },
-    { id: "essci", label: "ESSCI", role: "ESSCI" },
-    { id: "readonly", label: "SEIF Readonly", role: "SEIF_READONLY" },
-    { id: "superadmin", label: "Super Admins", role: "SUPER_ADMIN" },
-  ];
+  // Tab configuration - CRITICAL SECURITY: Hide Super Admins from non-Super Admins
+  const tabs = useMemo(() => {
+    const baseTabs = [
+      { id: "all", label: "All Users", role: null },
+      {
+        id: "admins",
+        label: "Admins",
+        role: isSuperAdmin ? ["ADMIN", "SUPER_ADMIN"] : ["ADMIN"], // Only show SUPER_ADMIN to Super Admins
+      },
+      { id: "partners", label: "Partners", role: "PARTNER" },
+      { id: "essci", label: "ESSCI", role: "ESSCI" },
+      { id: "readonly", label: "SEIF Readonly", role: "SEIF_READONLY" },
+    ];
+
+    // Only Super Admins can see the Super Admins tab
+    if (isSuperAdmin) {
+      baseTabs.push({
+        id: "superadmin",
+        label: "Super Admins",
+        role: "SUPER_ADMIN",
+      });
+    }
+
+    return baseTabs;
+  }, [isSuperAdmin]);
 
   // Fetch filter options
   useEffect(() => {
@@ -162,18 +178,29 @@ const UserManagementPage = () => {
       const response = await getUsers(params);
 
       // Client-side filter for admins tab (temporary until backend supports OR)
+      // CRITICAL SECURITY: Only show SUPER_ADMIN to Super Admins
       let filteredUsers = response.data.users;
       if (activeTab === "admins") {
-        filteredUsers = filteredUsers.filter(
-          (u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN"
-        );
+        filteredUsers = filteredUsers.filter((u) => {
+          if (isSuperAdmin) {
+            return u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+          } else {
+            return u.role === "ADMIN"; // Hide SUPER_ADMIN from non-Super Admins
+          }
+        });
       }
 
-      setUsers(filteredUsers);
-      setPagination(response.data);
+      setUsers(filteredUsers || []);
+      setPagination({
+        page: response.data.page || 1,
+        limit: response.data.limit || 10,
+        total: response.data.total || 0,
+        pages: response.data.pages || 1,
+      });
     } catch (error) {
       console.error("Error fetching users:", error);
       toast.error("Failed to load users");
+      setUsers([]);
     } finally {
       setIsLoading(false);
     }
@@ -186,34 +213,25 @@ const UserManagementPage = () => {
     sortOrder,
     activeTab,
     tabs,
+    isSuperAdmin,
   ]);
 
   // Fetch users when dependencies change
   useEffect(() => {
     fetchUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    pagination.page,
-    pagination.limit,
-    activeFilters,
-    sortBy,
-    sortOrder,
-    activeTab,
-  ]);
+  }, [fetchUsers]);
 
   // Handle search with debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (pagination.page === 1) {
-        fetchUsers();
-      } else {
+      // Reset to page 1 when search changes - this will trigger fetchUsers via the main useEffect
+      if (pagination.page !== 1) {
         setPagination((prev) => ({ ...prev, page: 1 }));
       }
     }, 500);
 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
+  }, [searchTerm, pagination.page]);
 
   // Form validation
   const validateForm = (data, isEdit = false) => {
@@ -629,7 +647,7 @@ const UserManagementPage = () => {
       key: "role",
       label: "Role",
       type: "select",
-      options: filterOptions.roles.map((role) => ({
+      options: (filterOptions?.roles || []).map((role) => ({
         value: role,
         label: role,
       })),
@@ -638,7 +656,7 @@ const UserManagementPage = () => {
       key: "status",
       label: "Status",
       type: "select",
-      options: filterOptions.statuses.map((status) => ({
+      options: (filterOptions?.statuses || []).map((status) => ({
         value: status,
         label: status.charAt(0).toUpperCase() + status.slice(1),
       })),
@@ -647,7 +665,7 @@ const UserManagementPage = () => {
       key: "partner_id",
       label: "Partner",
       type: "select",
-      options: filterOptions.partners.map((partner) => ({
+      options: (filterOptions?.partners || []).map((partner) => ({
         value: partner.id,
         label: partner.name,
       })),
@@ -931,7 +949,7 @@ const UserManagementPage = () => {
                       <SelectValue placeholder="Select partner" />
                     </SelectTrigger>
                     <SelectContent>
-                      {filterOptions.partners.map((partner) => (
+                      {(filterOptions?.partners || []).map((partner) => (
                         <SelectItem key={partner.id} value={partner.id}>
                           {partner.name}
                         </SelectItem>

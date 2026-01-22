@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSelector } from "react-redux";
 import StatCard from "../../../components/common/StatCard";
 import AdvancedSearchBar from "../../../components/common/AdvancedSearchBar";
@@ -42,6 +42,84 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { UserGroupIcon, UserIcon } from "@heroicons/react/24/outline";
+import historicalCenterData from "../../../data/historicalCenterData.json";
+
+/**
+ * Merge historical center data from JSON with live API data
+ * @param {Array} historicalData - Historical centers from JSON (77 centers)
+ * @param {Array} apiData - Live data from API (current year)
+ * @param {string} selectedYear - Selected financial year (e.g., "2024-25")
+ * @returns {Array} Merged center data sorted by total students
+ */
+function mergeCenterData(historicalData, apiData, selectedYear) {
+  const merged = new Map();
+  
+  // Add all 77 historical centers
+  historicalData.forEach(h => {
+    const key = h.centerName;
+    merged.set(key, {
+      center_id: h.id,
+      center_name: h.centerName,
+      partner_name: h.centerName.split(' ')[0] + (h.centerName.split(' ')[1] ? ' ' + h.centerName.split(' ')[1] : ''),
+      city: h.city || h.location,
+      state: h.state,
+      students_2022_23: h.students_2022_23 || 0,
+      students_2023_24: h.students_2023_24 || 0,
+      students_2024_25: h.students_2024_25 || 0,
+      currentTotal: 0,
+      currentMale: 0,
+      currentFemale: 0,
+      source: 'historical'
+    });
+  });
+  
+  // Merge API data (current year)
+  if (Array.isArray(apiData)) {
+    apiData.forEach(api => {
+      const key = api.center_name;
+      if (merged.has(key)) {
+        // Update existing historical center with API data
+        const existing = merged.get(key);
+        existing.currentTotal = api.total_students;
+        existing.currentMale = api.male_students;
+        existing.currentFemale = api.female_students;
+        existing.partner_name = api.partner_name; // Use API partner name
+        existing.source = 'both';
+      } else {
+        // Add new center from API (not in historical)
+        merged.set(key, {
+          center_id: api.center_id,
+          center_name: api.center_name,
+          partner_name: api.partner_name,
+          city: api.city,
+          state: api.state,
+          students_2022_23: 0,
+          students_2023_24: 0,
+          students_2024_25: 0,
+          currentTotal: api.total_students,
+          currentMale: api.male_students,
+          currentFemale: api.female_students,
+          source: 'api'
+        });
+      }
+    });
+  }
+  
+  // Calculate display values based on selected year
+  return Array.from(merged.values())
+    .map(c => ({
+      ...c,
+      total_students: selectedYear === '2022-23' ? c.students_2022_23 :
+                     selectedYear === '2023-24' ? c.students_2023_24 :
+                     selectedYear === '2024-25' ? c.students_2024_25 :
+                     c.currentTotal, // Current year or "all"
+      male_students: selectedYear.startsWith('20') && selectedYear !== '2025-26' ? 'N/A' : c.currentMale,
+      female_students: selectedYear.startsWith('20') && selectedYear !== '2025-26' ? 'N/A' : c.currentFemale
+    }))
+    .filter(c => c.total_students > 0) // Only show centers with students
+    .sort((a, b) => b.total_students - a.total_students) // Sort descending
+    .slice(0, 20); // Top 20 only
+}
 
 /**
  * Overview Tab for Data Management
@@ -88,12 +166,58 @@ const OverviewTab = () => {
   ];
 
   useEffect(() => {
-    // Initial data load
+    // Initial data load - WAIT FOR AUTH TO BE READY
     const initialize = async () => {
+      console.log(
+        "🔄 Initializing OverviewTab - waiting for authentication...",
+      );
+
+      // Simple check for auth token (no race condition with timeout)
+      let attempts = 0;
+      let token = null;
+      const maxAttempts = 100; // 10 seconds (100ms * 100)
+
+      while (attempts < maxAttempts) {
+        token = localStorage.getItem("seif_access_token");
+        if (token) {
+          console.log(
+            `🔐 ✅ Auth token detected after ${attempts * 100}ms, proceeding with data fetch...`,
+          );
+          break;
+        }
+
+        attempts++;
+        if (attempts % 10 === 0) {
+          // Log every second
+          console.log(
+            `🔄 Still waiting for auth token... (${attempts * 100}ms elapsed)`,
+          );
+        }
+
+        // Wait 100ms before next check
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      if (!token) {
+        // Auth timeout after 10 seconds
+        console.error(
+          "❌ Auth timeout after 10 seconds! Token not found in localStorage.",
+        );
+        console.error("   This usually means login did not complete properly.");
+        setAnalyticsError(
+          "Authentication not ready. Please try refreshing the page or logging in again.",
+        );
+        console.error("⚠️ Skipping data fetch due to authentication timeout");
+        return; // Don't proceed without auth
+      }
+
+      console.log("✅ Authentication confirmed, fetching data...");
       await fetchStats();
       if (isAdmin) {
+        console.log("👤 Admin user detected, fetching filter options...");
         await fetchFilterOptions();
         // Fetch analytics immediately after filter options
+        console.log("📊 Fetching analytics...");
         await fetchAnalytics();
       }
     };
@@ -115,6 +239,51 @@ const OverviewTab = () => {
     filters.gender,
   ]);
 
+  // Log matching results only once (in development) - prevents multiple console logs
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+
+    // Wait for results to be available
+    const results = window.__matchingResults;
+    if (!results || results.totalCenters === 0) return;
+
+    // Log DEBUG info first
+    console.log("\n🗂️ DEBUG: Database has", results.dbCentersCount, "centers");
+
+    // Log unmatched centers
+    if (results.unmatchedCenters.length > 0) {
+      console.group("🔍 Unmatched Centers from Historical Data");
+      console.log(
+        `Total unmatched: ${results.unmatchedCenters.length} centers`,
+      );
+      console.log(
+        `Total students in unmatched: ${results.unmatchedCenters.reduce((sum, c) => sum + c.totalStudents, 0)}`,
+      );
+      console.table(
+        results.unmatchedCenters.slice(0, 10).map((c) => ({
+          "Center Name": c.centerName,
+          City: c.extractedCity,
+          Location: c.fullLocation,
+          Students: c.totalStudents,
+        })),
+      );
+      console.groupEnd();
+    }
+
+    // Log matched partners
+    if (Object.keys(results.historicalPartnerMap).length > 0) {
+      console.group("✅ Matched Historical Data");
+      console.log(`Total matched: ${results.matchedCount} centers`);
+      console.table(
+        Object.values(results.historicalPartnerMap).map((p) => ({
+          Partner: p.partner_name,
+          Students: p.total_students,
+        })),
+      );
+      console.groupEnd();
+    }
+  }, [analytics, filterOptions.centers.length, filters.financialYear]); // Only re-run when these change
+
   const fetchStats = async () => {
     try {
       setLoading(true);
@@ -131,7 +300,10 @@ const OverviewTab = () => {
 
   const fetchFilterOptions = async () => {
     try {
+      console.log("🔍 Fetching filter options from API...");
       const response = await getFilterOptions();
+      console.log("✅ Filter options API response:", response);
+
       const optionsData = response.data || { partners: [], centers: [] };
 
       // Ensure we have arrays
@@ -141,9 +313,27 @@ const OverviewTab = () => {
           : [],
         centers: Array.isArray(optionsData.centers) ? optionsData.centers : [],
       });
+
+      console.log(
+        `✅ Filter options loaded: ${optionsData.partners?.length || 0} partners, ${optionsData.centers?.length || 0} centers`,
+      );
     } catch (err) {
-      console.error("Error fetching filter options:", err.message);
-      setAnalyticsError("Failed to load filter options");
+      console.error("❌ Error fetching filter options:", err);
+      console.error("   Error response:", err.response?.data);
+      console.error("   Error status:", err.response?.status);
+      console.error("   Error message:", err.message);
+
+      // Show specific error message to user
+      let errorMessage = "Failed to load filter options";
+      if (err.response?.status === 401) {
+        errorMessage = "Authentication failed. Please try logging in again.";
+      } else if (err.response?.status === 403) {
+        errorMessage = "You don't have permission to access this data.";
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      }
+
+      setAnalyticsError(errorMessage);
       setFilterOptions({ partners: [], centers: [] });
     }
   };
@@ -173,12 +363,497 @@ const OverviewTab = () => {
       console.error("Error fetching analytics:", err);
       setAnalyticsError(
         err.response?.data?.message ||
-          "Failed to load analytics data. Please try again."
+          "Failed to load analytics data. Please try again.",
       );
     } finally {
       setAnalyticsLoading(false);
     }
   };
+
+  // Helper function: Filter historical data based on current filters
+  const getFilteredHistoricalData = useMemo(() => {
+    let filtered = historicalCenterData;
+
+    // State filter (filter by state if we have partner/center filters)
+    if (filters.partnerId !== "all" || filters.centerId !== "all") {
+      // Get state from selected center or partner
+      const selectedCenter = filterOptions.centers.find(
+        (c) => c.id === filters.centerId,
+      );
+      if (selectedCenter && selectedCenter.state) {
+        filtered = filtered.filter(
+          (center) => center.state === selectedCenter.state,
+        );
+      }
+
+      // If center is selected, try to match by name
+      if (filters.centerId !== "all" && selectedCenter) {
+        filtered = filtered.filter((center) =>
+          center.centerName
+            .toLowerCase()
+            .includes(selectedCenter.name?.toLowerCase() || ""),
+        );
+      }
+    }
+
+    return filtered;
+  }, [filters.partnerId, filters.centerId, filterOptions.centers]);
+
+  // Helper function: Aggregate historical data by financial year
+  const aggregateHistoricalStudents = useMemo(() => {
+    let total = 0;
+
+    getFilteredHistoricalData.forEach((center) => {
+      if (filters.financialYear === "all") {
+        total +=
+          (center.students_2022_23 || 0) +
+          (center.students_2023_24 || 0) +
+          (center.students_2024_25 || 0);
+      } else if (filters.financialYear === "2022-23") {
+        total += center.students_2022_23 || 0;
+      } else if (filters.financialYear === "2023-24") {
+        total += center.students_2023_24 || 0;
+      } else if (filters.financialYear === "2024-25") {
+        total += center.students_2024_25 || 0;
+      }
+    });
+
+    return total;
+  }, [getFilteredHistoricalData, filters.financialYear]);
+
+  // Helper function: Get state distribution from historical data
+  const getHistoricalStateDistribution = useMemo(() => {
+    const stateMap = {};
+
+    getFilteredHistoricalData.forEach((center) => {
+      const state = center.state;
+      if (!stateMap[state]) {
+        stateMap[state] = 0;
+      }
+
+      if (filters.financialYear === "all") {
+        stateMap[state] +=
+          (center.students_2022_23 || 0) +
+          (center.students_2023_24 || 0) +
+          (center.students_2024_25 || 0);
+      } else if (filters.financialYear === "2022-23") {
+        stateMap[state] += center.students_2022_23 || 0;
+      } else if (filters.financialYear === "2023-24") {
+        stateMap[state] += center.students_2023_24 || 0;
+      } else if (filters.financialYear === "2024-25") {
+        stateMap[state] += center.students_2024_25 || 0;
+      }
+    });
+
+    return Object.entries(stateMap).map(([state, count]) => ({
+      state,
+      count,
+    }));
+  }, [getFilteredHistoricalData, filters.financialYear]);
+
+  // Helper function: Get top centers from historical data
+  const getHistoricalTopCenters = useMemo(() => {
+    const centerData = getFilteredHistoricalData.map((center) => {
+      let studentCount = 0;
+
+      if (filters.financialYear === "all") {
+        studentCount =
+          (center.students_2022_23 || 0) +
+          (center.students_2023_24 || 0) +
+          (center.students_2024_25 || 0);
+      } else if (filters.financialYear === "2022-23") {
+        studentCount = center.students_2022_23 || 0;
+      } else if (filters.financialYear === "2023-24") {
+        studentCount = center.students_2023_24 || 0;
+      } else if (filters.financialYear === "2024-25") {
+        studentCount = center.students_2024_25 || 0;
+      }
+
+      return {
+        centerName: center.centerName,
+        studentCount,
+      };
+    });
+
+    return centerData
+      .filter((c) => c.studentCount > 0)
+      .sort((a, b) => b.studentCount - a.studentCount)
+      .slice(0, 20);
+  }, [getFilteredHistoricalData, filters.financialYear]);
+
+  // Merged stats (API + Historical)
+  // eslint-disable-next-line no-unused-vars
+  const mergedStats = useMemo(() => {
+    if (!stats) return null;
+
+    return {
+      ...stats,
+      total_students: (stats.total_students || 0) + aggregateHistoricalStudents,
+    };
+  }, [stats, aggregateHistoricalStudents]);
+
+  // Merged analytics (API + Historical)
+  const mergedAnalytics = useMemo(() => {
+    if (!analytics) return null;
+
+    // Merge state distribution
+    const mergedStateData = [...(analytics.studentsByState || [])];
+    getHistoricalStateDistribution.forEach((historicalState) => {
+      const existingState = mergedStateData.find(
+        (s) => s.state === historicalState.state,
+      );
+      if (existingState) {
+        existingState.count += historicalState.count;
+      } else {
+        mergedStateData.push(historicalState);
+      }
+    });
+
+    // Merge top centers
+    const mergedCenterData = [...(analytics.topCenters || [])];
+    getHistoricalTopCenters.forEach((historicalCenter) => {
+      const existingCenter = mergedCenterData.find(
+        (c) => c.centerName === historicalCenter.centerName,
+      );
+      if (existingCenter) {
+        existingCenter.studentCount += historicalCenter.studentCount;
+      } else {
+        mergedCenterData.push(historicalCenter);
+      }
+    });
+
+    // Sort and limit top centers to 20
+    mergedCenterData.sort((a, b) => b.studentCount - a.studentCount);
+    const topMergedCenters = mergedCenterData.slice(0, 20);
+
+    // Merge partner breakdown (match JSON centers to database partners)
+    const mergedPartnerData = [...(analytics.partnerBreakdown || [])];
+
+    // Create center-to-partner mapping from filterOptions
+    const centerToPartnerMap = {};
+    filterOptions.centers.forEach((center) => {
+      if (center.id && center.partner_id && center.center_name) {
+        centerToPartnerMap[center.id] = {
+          partner_id: center.partner_id,
+          partner_name: center.partner_name,
+          center_name: center.center_name.toLowerCase().trim(),
+        };
+      }
+    });
+
+    // DEBUG: Log database centers (run once to see what we're matching against)
+    if (
+      filterOptions.centers.length > 0 &&
+      Object.keys(centerToPartnerMap).length > 0
+    ) {
+      console.log(
+        "🗂️ DEBUG: Database has",
+        Object.keys(centerToPartnerMap).length,
+        "centers",
+      );
+      console.log(
+        "Sample DB center names:",
+        Object.values(centerToPartnerMap)
+          .slice(0, 10)
+          .map((c) => c.center_name),
+      );
+    }
+
+    // Aggregate historical students by partner
+    const historicalPartnerMap = {};
+    const unmatchedCenters = []; // Track unmatched centers for admin review
+
+    getFilteredHistoricalData.forEach((jsonCenter) => {
+      // Try to match JSON center to database center
+      const jsonName = jsonCenter.centerName.toLowerCase().trim();
+      const jsonLocation = (jsonCenter.location || "").toLowerCase().trim();
+
+      let matchedPartner = null;
+      let bestMatchScore = 0;
+
+      // Enhanced city-based matching algorithm
+      // Extract city name from location (first part before comma)
+      const locationParts = jsonLocation
+        .split(",")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      const cityName = locationParts[0] || ""; // First part is usually the city
+
+      for (const [centerId, centerInfo] of Object.entries(centerToPartnerMap)) {
+        const dbName = centerInfo.center_name;
+        let matchScore = 0;
+
+        // Priority 1: Exact match (center name + city)
+        if (jsonName === dbName) {
+          matchScore = 100;
+        }
+        // Priority 2: Center name matches AND city appears in DB name
+        // Example: "Dalmia Bharat Foundation" + "Rajgangpur" → "Dalmia Bharat Foundation Rajgangpur"
+        else if (cityName && dbName.includes(cityName)) {
+          // Filter out common words for better matching
+          const commonWords = [
+            "foundation",
+            "university",
+            "college",
+            "institute",
+            "school",
+            "centre",
+            "center",
+            "training",
+          ];
+          const centerNameWords = jsonName
+            .split(/\s+/)
+            .filter(
+              (w) => w.length > 3 && !commonWords.includes(w.toLowerCase()),
+            );
+          const dbNameLower = dbName.toLowerCase();
+          const matchingWords = centerNameWords.filter((w) =>
+            dbNameLower.includes(w),
+          );
+
+          if (matchingWords.length >= 2) {
+            // Both center name and city match - high confidence
+            matchScore = 95;
+          } else if (matchingWords.length >= 1) {
+            // City + at least one word from center name
+            matchScore = 85;
+          } else {
+            // Just city name matches
+            matchScore = 70; // Lowered from 75 for more lenient matching
+          }
+        }
+        // Priority 3: Bidirectional contains (center name)
+        else if (jsonName.includes(dbName) || dbName.includes(jsonName)) {
+          matchScore = 75; // Lowered from 80
+        }
+        // Priority 4: Check for alternate city names and partial word matches
+        else if (locationParts.length > 0) {
+          const locationWords = locationParts.flatMap((part) =>
+            part.split(/\s+/).filter((w) => w.length > 3),
+          );
+          const dbNameLower = dbName.toLowerCase();
+          const matchingLocationWords = locationWords.filter((w) =>
+            dbNameLower.includes(w),
+          );
+
+          if (matchingLocationWords.length > 0) {
+            // Filter common words from center name
+            const commonWords = [
+              "foundation",
+              "university",
+              "college",
+              "institute",
+              "school",
+              "centre",
+              "center",
+              "training",
+            ];
+            const centerNameWords = jsonName
+              .split(/\s+/)
+              .filter(
+                (w) => w.length > 3 && !commonWords.includes(w.toLowerCase()),
+              );
+            const matchingCenterWords = centerNameWords.filter((w) =>
+              dbNameLower.includes(w),
+            );
+
+            if (matchingCenterWords.length >= 1) {
+              // Location word + center name word match
+              matchScore = 65; // Lowered from 70
+            } else {
+              // Just location word matches
+              matchScore = 55; // Lowered from 60
+            }
+          }
+        }
+
+        // Keep best match (threshold lowered from 60 to 50 for more lenient matching)
+        if (matchScore >= 50 && matchScore > bestMatchScore) {
+          bestMatchScore = matchScore;
+          matchedPartner = {
+            partner_id: centerInfo.partner_id,
+            partner_name: centerInfo.partner_name,
+            match_score: matchScore,
+            matched_city: cityName, // Store for debugging
+          };
+        }
+      }
+
+      // If matched, aggregate students by partner
+      if (matchedPartner) {
+        const partnerId = matchedPartner.partner_id;
+        if (!historicalPartnerMap[partnerId]) {
+          historicalPartnerMap[partnerId] = {
+            partner_id: partnerId,
+            partner_name: matchedPartner.partner_name,
+            total_students: 0,
+          };
+        }
+
+        // Add students based on financial year filter
+        if (filters.financialYear === "all") {
+          historicalPartnerMap[partnerId].total_students +=
+            (jsonCenter.students_2022_23 || 0) +
+            (jsonCenter.students_2023_24 || 0) +
+            (jsonCenter.students_2024_25 || 0);
+        } else if (filters.financialYear === "2022-23") {
+          historicalPartnerMap[partnerId].total_students +=
+            jsonCenter.students_2022_23 || 0;
+        } else if (filters.financialYear === "2023-24") {
+          historicalPartnerMap[partnerId].total_students +=
+            jsonCenter.students_2023_24 || 0;
+        } else if (filters.financialYear === "2024-25") {
+          historicalPartnerMap[partnerId].total_students +=
+            jsonCenter.students_2024_25 || 0;
+        }
+      } else {
+        // Track unmatched centers for admin review
+        const totalStudents =
+          (jsonCenter.students_2022_23 || 0) +
+          (jsonCenter.students_2023_24 || 0) +
+          (jsonCenter.students_2024_25 || 0);
+
+        if (totalStudents > 0) {
+          // Extract city for debugging
+          const locationParts = jsonLocation
+            .split(",")
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0);
+          const cityName = locationParts[0] || "Unknown";
+
+          unmatchedCenters.push({
+            centerName: jsonCenter.centerName,
+            extractedCity: cityName,
+            fullLocation: jsonCenter.location,
+            state: jsonCenter.state,
+            totalStudents: totalStudents,
+            suggestion: `${jsonCenter.centerName} ${cityName}`, // Suggested DB center name
+          });
+        }
+      }
+    });
+
+    // Return matching results for useEffect logging
+    window.__matchingResults = {
+      unmatchedCenters,
+      historicalPartnerMap,
+      totalCenters: getFilteredHistoricalData.length,
+      matchedCount: getFilteredHistoricalData.length - unmatchedCenters.length,
+      dbCentersCount: Object.keys(centerToPartnerMap).length,
+    };
+
+    // Merge historical partner data with API partner data (ADDITION)
+    Object.values(historicalPartnerMap).forEach((historicalPartner) => {
+      const existingPartner = mergedPartnerData.find(
+        (p) => p.partner_id === historicalPartner.partner_id,
+      );
+      if (existingPartner) {
+        // Add JSON students to API students (ADDITION formula)
+        existingPartner.total_students =
+          (parseInt(existingPartner.total_students) || 0) +
+          (historicalPartner.total_students || 0);
+      } else {
+        // Add as new partner with only historical data (no gender breakdown)
+        mergedPartnerData.push({
+          partner_id: historicalPartner.partner_id,
+          partner_name: historicalPartner.partner_name,
+          total_students: historicalPartner.total_students,
+          male_students: 0, // JSON has no gender data
+          female_students: 0, // JSON has no gender data
+          centers_count: 0, // Can't determine from JSON
+        });
+      }
+    });
+
+    // Sort partners by total students and limit to top 10
+    mergedPartnerData.sort(
+      (a, b) =>
+        (parseInt(b.total_students) || 0) - (parseInt(a.total_students) || 0),
+    );
+    const topMergedPartners = mergedPartnerData.slice(0, 10);
+
+    // Merge center breakdown with historical data
+    const mergedCenterBreakdown = mergeCenterData(
+      historicalCenterData,
+      analytics.centerBreakdown || [],
+      filters.financialYear
+    );
+
+    return {
+      ...analytics,
+      studentsByState: mergedStateData,
+      topCenters: topMergedCenters,
+      partnerBreakdown: topMergedPartners,
+      centerBreakdown: mergedCenterBreakdown,
+    };
+  }, [
+    analytics,
+    getHistoricalStateDistribution,
+    getHistoricalTopCenters,
+    getFilteredHistoricalData,
+    filterOptions.centers,
+    filters.financialYear,
+  ]);
+
+  // Log matching results ONCE (prevents console spam)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+
+    // Wait for results to be available
+    const results = window.__matchingResults;
+    if (!results || results.totalCenters === 0) return;
+
+    // Only log once by tracking if we've logged for this count
+    const key = `${results.matchedCount}-${results.unmatchedCenters.length}`;
+    if (window.__lastLogKey === key) return;
+    window.__lastLogKey = key;
+
+    // Log DEBUG info first
+    console.log("\n🗂️ DEBUG: Database has", results.dbCentersCount, "centers");
+
+    // Log unmatched centers (limit to first 10 for readability)
+    if (results.unmatchedCenters.length > 0) {
+      console.group("🔍 Unmatched Centers from Historical Data");
+      console.log(
+        `Total unmatched: ${results.unmatchedCenters.length} centers`,
+      );
+      console.log(
+        `Total students in unmatched: ${results.unmatchedCenters.reduce((sum, c) => sum + c.totalStudents, 0)}`,
+      );
+      console.table(
+        results.unmatchedCenters.slice(0, 10).map((c) => ({
+          "Center Name": c.centerName,
+          City: c.extractedCity,
+          Location: c.fullLocation,
+          Students: c.totalStudents,
+        })),
+      );
+      if (results.unmatchedCenters.length > 10) {
+        console.log(
+          `... and ${results.unmatchedCenters.length - 10} more unmatched centers`,
+        );
+      }
+      console.groupEnd();
+    }
+
+    // Log matched partners
+    if (Object.keys(results.historicalPartnerMap).length > 0) {
+      console.group("✅ Matched Historical Data to Partners");
+      console.log(`Total matched: ${results.matchedCount} centers`);
+      console.log(
+        `Total students matched: ${Object.values(results.historicalPartnerMap).reduce((sum, p) => sum + p.total_students, 0)}`,
+      );
+      console.table(
+        Object.values(results.historicalPartnerMap)
+          .slice(0, 10)
+          .map((p) => ({
+            "Partner Name": p.partner_name,
+            Students: p.total_students,
+          })),
+      );
+      console.groupEnd();
+    }
+  }, [analytics, filterOptions.centers.length, filters.financialYear]);
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -235,8 +910,8 @@ const OverviewTab = () => {
             {/* Filters Only (No Search Bar) */}
             <div className="mb-6">
               <AdvancedSearchBar
-                value={null}
-                onChange={null}
+                value=""
+                onChange={undefined}
                 placeholder=""
                 filterGroups={[
                   {
@@ -244,11 +919,21 @@ const OverviewTab = () => {
                     key: "financialYear",
                     options: [
                       { value: "all", label: "All Years" },
+                      { value: "2022-23", label: "FY 2022-23" },
+                      { value: "2023-24", label: "FY 2023-24" },
+                      { value: "2024-25", label: "FY 2024-25" },
                       ...(Array.isArray(analytics?.availableYears)
-                        ? analytics.availableYears.map((year) => ({
-                            value: year,
-                            label: year,
-                          }))
+                        ? analytics.availableYears
+                            .filter(
+                              (year) =>
+                                !["2022-23", "2023-24", "2024-25"].includes(
+                                  year,
+                                ),
+                            )
+                            .map((year) => ({
+                              value: year,
+                              label: year,
+                            }))
                         : []),
                     ],
                     multi: false,
@@ -325,7 +1010,7 @@ const OverviewTab = () => {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                   <StatCard
                     title="Total Students"
-                    value={analytics.summary?.total_students || 0}
+                    value={mergedStats?.total_students || 0}
                     trend="up"
                     graphData={
                       Array.isArray(analytics.yearlyTrend) &&
@@ -445,7 +1130,7 @@ const OverviewTab = () => {
                                           : "#FF7400"
                                       }
                                     />
-                                  )
+                                  ),
                                 )}
                               </Pie>
                               <Tooltip />
@@ -466,7 +1151,7 @@ const OverviewTab = () => {
                                 </p>
                                 <p className="text-2xl font-bold text-gray-900">
                                   {analytics.genderDistribution.find(
-                                    (g) => g.gender === "Female"
+                                    (g) => g.gender === "Female",
                                   )?.count || 0}
                                 </p>
                               </div>
@@ -484,7 +1169,7 @@ const OverviewTab = () => {
                                 </p>
                                 <p className="text-2xl font-bold text-gray-900">
                                   {analytics.genderDistribution.find(
-                                    (g) => g.gender === "Male"
+                                    (g) => g.gender === "Male",
                                   )?.count || 0}
                                 </p>
                               </div>
@@ -601,9 +1286,9 @@ const OverviewTab = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {Array.isArray(analytics.partnerBreakdown) &&
-                        analytics.partnerBreakdown.length > 0 ? (
-                          analytics.partnerBreakdown.map((partner) => (
+                        {Array.isArray(mergedAnalytics?.partnerBreakdown) &&
+                        mergedAnalytics.partnerBreakdown.length > 0 ? (
+                          mergedAnalytics.partnerBreakdown.map((partner) => (
                             <tr
                               key={partner.partner_id}
                               className="hover:bg-gray-50"
@@ -670,9 +1355,9 @@ const OverviewTab = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {Array.isArray(analytics.centerBreakdown) &&
-                        analytics.centerBreakdown.length > 0 ? (
-                          analytics.centerBreakdown.map((center) => (
+                        {Array.isArray(mergedAnalytics?.centerBreakdown) &&
+                        mergedAnalytics.centerBreakdown.length > 0 ? (
+                          mergedAnalytics.centerBreakdown.map((center) => (
                             <tr
                               key={center.center_id}
                               className="hover:bg-gray-50"

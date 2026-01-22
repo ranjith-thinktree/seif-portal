@@ -46,7 +46,7 @@ router.get('/test-query', async (req, res) => {
       COALESCE((SELECT SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) FROM students s ), 0) as female_students,
       (SELECT COUNT(*) FROM partners WHERE status = 'active') as total_partners,
       (SELECT COUNT(*) FROM centers WHERE status = 'active') as total_centers,
-      COALESCE((SELECT SUM(CASE WHEN s.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur') THEN 1 ELSE 0 END) FROM students s ), 0) as total_employments
+      COALESCE((SELECT COUNT(DISTINCT e.id) FROM employment e WHERE e.employment_status IN ('Employed', 'Self-Employed', 'Entrepreneur')), 0) as total_employments
     FROM dual`);
     res.json({ success: true, data: result[0] });
   } catch (error) {

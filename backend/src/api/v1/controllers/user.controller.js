@@ -15,6 +15,7 @@ class UserController {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
+      const requesterRole = req.user?.role; // Get requester's role from JWT
 
       const filters = {
         role: req.query.role,
@@ -26,7 +27,7 @@ class UserController {
       // Remove undefined filters
       Object.keys(filters).forEach((key) => filters[key] === undefined && delete filters[key]);
 
-      const result = await UserService.getUsersWithPartners(page, limit, filters);
+      const result = await UserService.getUsersWithPartners(page, limit, filters, requesterRole);
 
       return ApiResponse.success(res, 'Users retrieved successfully', result);
     } catch (error) {
@@ -40,7 +41,8 @@ class UserController {
    */
   static async getFilterOptions(req, res, next) {
     try {
-      const options = await UserService.getFilterOptions();
+      const requesterRole = req.user?.role; // Get requester's role from JWT
+      const options = await UserService.getFilterOptions(requesterRole);
       return ApiResponse.success(res, 'Filter options retrieved successfully', options);
     } catch (error) {
       next(error);
@@ -66,7 +68,8 @@ class UserController {
    */
   static async getByRole(req, res, next) {
     try {
-      const users = await UserService.getByRole(req.params.role);
+      const requesterRole = req.user?.role; // Get requester's role from JWT
+      const users = await UserService.getByRole(req.params.role, requesterRole);
       return ApiResponse.success(res, `${req.params.role} users retrieved successfully`, users);
     } catch (error) {
       next(error);

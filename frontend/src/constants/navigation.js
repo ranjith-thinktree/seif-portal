@@ -61,19 +61,9 @@ export const SIDEBAR_MENU = [
   },
   {
     name: "Organization Management",
-    path: "#",
+    path: ROUTES.ORGANIZATION_MANAGEMENT,
     icon: BuildingOfficeIcon,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-    submenu: [
-      {
-        name: "Partners",
-        path: ROUTES.ORGANIZATION_PARTNERS,
-      },
-      {
-        name: "Centers",
-        path: ROUTES.ORGANIZATION_CENTERS,
-      },
-    ],
   },
   {
     name: "Data",

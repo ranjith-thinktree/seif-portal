@@ -11,6 +11,7 @@ export const ROUTES = {
   // Admin Routes
   USERS: "/users",
   USER_MANAGEMENT: "/user-management",
+  ORGANIZATION_MANAGEMENT: "/organization-management",
   ORGANIZATION_PARTNERS: "/organization/partners",
   ORGANIZATION_CENTERS: "/organization/centers",
   DATA_MANAGEMENT: "/data-management",
@@ -24,6 +25,7 @@ export const ROUTES = {
   INBOX: "/inbox",
   DATABASE_MANAGEMENT: "/admin/database-management",
   ADMIN_TERMINAL: "/admin/terminal",
+  REFURBISHMENT: "/admin/refurbishment",
   REVIEW: "/review/:id",
   REVIEW_UPLOAD: "/review-centers/:uploadId",
   REVIEW_STUDENTS: "/review-centers/:uploadId/students/:centerId",
