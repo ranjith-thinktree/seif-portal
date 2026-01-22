@@ -16,6 +16,7 @@ import {
   FolderIcon,
   CircleStackIcon,
   CommandLineIcon,
+  WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import { ROLES } from "./roles";
 import { ROUTES } from "./routes";
@@ -76,6 +77,12 @@ export const SIDEBAR_MENU = [
       ROLES.SEIF_READONLY,
       ROLES.PARTNER,
     ],
+  },
+  {
+    name: "Refurbishment",
+    path: ROUTES.REFURBISHMENT,
+    icon: WrenchScrewdriverIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {
     name: "Reportings",
