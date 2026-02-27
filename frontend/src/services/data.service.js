@@ -15,6 +15,43 @@ export const getOverviewStats = async () => {
   return response.data;
 };
 
+// ==================== DASHBOARD ====================
+
+/**
+ * Get consolidated analytics for dashboard
+ * @param {string} year - Year filter ('all' or 'YYYY-YY' format)
+ * @returns {Promise} Analytics data with stats, trends, and breakdowns
+ */
+export const getConsolidatedAnalytics = async (year = "all") => {
+  const params = year !== "all" ? { year } : {};
+  const response = await apiClient.get("/dashboard/analytics", { params });
+  return response.data;
+};
+
+/**
+ * Get centers grouped by year of establishment
+ * @param {string} year - Year filter ('all' or specific year)
+ * @returns {Promise} Centers data grouped by establishment year
+ */
+export const getCentersByEstablishment = async (year = "all") => {
+  const params = year !== "all" ? { year } : {};
+  const response = await apiClient.get("/dashboard/centers-by-establishment", {
+    params,
+  });
+  return response.data?.data || response.data;
+};
+
+/**
+ * Get state-wise statistics for India Map
+ * @param {string} year - Year filter ('all' or specific year)
+ * @returns {Promise} State statistics with state code as key
+ */
+export const getStateStats = async (year = "all") => {
+  const params = year !== "all" ? { year } : {};
+  const response = await apiClient.get("/dashboard/state-stats", { params });
+  return response.data?.data || response.data;
+};
+
 // ==================== PARTNERS ====================
 
 /**
@@ -143,7 +180,7 @@ export const resetPartnerPassword = async (partnerId, sendEmail = true) => {
     `/admin/partners/${partnerId}/reset-password`,
     {
       sendEmail,
-    }
+    },
   );
   return response.data;
 };
@@ -153,7 +190,7 @@ export const resetPartnerPassword = async (partnerId, sendEmail = true) => {
  */
 export const getPartnerLoginDetails = async (partnerId) => {
   const response = await apiClient.get(
-    `/admin/partners/${partnerId}/login-details`
+    `/admin/partners/${partnerId}/login-details`,
   );
   return response.data;
 };
@@ -192,7 +229,7 @@ export const getCountries = async () => {
  */
 export const getStatesByCountry = async (countryId) => {
   const response = await apiClient.get(
-    `/partners/reference/states/${countryId}`
+    `/partners/reference/states/${countryId}`,
   );
   return response.data;
 };
@@ -228,7 +265,7 @@ export const getRegisteredAsOptions = async () => {
  */
 export const getOrganizationTypeOptions = async () => {
   const response = await apiClient.get(
-    "/partners/reference/organization-types"
+    "/partners/reference/organization-types",
   );
   return response.data;
 };
@@ -494,6 +531,10 @@ export const downloadCSV = (blob, filename) => {
 const dataService = {
   // Data Management
   getOverviewStats,
+  getConsolidatedAnalytics,
+  // Dashboard
+  getCentersByEstablishment,
+  getStateStats,
   // Partners
   getPartners,
   getPartnerById,

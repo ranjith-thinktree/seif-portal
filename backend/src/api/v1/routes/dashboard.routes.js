@@ -49,4 +49,43 @@ router.get(
   DashboardController.getSEIFDashboard
 );
 
+/**
+ * @route   GET /api/v1/dashboard/analytics
+ * @desc    Get consolidated analytics for admin dashboard
+ * @access  Admin, Super Admin
+ * @query   year - Optional year filter ('2024-25' format or 'all')
+ */
+router.get(
+  '/analytics',
+  authenticate,
+  checkRole([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]),
+  DashboardController.getConsolidatedAnalytics
+);
+
+/**
+ * @route   GET /api/v1/dashboard/centers-by-establishment
+ * @desc    Get centers grouped by year of establishment
+ * @access  Admin, Super Admin
+ * @query   year - Optional year filter or 'all'
+ */
+router.get(
+  '/centers-by-establishment',
+  authenticate,
+  checkRole([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]),
+  DashboardController.getCentersByEstablishment
+);
+
+/**
+ * @route   GET /api/v1/dashboard/state-stats
+ * @desc    Get state-wise statistics for India Map visualization
+ * @access  Admin, Super Admin
+ * @query   year - Optional year filter or 'all'
+ */
+router.get(
+  '/state-stats',
+  authenticate,
+  checkRole([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]),
+  DashboardController.getStateStats
+);
+
 module.exports = router;

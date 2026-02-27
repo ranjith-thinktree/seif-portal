@@ -107,7 +107,10 @@ describe('Refurbishment API - Integration Tests', () => {
   afterAll(async () => {
     // Cleanup: Delete test data
     await db.query('DELETE FROM centers WHERE partner_id = ?', [testPartnerId]);
-    await db.query('DELETE FROM users WHERE email IN (?, ?)', ['admin@test.com', 'partner@test.com']);
+    await db.query('DELETE FROM users WHERE email IN (?, ?)', [
+      'admin@test.com',
+      'partner@test.com',
+    ]);
     await db.query('DELETE FROM partners WHERE id = ?', [testPartnerId]);
     await db.closePool();
   });
@@ -318,7 +321,9 @@ describe('Refurbishment API - Integration Tests', () => {
 
       // Verify data consistency - eligible + ineligible should be <= total (some might be inactive/archived)
       const summary = response.body.data.allCentersSummary;
-      expect(summary.eligibleCount + summary.ineligibleCount).toBeLessThanOrEqual(summary.totalCount);
+      expect(summary.eligibleCount + summary.ineligibleCount).toBeLessThanOrEqual(
+        summary.totalCount
+      );
     });
 
     it('should respect custom recentlyRefurbishedWithin parameter', async () => {

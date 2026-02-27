@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 
 /**
  * Test Suite: Refurbishment Service - Eligibility Calculation
- * 
+ *
  * Tests the time-based eligibility formula for refurbishment requests.
  * Eligibility is based on months since last refurbishment (or establishment for new centers)
  * compared to refurbishment_frequency_months.

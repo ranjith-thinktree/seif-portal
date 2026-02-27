@@ -78,9 +78,7 @@ describe('PackageService', () => {
     it('should throw NotFoundError when package not found', async () => {
       RefurbishmentPackageModel.findById.mockResolvedValue(null);
 
-      await expect(PackageService.getPackageById('non-existent')).rejects.toThrow(
-        NotFoundError
-      );
+      await expect(PackageService.getPackageById('non-existent')).rejects.toThrow(NotFoundError);
       await expect(PackageService.getPackageById('non-existent')).rejects.toThrow(
         'Package not found'
       );
@@ -115,23 +113,23 @@ describe('PackageService', () => {
       const invalidData = { ...validPackageData };
       delete invalidData.package_name;
 
-      await expect(
-        PackageService.createPackage(invalidData, 'user-1')
-      ).rejects.toThrow(ValidationError);
-      await expect(
-        PackageService.createPackage(invalidData, 'user-1')
-      ).rejects.toThrow('Package name is required');
+      await expect(PackageService.createPackage(invalidData, 'user-1')).rejects.toThrow(
+        ValidationError
+      );
+      await expect(PackageService.createPackage(invalidData, 'user-1')).rejects.toThrow(
+        'Package name is required'
+      );
     });
 
     it('should throw ValidationError when category is invalid', async () => {
       const invalidData = { ...validPackageData, category: 'invalid' };
 
-      await expect(
-        PackageService.createPackage(invalidData, 'user-1')
-      ).rejects.toThrow(ValidationError);
-      await expect(
-        PackageService.createPackage(invalidData, 'user-1')
-      ).rejects.toThrow(/Invalid category/);
+      await expect(PackageService.createPackage(invalidData, 'user-1')).rejects.toThrow(
+        ValidationError
+      );
+      await expect(PackageService.createPackage(invalidData, 'user-1')).rejects.toThrow(
+        /Invalid category/
+      );
     });
 
     it('should throw ValidationError when package name already exists', async () => {
@@ -140,12 +138,12 @@ describe('PackageService', () => {
         package_name: 'New Package',
       });
 
-      await expect(
-        PackageService.createPackage(validPackageData, 'user-1')
-      ).rejects.toThrow(ValidationError);
-      await expect(
-        PackageService.createPackage(validPackageData, 'user-1')
-      ).rejects.toThrow(/already exists/);
+      await expect(PackageService.createPackage(validPackageData, 'user-1')).rejects.toThrow(
+        ValidationError
+      );
+      await expect(PackageService.createPackage(validPackageData, 'user-1')).rejects.toThrow(
+        /already exists/
+      );
     });
   });
 
@@ -189,12 +187,12 @@ describe('PackageService', () => {
         package_name: 'New Name',
       });
 
-      await expect(
-        PackageService.updatePackage('pkg-1', updateData, 'user-1')
-      ).rejects.toThrow(ValidationError);
-      await expect(
-        PackageService.updatePackage('pkg-1', updateData, 'user-1')
-      ).rejects.toThrow(/already exists/);
+      await expect(PackageService.updatePackage('pkg-1', updateData, 'user-1')).rejects.toThrow(
+        ValidationError
+      );
+      await expect(PackageService.updatePackage('pkg-1', updateData, 'user-1')).rejects.toThrow(
+        /already exists/
+      );
     });
   });
 
@@ -232,12 +230,12 @@ describe('PackageService', () => {
         new Error('Cannot delete package that is linked to courses')
       );
 
-      await expect(
-        PackageService.deletePackage('pkg-1', 'user-1', true)
-      ).rejects.toThrow(ValidationError);
-      await expect(
-        PackageService.deletePackage('pkg-1', 'user-1', true)
-      ).rejects.toThrow(/Cannot permanently delete package that is linked to courses/);
+      await expect(PackageService.deletePackage('pkg-1', 'user-1', true)).rejects.toThrow(
+        ValidationError
+      );
+      await expect(PackageService.deletePackage('pkg-1', 'user-1', true)).rejects.toThrow(
+        /Cannot permanently delete package that is linked to courses/
+      );
     });
 
     it('should throw NotFoundError when package does not exist', async () => {
@@ -271,9 +269,7 @@ describe('PackageService', () => {
     });
 
     it('should throw ValidationError when orderMap is invalid', async () => {
-      await expect(PackageService.reorderPackages(null, 'user-1')).rejects.toThrow(
-        ValidationError
-      );
+      await expect(PackageService.reorderPackages(null, 'user-1')).rejects.toThrow(ValidationError);
       await expect(PackageService.reorderPackages('invalid', 'user-1')).rejects.toThrow(
         ValidationError
       );

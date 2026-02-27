@@ -9,9 +9,10 @@ const { ValidationError, NotFoundError } = require('../../../utils/error.util');
 class PackageService {
   /**
    * Get all packages with pagination and filters
+   * Returns packages with course names for display
    */
   static async getAllPackages(filters = {}) {
-    const packages = await RefurbishmentPackageModel.findAll(filters);
+    const packages = await RefurbishmentPackageModel.findAllWithCourses(filters);
     const total = await RefurbishmentPackageModel.count(filters);
 
     return {
@@ -60,27 +61,11 @@ class PackageService {
       throw new ValidationError('Package name is required');
     }
 
-    if (!packageData.category) {
-      throw new ValidationError('Category is required');
-    }
-
-    // Validate category enum
-    const validCategories = ['electrical', 'equipment', 'furniture', 'infrastructure'];
-    if (!validCategories.includes(packageData.category)) {
-      throw new ValidationError(
-        `Invalid category. Must be one of: ${validCategories.join(', ')}`
-      );
-    }
-
     // Check if package name already exists
-    const existingPackage = await RefurbishmentPackageModel.findByName(
-      packageData.package_name
-    );
+    const existingPackage = await RefurbishmentPackageModel.findByName(packageData.package_name);
 
     if (existingPackage) {
-      throw new ValidationError(
-        `Package with name "${packageData.package_name}" already exists`
-      );
+      throw new ValidationError(`Package with name "${packageData.package_name}" already exists`);
     }
 
     // Set display_order if not provided
@@ -114,29 +99,12 @@ class PackageService {
       throw new NotFoundError('Package not found');
     }
 
-    // Validate category if provided
-    if (packageData.category) {
-      const validCategories = ['electrical', 'equipment', 'furniture', 'infrastructure'];
-      if (!validCategories.includes(packageData.category)) {
-        throw new ValidationError(
-          `Invalid category. Must be one of: ${validCategories.join(', ')}`
-        );
-      }
-    }
-
     // Check if new name conflicts with existing package
-    if (
-      packageData.package_name &&
-      packageData.package_name !== existingPackage.package_name
-    ) {
-      const duplicatePackage = await RefurbishmentPackageModel.findByName(
-        packageData.package_name
-      );
+    if (packageData.package_name && packageData.package_name !== existingPackage.package_name) {
+      const duplicatePackage = await RefurbishmentPackageModel.findByName(packageData.package_name);
 
       if (duplicatePackage && duplicatePackage.id !== id) {
-        throw new ValidationError(
-          `Package with name "${packageData.package_name}" already exists`
-        );
+        throw new ValidationError(`Package with name "${packageData.package_name}" already exists`);
       }
     }
 

@@ -125,9 +125,7 @@ describe('PackageController', () => {
       const mockPackage = {
         id: 'pkg-1',
         package_name: 'Test Package',
-        courses: [
-          { id: 'course-1', course_name: 'Electrical' },
-        ],
+        courses: [{ id: 'course-1', course_name: 'Electrical' }],
       };
       PackageService.getPackageWithCourses.mockResolvedValue(mockPackage);
 
@@ -215,11 +213,7 @@ describe('PackageController', () => {
 
       await PackageController.createPackage(req, res, next);
 
-      expect(ApiResponse.error).toHaveBeenCalledWith(
-        res,
-        'Package name is required',
-        400
-      );
+      expect(ApiResponse.error).toHaveBeenCalledWith(res, 'Package name is required', 400);
       expect(next).not.toHaveBeenCalled();
     });
   });
@@ -298,11 +292,7 @@ describe('PackageController', () => {
 
       await PackageController.deletePackage(req, res, next);
 
-      expect(PackageService.deletePackage).toHaveBeenCalledWith(
-        'pkg-1',
-        'user-1',
-        false
-      );
+      expect(PackageService.deletePackage).toHaveBeenCalledWith('pkg-1', 'user-1', false);
       expect(ApiResponse.success).toHaveBeenCalledWith(
         res,
         'Package deactivated successfully',
@@ -320,11 +310,7 @@ describe('PackageController', () => {
 
       await PackageController.deletePackage(req, res, next);
 
-      expect(PackageService.deletePackage).toHaveBeenCalledWith(
-        'pkg-1',
-        'user-1',
-        true
-      );
+      expect(PackageService.deletePackage).toHaveBeenCalledWith('pkg-1', 'user-1', true);
       expect(ApiResponse.success).toHaveBeenCalledWith(
         res,
         'Package permanently deleted successfully',
@@ -368,16 +354,8 @@ describe('PackageController', () => {
 
       await PackageController.reorderPackages(req, res, next);
 
-      expect(PackageService.reorderPackages).toHaveBeenCalledWith(
-        req.body.orderMap,
-        'user-1'
-      );
-      expect(ApiResponse.success).toHaveBeenCalledWith(
-        res,
-        mockResult,
-        mockResult.message,
-        200
-      );
+      expect(PackageService.reorderPackages).toHaveBeenCalledWith(req.body.orderMap, 'user-1');
+      expect(ApiResponse.success).toHaveBeenCalledWith(res, mockResult, mockResult.message, 200);
     });
 
     it('should handle missing orderMap', async () => {
@@ -401,11 +379,7 @@ describe('PackageController', () => {
 
       await PackageController.reorderPackages(req, res, next);
 
-      expect(ApiResponse.error).toHaveBeenCalledWith(
-        res,
-        'Package not found: invalid-id',
-        400
-      );
+      expect(ApiResponse.error).toHaveBeenCalledWith(res, 'Package not found: invalid-id', 400);
     });
   });
 });

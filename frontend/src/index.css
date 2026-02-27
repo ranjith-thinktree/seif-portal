@@ -61,4 +61,29 @@
     scrollbar-width: thin;
     scrollbar-color: #CBD5E1 #F1F5F9;
   }
+
+  /* Ultra-thin subtle scrollbar — barely visible, just a hint */
+  .scrollbar-subtle::-webkit-scrollbar {
+    width: 2px;
+    height: 2px;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 99px;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+    background: #9CA3AF;
+  }
+
+  /* Firefox */
+  .scrollbar-subtle {
+    scrollbar-width: thin;
+    scrollbar-color: #D1D5DB transparent;
+  }
 }

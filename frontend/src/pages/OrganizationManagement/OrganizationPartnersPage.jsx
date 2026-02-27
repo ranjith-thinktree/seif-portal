@@ -15,6 +15,7 @@ import {
   Phone,
   Building2,
   Key,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
@@ -44,6 +45,8 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
   const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [showBlockedDeleteDialog, setShowBlockedDeleteDialog] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,13 +56,17 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
   const fetchPartners = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getPartners();
+      // Request all partners with a large limit for client-side pagination
+      const response = await getPartners({
+        limit: 1000,
+        approval_status: "approved",
+      });
 
       if (response.success) {
         // Filter only approved partners (status = 'active' or 'inactive')
         const approvedPartners = response.data.filter(
           (partner) =>
-            partner.status === "active" || partner.status === "inactive"
+            partner.status === "active" || partner.status === "inactive",
         );
         setPartners(approvedPartners);
         setFilteredPartners(approvedPartners);
@@ -69,7 +76,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     } catch (error) {
       console.error("Error fetching partners:", error);
       toast.error(
-        error.message || "Failed to fetch partners. Please try again."
+        error.message || "Failed to fetch partners. Please try again.",
       );
       setPartners([]);
       setFilteredPartners([]);
@@ -101,7 +108,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     } catch (error) {
       console.error("Error deleting partner:", error);
       toast.error(
-        error.message || "Failed to delete partner. Please try again."
+        error.message || "Failed to delete partner. Please try again.",
       );
     } finally {
       setDeleting(false);
@@ -112,13 +119,24 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
   const handleResetPassword = async () => {
     if (!selectedPartner) return;
 
+    // Use the linked user_id (not the partner table id)
+    const targetUserId = selectedPartner.user_id;
+    if (!targetUserId) {
+      toast.error(
+        "No user account linked to this partner. Cannot reset password.",
+      );
+      setShowResetPasswordDialog(false);
+      setSelectedPartner(null);
+      return;
+    }
+
     try {
       setResettingPassword(true);
-      const response = await resetUserPassword(selectedPartner.id);
+      const response = await resetUserPassword(targetUserId);
 
       if (response.success) {
         toast.success(
-          "Password reset link sent to partner's email successfully"
+          "Password reset link sent to partner's email successfully",
         );
         setShowResetPasswordDialog(false);
         setSelectedPartner(null);
@@ -128,7 +146,8 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     } catch (error) {
       console.error("Error resetting password:", error);
       toast.error(
-        error.message || "Failed to send password reset link. Please try again."
+        error.message ||
+          "Failed to send password reset link. Please try again.",
       );
     } finally {
       setResettingPassword(false);
@@ -138,6 +157,10 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
   // Handle Export
   const handleExport = useCallback(() => {
     try {
+      if (filteredPartners.length === 0) {
+        toast.warn("No data to export.");
+        return;
+      }
       // Prepare CSV data
       const csvData = filteredPartners.map((partner) => ({
         "Partner Name": partner.name,
@@ -167,7 +190,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       link.setAttribute("href", url);
       link.setAttribute(
         "download",
-        `partners_${new Date().toISOString().split("T")[0]}.csv`
+        `partners_${new Date().toISOString().split("T")[0]}.csv`,
       );
       document.body.appendChild(link);
       link.click();
@@ -306,7 +329,11 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
               size="sm"
               onClick={() => {
                 setSelectedPartner(row.original);
-                setShowDeleteDialog(true);
+                if (row.original.total_centers > 0) {
+                  setShowBlockedDeleteDialog(true);
+                } else {
+                  setShowDeleteDialog(true);
+                }
               }}
             >
               <Trash2 className="w-4 h-4 text-red-600" />
@@ -315,7 +342,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         ),
       },
     ],
-    []
+    [],
   );
 
   // Search Configuration
@@ -328,7 +355,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
           label: "Organization Type",
           options: [
             ...new Set(
-              partners.map((p) => p.organization_type).filter(Boolean)
+              partners.map((p) => p.organization_type).filter(Boolean),
             ),
           ].map((type) => ({
             value: type,
@@ -377,7 +404,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         },
       ],
     }),
-    [partners]
+    [partners],
   );
 
   // Handle Search
@@ -386,18 +413,33 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     setCurrentPage(1);
   }, []);
 
-  // Handle View Centers
+  // Paginated Data - slice data for current page
+  const paginatedPartners = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredPartners.slice(startIndex, endIndex);
+  }, [filteredPartners, currentPage, pageSize]);
+
+  // Pagination Object
+  const paginationConfig = useMemo(() => {
+    const totalPages = Math.ceil(filteredPartners.length / pageSize);
+    return {
+      page: currentPage,
+      limit: pageSize,
+      total: filteredPartners.length,
+      totalPages: totalPages || 1,
+    };
+  }, [filteredPartners.length, currentPage, pageSize]);
+
+  // Handle View Partner Details
   const handleViewCenters = (partner) => {
-    // Navigate to centers page filtered by this partner
-    // TODO: Implement navigation
-    console.log("View centers for partner:", partner.id);
+    setSelectedPartner(partner);
+    setShowViewDialog(true);
   };
 
   // Handle Edit
   const handleEdit = (partner) => {
-    // Navigate to edit page
-    // TODO: Implement navigation
-    console.log("Edit partner:", partner.id);
+    toast.info("Edit functionality coming soon.");
   };
 
   // Render Content
@@ -463,13 +505,16 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       {/* Data Table */}
       <EnhancedDataTable
         columns={columns}
-        data={filteredPartners}
-        loading={loading}
-        currentPage={currentPage}
-        pageSize={pageSize}
+        data={paginatedPartners}
+        pagination={paginationConfig}
         onPageChange={setCurrentPage}
-        onPageSizeChange={setPageSize}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setCurrentPage(1);
+        }}
+        isLoading={loading}
         emptyMessage="No partners found"
+        storageKey="organization-partners-table"
       />
 
       {/* Delete Confirmation Dialog */}
@@ -484,6 +529,211 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         loading={deleting}
         itemType="partners"
       />
+
+      {/* Blocked Delete Dialog — shown when partner still has centers */}
+      <Dialog
+        open={showBlockedDeleteDialog}
+        onOpenChange={setShowBlockedDeleteDialog}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
+              Cannot Delete Partner
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold">{selectedPartner?.name}</span>{" "}
+              cannot be deleted because it has{" "}
+              <span className="font-bold text-amber-600">
+                {selectedPartner?.total_centers}{" "}
+                {selectedPartner?.total_centers === 1 ? "center" : "centers"}
+              </span>{" "}
+              associated with it.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-amber-800 mb-2">
+                To delete this partner, follow these steps:
+              </p>
+              <ol className="list-decimal list-inside text-sm text-amber-700 space-y-1">
+                <li>Go to the Centers section</li>
+                <li>
+                  Delete all centers belonging to{" "}
+                  <span className="font-medium">{selectedPartner?.name}</span>
+                </li>
+                <li>Return here and delete the partner</li>
+              </ol>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowBlockedDeleteDialog(false)}>
+              Got It
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Partner Details Dialog */}
+      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-blue-600" />
+              Partner Details
+            </DialogTitle>
+            <DialogDescription>
+              Full information for {selectedPartner?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPartner && (
+            <div className="space-y-4 py-2">
+              {/* Basic Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Partner Name
+                  </p>
+                  <p className="font-semibold text-gray-900">
+                    {selectedPartner.name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Partner ID
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedPartner.partner_id || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Organization Type
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedPartner.organization_type || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Status
+                  </p>
+                  <Badge
+                    variant={
+                      selectedPartner.status === "active"
+                        ? "success"
+                        : "secondary"
+                    }
+                  >
+                    {selectedPartner.status}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Contact Info */}
+              <div className="border-t pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">
+                  Contact Information
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Contact Person
+                    </p>
+                    <p className="text-gray-700">
+                      {selectedPartner.contact_person || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Email
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-gray-400" />
+                      <p className="text-gray-700 text-sm">
+                        {selectedPartner.contact_email || "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Phone
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-gray-400" />
+                      <p className="text-gray-700 text-sm">
+                        {selectedPartner.contact_phone || "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Total Centers
+                    </p>
+                    <p className="font-semibold text-blue-600 text-lg">
+                      {selectedPartner.total_centers ?? 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address */}
+              <div className="border-t pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">
+                  Address
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Street Address
+                    </p>
+                    <div className="flex items-start gap-1">
+                      <MapPin className="w-3 h-3 text-gray-400 mt-1" />
+                      <p className="text-gray-700 text-sm">
+                        {[
+                          selectedPartner.address_line1,
+                          selectedPartner.address_line2,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      City
+                    </p>
+                    <p className="text-gray-700">
+                      {selectedPartner.city || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      State
+                    </p>
+                    <p className="text-gray-700">
+                      {selectedPartner.state || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Postal Code
+                    </p>
+                    <p className="text-gray-700">
+                      {selectedPartner.postal_code || "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setShowViewDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog

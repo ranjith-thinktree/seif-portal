@@ -1,6 +1,7 @@
 const employmentService = require('../../src/api/v1/services/employment.service');
 const db = require('../../src/database/connection');
 const ExcelJS = require('exceljs');
+const { v4: uuidv4 } = require('uuid');
 
 jest.mock('../../src/database/connection');
 jest.mock('exceljs');
@@ -26,8 +27,8 @@ describe('Employment Service - Unit Tests', () => {
 
   describe('processEmploymentUpload - student matching', () => {
     it('should match students by (partner_id + partner_student_id)', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001', // Partner's student ID
@@ -41,7 +42,7 @@ describe('Employment Service - Unit Tests', () => {
       // Mock: Student exists with matching partner_id and partner_student_id
       mockConnection.query
         .mockResolvedValueOnce([
-          [{ id: 'student-uuid', partner_student_id: 'S001', partner_id: mockPartnerId }],
+          [{ id: uuidv4(), partner_student_id: 'S001', partner_id: mockPartnerId }],
         ]) // find student
         .mockResolvedValueOnce([{ insertId: 1 }]) // insert employment
         .mockResolvedValueOnce([{ affectedRows: 1 }]); // update student employment_status
@@ -65,8 +66,8 @@ describe('Employment Service - Unit Tests', () => {
     });
 
     it('should log error for non-existent student', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S999', // Does not exist
@@ -95,8 +96,8 @@ describe('Employment Service - Unit Tests', () => {
     });
 
     it('should process multiple students in batch', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001',
@@ -148,8 +149,8 @@ describe('Employment Service - Unit Tests', () => {
 
   describe('error logging with row numbers', () => {
     it('should include CSV row number in error log', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001',
@@ -184,8 +185,8 @@ describe('Employment Service - Unit Tests', () => {
     });
 
     it('should include error message in log', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S999',
@@ -215,8 +216,8 @@ describe('Employment Service - Unit Tests', () => {
 
   describe('success/failure statistics', () => {
     it('should return correct statistics', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001',
@@ -278,8 +279,8 @@ describe('Employment Service - Unit Tests', () => {
 
   describe('employment_status update', () => {
     it('should update student employment_status to employed', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001',
@@ -342,8 +343,8 @@ describe('Employment Service - Unit Tests', () => {
 
   describe('validation rules', () => {
     it('should validate required fields', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001',
@@ -367,8 +368,8 @@ describe('Employment Service - Unit Tests', () => {
     });
 
     it('should validate date format', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001',
@@ -395,8 +396,8 @@ describe('Employment Service - Unit Tests', () => {
 
   describe('transaction handling', () => {
     it('should rollback on error', async () => {
-      const mockPartnerId = 'partner-uuid';
-      const mockUploadId = 'employment-upload-uuid';
+      const mockPartnerId = uuidv4();
+      const mockUploadId = uuidv4();
       const mockCsvData = [
         {
           student_id: 'S001',

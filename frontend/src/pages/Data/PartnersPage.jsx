@@ -124,7 +124,7 @@ const PartnersPage = ({ embedded = false }) => {
       // Remove empty filters
       Object.keys(params).forEach(
         (key) =>
-          (params[key] === "" || params[key] === null) && delete params[key]
+          (params[key] === "" || params[key] === null) && delete params[key],
       );
 
       const response = await getPartners(params);
@@ -168,6 +168,11 @@ const PartnersPage = ({ embedded = false }) => {
   // Handle page change
   const handlePageChange = (newPage) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
+  };
+
+  // Handle page size change
+  const handlePageSizeChange = (newPageSize) => {
+    setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
   };
 
   // Handle create partner
@@ -238,7 +243,7 @@ const PartnersPage = ({ embedded = false }) => {
       // Show success toast if any deletions succeeded
       if (response.data.summary.successful > 0) {
         toast.success(
-          `Successfully deleted ${response.data.summary.successful} partner(s)`
+          `Successfully deleted ${response.data.summary.successful} partner(s)`,
         );
         fetchPartners(); // Refresh table
         setSelectedRows([]); // Clear selection
@@ -316,7 +321,7 @@ const PartnersPage = ({ embedded = false }) => {
     } catch (error) {
       console.error("Error resending welcome email:", error);
       toast.error(
-        error.response?.data?.message || "Failed to send welcome email"
+        error.response?.data?.message || "Failed to send welcome email",
       );
     }
   };
@@ -366,7 +371,7 @@ const PartnersPage = ({ embedded = false }) => {
       // Remove empty filters
       Object.keys(params).forEach(
         (key) =>
-          (params[key] === "" || params[key] === null) && delete params[key]
+          (params[key] === "" || params[key] === null) && delete params[key],
       );
 
       const blob = await exportPartners(params);
@@ -723,6 +728,7 @@ const PartnersPage = ({ embedded = false }) => {
             data={partners}
             pagination={pagination}
             onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
             isLoading={isLoading}
             emptyMessage="No partners found"
             showSerialNumber={true}

@@ -215,6 +215,96 @@ const getUploadCenterDetails = async (req, res, next) => {
   }
 };
 
+/**
+ * Get refurbishment notification details
+ * GET /api/v1/notifications/:notificationId/refurbishment-details
+ */
+const getRefurbishmentDetails = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const role = req.user.role;
+    const partnerId = req.user.partner_id;
+    const notificationId = req.params.notificationId;
+
+    // Partners and admins can view refurbishment notification details.
+    // Admins view all; partners are restricted to their own notifications (enforced in service).
+    if (role !== 'PARTNER' && role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only partners and admins can view refurbishment details.',
+      });
+    }
+    // Admins don't have a partnerId — pass null so service handles it correctly
+    const effectivePartnerId = role === 'ADMIN' || role === 'SUPER_ADMIN' ? null : partnerId;
+
+    const result = await notificationService.getRefurbishmentDetails(
+      notificationId,
+      userId,
+      effectivePartnerId
+    );
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: 'Refurbishment notification not found or access denied',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Submit partner refurbishment response
+ * POST /api/v1/notifications/:notificationId/refurbishment-response
+ */
+const submitRefurbishmentResponse = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const role = req.user.role;
+    const partnerId = req.user.partner_id;
+    const notificationId = req.params.notificationId;
+    const { selected_packages, upgradation = null } = req.body;
+
+    // Only partners can submit responses
+    if (role !== 'PARTNER' || !partnerId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only partners can submit refurbishment responses.',
+      });
+    }
+
+    // Validate input
+    if (!selected_packages || !Array.isArray(selected_packages) || selected_packages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid request. selected_packages array is required.',
+      });
+    }
+
+    const result = await notificationService.submitRefurbishmentResponse(
+      notificationId,
+      userId,
+      partnerId,
+      selected_packages,
+      upgradation
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Refurbishment response submitted successfully',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getNotifications,
   getUnreadCount,
@@ -224,4 +314,6 @@ module.exports = {
   deleteNotification,
   getGroupedNotifications,
   getUploadCenterDetails,
+  getRefurbishmentDetails,
+  submitRefurbishmentResponse,
 };

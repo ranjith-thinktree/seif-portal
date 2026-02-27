@@ -172,7 +172,7 @@ const UserManagementPage = () => {
       // Remove empty filters
       Object.keys(params).forEach(
         (key) =>
-          (params[key] === "" || params[key] === null) && delete params[key]
+          (params[key] === "" || params[key] === null) && delete params[key],
       );
 
       const response = await getUsers(params);
@@ -195,7 +195,9 @@ const UserManagementPage = () => {
         page: response.data.page || 1,
         limit: response.data.limit || 10,
         total: response.data.total || 0,
-        pages: response.data.pages || 1,
+        pages:
+          Math.ceil((response.data.total || 0) / (response.data.limit || 10)) ||
+          1,
       });
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -374,7 +376,7 @@ const UserManagementPage = () => {
     try {
       await updateUserStatus(selectedUser.id, newStatus);
       toast.success(
-        `User ${newStatus === "active" ? "activated" : newStatus} successfully`
+        `User ${newStatus === "active" ? "activated" : newStatus} successfully`,
       );
       setShowStatusModal(false);
       setSelectedUser(null);
@@ -382,7 +384,7 @@ const UserManagementPage = () => {
     } catch (error) {
       console.error("Error updating user status:", error);
       toast.error(
-        error.response?.data?.message || "Failed to update user status"
+        error.response?.data?.message || "Failed to update user status",
       );
     } finally {
       setIsSubmitting(false);
@@ -638,7 +640,7 @@ const UserManagementPage = () => {
         },
       },
     ],
-    [canManageUsers, isSuperAdmin, currentUserId]
+    [canManageUsers, isSuperAdmin, currentUserId],
   );
 
   // Filter configuration for AdvancedSearchBar
@@ -984,8 +986,8 @@ const UserManagementPage = () => {
                 {isSubmitting
                   ? "Saving..."
                   : showCreateModal
-                  ? "Create User"
-                  : "Update User"}
+                    ? "Create User"
+                    : "Update User"}
               </Button>
             </DialogFooter>
           </DialogContent>

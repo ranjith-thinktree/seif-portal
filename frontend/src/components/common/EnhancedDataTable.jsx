@@ -33,6 +33,7 @@ const EnhancedDataTable = ({
   data = [],
   pagination,
   onPageChange,
+  onPageSizeChange, // Callback to change page size
   onRowClick, // Callback when row is clicked
   isLoading = false,
   emptyMessage = "No data found",
@@ -89,7 +90,7 @@ const EnhancedDataTable = ({
   };
 
   const [columnVisibility, setColumnVisibility] = useState(
-    getInitialColumnVisibility()
+    getInitialColumnVisibility(),
   );
   const [columnSizing, setColumnSizing] = useState(getInitialColumnSizing());
 
@@ -97,7 +98,7 @@ const EnhancedDataTable = ({
   useEffect(() => {
     localStorage.setItem(
       `columnVisibility_${storageKey}`,
-      JSON.stringify(columnVisibility)
+      JSON.stringify(columnVisibility),
     );
     if (onColumnVisibilityChange) {
       onColumnVisibilityChange(columnVisibility);
@@ -108,7 +109,7 @@ const EnhancedDataTable = ({
   useEffect(() => {
     localStorage.setItem(
       `columnSizing_${storageKey}`,
-      JSON.stringify(columnSizing)
+      JSON.stringify(columnSizing),
     );
   }, [columnSizing, storageKey]);
 
@@ -173,7 +174,7 @@ const EnhancedDataTable = ({
         ),
         cell: ({ row }) => (
           <div className="flex items-center justify-center font-medium">
-            {(page - 1) * limit + row.index + 1}
+            {((page || 1) - 1) * (limit || 50) + row.index + 1}
           </div>
         ),
         enableHiding: false,
@@ -306,12 +307,7 @@ const EnhancedDataTable = ({
 
       {/* Table */}
       <div className="enhanced-data-table rounded-md border bg-white overflow-x-auto overflow-y-visible custom-scrollbar">
-        <Table
-          className="table-fixed"
-          style={{
-            width: table.getCenterTotalSize(),
-          }}
-        >
+        <Table className="w-full table-fixed">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow
@@ -331,7 +327,7 @@ const EnhancedDataTable = ({
                       <div className="truncate">
                         {flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                       </div>
                     )}
@@ -372,12 +368,12 @@ const EnhancedDataTable = ({
                         "px-6 py-4 text-sm",
                         cell.column.id === "actions"
                           ? "overflow-visible relative"
-                          : "truncate"
+                          : "truncate",
                       )}
                     >
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
@@ -400,11 +396,33 @@ const EnhancedDataTable = ({
       {/* Pagination */}
       {pagination && (
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-          <div className="text-sm text-gray-600">
-            Showing {data.length > 0 ? (page - 1) * limit + 1 : 0} to{" "}
-            {Math.min(page * limit, total)} of {total} results
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-600">
+              Showing{" "}
+              {data.length > 0 ? ((page || 1) - 1) * (limit || 50) + 1 : 0} to{" "}
+              {Math.min((page || 1) * (limit || 50), total || 0)} of{" "}
+              {total || 0} results
+            </div>
+            {onPageSizeChange && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Show:</label>
+                <select
+                  value={limit}
+                  onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">
+              Page {page} of {totalPages}
+            </span>
             <Button
               variant="outline"
               size="sm"

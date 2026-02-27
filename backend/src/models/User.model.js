@@ -197,9 +197,9 @@ class UserModel {
       FROM users 
       ${whereSQL}
       ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
     `;
-    const [users] = await query(dataSQL, [...params, limit, offset]);
+    const [users] = await query(dataSQL, params);
 
     return { users, total };
   }

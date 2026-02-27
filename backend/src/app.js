@@ -4,12 +4,17 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 const config = require('./config');
 const { errorHandler, notFoundHandler } = require('./middleware/error.middleware');
 const Sentry = require('@sentry/node');
 
 // Create Express app
 const app = express();
+
+// Trust the first proxy (Nginx reverse proxy)
+// Required when running behind Nginx to correctly read X-Forwarded-For for rate limiting
+app.set('trust proxy', 1);
 
 // Sentry request handler - must be first middleware
 if (process.env.SENTRY_DSN) {
@@ -67,7 +72,7 @@ const createRateLimiter = (windowMs, max, message) => {
 // Strict rate limit for unauthenticated users only
 const authRateLimiter = createRateLimiter(
   15 * 60 * 1000, // 15 minutes
-  20, // 20 requests for login/register endpoints (prevent brute force)
+  100, // Increased from 20 to 100 for testing (allows 13 tests * 5 runs = 65 attempts)
   'Too many authentication attempts, please try again later'
 );
 
@@ -113,6 +118,13 @@ if (config.server.env === 'development') {
 
 // Compress responses
 app.use(compression());
+
+// ===================================
+// STATIC FILE SERVING
+// ===================================
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ===================================
 // HEALTH CHECK

@@ -29,7 +29,7 @@ class UserController {
 
       const result = await UserService.getUsersWithPartners(page, limit, filters, requesterRole);
 
-      return ApiResponse.success(res, 'Users retrieved successfully', result);
+      return ApiResponse.success(res, result, 'Users retrieved successfully');
     } catch (error) {
       next(error);
     }
@@ -43,7 +43,7 @@ class UserController {
     try {
       const requesterRole = req.user?.role; // Get requester's role from JWT
       const options = await UserService.getFilterOptions(requesterRole);
-      return ApiResponse.success(res, 'Filter options retrieved successfully', options);
+      return ApiResponse.success(res, options, 'Filter options retrieved successfully');
     } catch (error) {
       next(error);
     }
@@ -56,7 +56,7 @@ class UserController {
   static async getById(req, res, next) {
     try {
       const user = await UserService.getById(req.params.id);
-      return ApiResponse.success(res, 'User retrieved successfully', user);
+      return ApiResponse.success(res, user, 'User retrieved successfully');
     } catch (error) {
       next(error);
     }
@@ -70,7 +70,7 @@ class UserController {
     try {
       const requesterRole = req.user?.role; // Get requester's role from JWT
       const users = await UserService.getByRole(req.params.role, requesterRole);
-      return ApiResponse.success(res, `${req.params.role} users retrieved successfully`, users);
+      return ApiResponse.success(res, users, `${req.params.role} users retrieved successfully`);
     } catch (error) {
       next(error);
     }
@@ -142,7 +142,7 @@ class UserController {
 
       const user = await UserService.update(req.params.id, updateData);
 
-      return ApiResponse.success(res, 'User updated successfully', user);
+      return ApiResponse.success(res, user, 'User updated successfully');
     } catch (error) {
       next(error);
     }
@@ -184,7 +184,7 @@ class UserController {
 
       const user = await UserService.updateStatus(req.params.id, status);
 
-      return ApiResponse.success(res, 'User status updated successfully', user);
+      return ApiResponse.success(res, user, 'User status updated successfully');
     } catch (error) {
       next(error);
     }
@@ -204,11 +204,15 @@ class UserController {
 
       // In production, you would send this via email
       // For now, return it in response (remove this in production!)
-      return ApiResponse.success(res, 'Password reset successfully', {
-        message: 'User must change password on next login',
-        temporaryPassword: tempPassword, // Remove this in production!
-        note: 'In production, this password should be sent via email',
-      });
+      return ApiResponse.success(
+        res,
+        {
+          message: 'User must change password on next login',
+          temporaryPassword: tempPassword, // Remove this in production!
+          note: 'In production, this password should be sent via email',
+        },
+        'Password reset successfully'
+      );
     } catch (error) {
       next(error);
     }
@@ -245,7 +249,7 @@ class UserController {
         }
       });
 
-      return ApiResponse.success(res, 'User statistics retrieved successfully', stats);
+      return ApiResponse.success(res, stats, 'User statistics retrieved successfully');
     } catch (error) {
       next(error);
     }

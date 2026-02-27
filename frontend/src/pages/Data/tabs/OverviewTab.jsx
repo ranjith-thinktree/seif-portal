@@ -42,7 +42,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { UserGroupIcon, UserIcon } from "@heroicons/react/24/outline";
-import historicalCenterData from "../../../data/historicalCenterData.json";
+import dashboardData from "../../../data/dashboardData.json";
+import StudentBreakdownTooltip from "../../../components/data/StudentBreakdownTooltip";
 
 /**
  * Merge historical center data from JSON with live API data
@@ -53,14 +54,14 @@ import historicalCenterData from "../../../data/historicalCenterData.json";
  */
 function mergeCenterData(historicalData, apiData, selectedYear) {
   const merged = new Map();
-  
-  // Add all 77 historical centers
-  historicalData.forEach(h => {
+
+  // Add all 76 historical centers
+  historicalData.forEach((h) => {
     const key = h.centerName;
     merged.set(key, {
       center_id: h.id,
       center_name: h.centerName,
-      partner_name: h.centerName.split(' ')[0] + (h.centerName.split(' ')[1] ? ' ' + h.centerName.split(' ')[1] : ''),
+      partner_name: h.partnerName || "Unknown Partner", // Use partnerName from JSON
       city: h.city || h.location,
       state: h.state,
       students_2022_23: h.students_2022_23 || 0,
@@ -69,13 +70,13 @@ function mergeCenterData(historicalData, apiData, selectedYear) {
       currentTotal: 0,
       currentMale: 0,
       currentFemale: 0,
-      source: 'historical'
+      source: "historical",
     });
   });
-  
+
   // Merge API data (current year)
   if (Array.isArray(apiData)) {
-    apiData.forEach(api => {
+    apiData.forEach((api) => {
       const key = api.center_name;
       if (merged.has(key)) {
         // Update existing historical center with API data
@@ -84,7 +85,7 @@ function mergeCenterData(historicalData, apiData, selectedYear) {
         existing.currentMale = api.male_students;
         existing.currentFemale = api.female_students;
         existing.partner_name = api.partner_name; // Use API partner name
-        existing.source = 'both';
+        existing.source = "both";
       } else {
         // Add new center from API (not in historical)
         merged.set(key, {
@@ -99,26 +100,56 @@ function mergeCenterData(historicalData, apiData, selectedYear) {
           currentTotal: api.total_students,
           currentMale: api.male_students,
           currentFemale: api.female_students,
-          source: 'api'
+          source: "api",
         });
       }
     });
   }
-  
+
   // Calculate display values based on selected year
   return Array.from(merged.values())
-    .map(c => ({
-      ...c,
-      total_students: selectedYear === '2022-23' ? c.students_2022_23 :
-                     selectedYear === '2023-24' ? c.students_2023_24 :
-                     selectedYear === '2024-25' ? c.students_2024_25 :
-                     c.currentTotal, // Current year or "all"
-      male_students: selectedYear.startsWith('20') && selectedYear !== '2025-26' ? 'N/A' : c.currentMale,
-      female_students: selectedYear.startsWith('20') && selectedYear !== '2025-26' ? 'N/A' : c.currentFemale
-    }))
-    .filter(c => c.total_students > 0) // Only show centers with students
-    .sort((a, b) => b.total_students - a.total_students) // Sort descending
-    .slice(0, 20); // Top 20 only
+    .map((c) => {
+      let total_students = 0;
+      let male_students = 0;
+      let female_students = 0;
+
+      if (selectedYear === "all") {
+        // Sum all three years
+        total_students =
+          (c.students_2022_23 || 0) +
+          (c.students_2023_24 || 0) +
+          (c.students_2024_25 || 0) +
+          (c.currentTotal || 0);
+        // Gender data only from current API data
+        male_students = c.currentMale || 0;
+        female_students = c.currentFemale || 0;
+      } else if (selectedYear === "2022-23") {
+        total_students = c.students_2022_23 || 0;
+        male_students = 0; // Historical data has no gender breakdown
+        female_students = 0;
+      } else if (selectedYear === "2023-24") {
+        total_students = c.students_2023_24 || 0;
+        male_students = 0;
+        female_students = 0;
+      } else if (selectedYear === "2024-25") {
+        total_students = c.students_2024_25 || 0;
+        male_students = 0;
+        female_students = 0;
+      } else {
+        // Current year from API
+        total_students = c.currentTotal || 0;
+        male_students = c.currentMale || 0;
+        female_students = c.currentFemale || 0;
+      }
+
+      return {
+        ...c,
+        total_students,
+        male_students,
+        female_students,
+      };
+    })
+    .sort((a, b) => b.total_students - a.total_students); // Sort descending by students
 }
 
 /**
@@ -144,10 +175,54 @@ const OverviewTab = () => {
     partnerId: "all",
     centerId: "all",
     gender: "all",
+    searchQuery: "",
   });
 
   const isPartner = user?.role === "PARTNER";
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+
+  // Generate autocomplete suggestions
+  const searchSuggestions = useMemo(() => {
+    const suggestions = [];
+
+    // Add partner suggestions
+    filterOptions.partners.forEach((partner) => {
+      if (partner.id !== "all") {
+        suggestions.push({
+          value: partner.name,
+          label: partner.name,
+          type: "partner",
+        });
+      }
+    });
+
+    // Add center suggestions
+    filterOptions.centers.forEach((center) => {
+      if (center.id !== "all") {
+        suggestions.push({
+          value: center.center_name,
+          label: `${center.center_name} (${center.partner_name})`,
+          type: "center",
+        });
+      }
+    });
+
+    // Add location suggestions (states and cities)
+    const locations = new Set();
+    filterOptions.centers.forEach((center) => {
+      if (center.state) locations.add(center.state);
+      if (center.city) locations.add(center.city);
+    });
+    locations.forEach((location) => {
+      suggestions.push({
+        value: location,
+        label: location,
+        type: "location",
+      });
+    });
+
+    return suggestions;
+  }, [filterOptions.partners, filterOptions.centers]);
 
   // Debug logging (disabled in production)
   // console.log("OverviewTab - User info:", { role: user?.role, isAdmin, isPartner });
@@ -241,7 +316,7 @@ const OverviewTab = () => {
 
   // Log matching results only once (in development) - prevents multiple console logs
   useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
+    if (import.meta.env.MODE !== "development") return;
 
     // Wait for results to be available
     const results = window.__matchingResults;
@@ -370,34 +445,11 @@ const OverviewTab = () => {
     }
   };
 
-  // Helper function: Filter historical data based on current filters
+  // Helper function: Use only API data (no historicalCenterData)
   const getFilteredHistoricalData = useMemo(() => {
-    let filtered = historicalCenterData;
-
-    // State filter (filter by state if we have partner/center filters)
-    if (filters.partnerId !== "all" || filters.centerId !== "all") {
-      // Get state from selected center or partner
-      const selectedCenter = filterOptions.centers.find(
-        (c) => c.id === filters.centerId,
-      );
-      if (selectedCenter && selectedCenter.state) {
-        filtered = filtered.filter(
-          (center) => center.state === selectedCenter.state,
-        );
-      }
-
-      // If center is selected, try to match by name
-      if (filters.centerId !== "all" && selectedCenter) {
-        filtered = filtered.filter((center) =>
-          center.centerName
-            .toLowerCase()
-            .includes(selectedCenter.name?.toLowerCase() || ""),
-        );
-      }
-    }
-
-    return filtered;
-  }, [filters.partnerId, filters.centerId, filterOptions.centers]);
+    // Return empty array since we're not using historicalCenterData anymore
+    return [];
+  }, []);
 
   // Helper function: Aggregate historical data by financial year
   const aggregateHistoricalStudents = useMemo(() => {
@@ -481,8 +533,68 @@ const OverviewTab = () => {
       .slice(0, 20);
   }, [getFilteredHistoricalData, filters.financialYear]);
 
-  // Merged stats (API + Historical)
-  // eslint-disable-next-line no-unused-vars
+  // Filter dashboard data based on financial year
+  const getFilteredDashboardData = useMemo(() => {
+    const year = filters.financialYear;
+
+    // Map financial year to calendar year
+    const yearMap = {
+      "2022-23": "2022",
+      "2023-24": "2023",
+      "2024-25": "2024",
+      "2025-26": "2025",
+    };
+
+    if (year === "all") {
+      // Sum all years
+      const allYears = ["2022", "2023", "2024", "2025"];
+      return {
+        total_students: allYears.reduce(
+          (sum, y) => sum + (dashboardData[y]?.total_students || 0),
+          0,
+        ),
+        india: allYears.reduce(
+          (sum, y) => sum + (dashboardData[y]?.india || 0),
+          0,
+        ),
+        greater_india: allYears.reduce(
+          (sum, y) => sum + (dashboardData[y]?.greater_india || 0),
+          0,
+        ),
+        nsi: allYears.reduce((sum, y) => sum + (dashboardData[y]?.nsi || 0), 0),
+        male: allYears.reduce(
+          (sum, y) => sum + (dashboardData[y]?.male || 0),
+          0,
+        ),
+        female: allYears.reduce(
+          (sum, y) => sum + (dashboardData[y]?.female || 0),
+          0,
+        ),
+        tot: allYears.reduce((sum, y) => sum + (dashboardData[y]?.tot || 0), 0),
+        employment: allYears.reduce(
+          (sum, y) => sum + (dashboardData[y]?.employment || 0),
+          0,
+        ),
+        monthly: null,
+      };
+    }
+
+    const calendarYear = yearMap[year];
+    return (
+      dashboardData[calendarYear] || {
+        total_students: 0,
+        india: 0,
+        greater_india: 0,
+        nsi: 0,
+        male: 0,
+        female: 0,
+        tot: 0,
+        monthly: null,
+      }
+    );
+  }, [filters.financialYear]);
+
+  // Merged stats (API + Historical) eslint-disable-next-line no-unused-vars
   const mergedStats = useMemo(() => {
     if (!stats) return null;
 
@@ -492,312 +604,9 @@ const OverviewTab = () => {
     };
   }, [stats, aggregateHistoricalStudents]);
 
-  // Merged analytics (API + Historical)
-  const mergedAnalytics = useMemo(() => {
-    if (!analytics) return null;
-
-    // Merge state distribution
-    const mergedStateData = [...(analytics.studentsByState || [])];
-    getHistoricalStateDistribution.forEach((historicalState) => {
-      const existingState = mergedStateData.find(
-        (s) => s.state === historicalState.state,
-      );
-      if (existingState) {
-        existingState.count += historicalState.count;
-      } else {
-        mergedStateData.push(historicalState);
-      }
-    });
-
-    // Merge top centers
-    const mergedCenterData = [...(analytics.topCenters || [])];
-    getHistoricalTopCenters.forEach((historicalCenter) => {
-      const existingCenter = mergedCenterData.find(
-        (c) => c.centerName === historicalCenter.centerName,
-      );
-      if (existingCenter) {
-        existingCenter.studentCount += historicalCenter.studentCount;
-      } else {
-        mergedCenterData.push(historicalCenter);
-      }
-    });
-
-    // Sort and limit top centers to 20
-    mergedCenterData.sort((a, b) => b.studentCount - a.studentCount);
-    const topMergedCenters = mergedCenterData.slice(0, 20);
-
-    // Merge partner breakdown (match JSON centers to database partners)
-    const mergedPartnerData = [...(analytics.partnerBreakdown || [])];
-
-    // Create center-to-partner mapping from filterOptions
-    const centerToPartnerMap = {};
-    filterOptions.centers.forEach((center) => {
-      if (center.id && center.partner_id && center.center_name) {
-        centerToPartnerMap[center.id] = {
-          partner_id: center.partner_id,
-          partner_name: center.partner_name,
-          center_name: center.center_name.toLowerCase().trim(),
-        };
-      }
-    });
-
-    // DEBUG: Log database centers (run once to see what we're matching against)
-    if (
-      filterOptions.centers.length > 0 &&
-      Object.keys(centerToPartnerMap).length > 0
-    ) {
-      console.log(
-        "🗂️ DEBUG: Database has",
-        Object.keys(centerToPartnerMap).length,
-        "centers",
-      );
-      console.log(
-        "Sample DB center names:",
-        Object.values(centerToPartnerMap)
-          .slice(0, 10)
-          .map((c) => c.center_name),
-      );
-    }
-
-    // Aggregate historical students by partner
-    const historicalPartnerMap = {};
-    const unmatchedCenters = []; // Track unmatched centers for admin review
-
-    getFilteredHistoricalData.forEach((jsonCenter) => {
-      // Try to match JSON center to database center
-      const jsonName = jsonCenter.centerName.toLowerCase().trim();
-      const jsonLocation = (jsonCenter.location || "").toLowerCase().trim();
-
-      let matchedPartner = null;
-      let bestMatchScore = 0;
-
-      // Enhanced city-based matching algorithm
-      // Extract city name from location (first part before comma)
-      const locationParts = jsonLocation
-        .split(",")
-        .map((p) => p.trim())
-        .filter((p) => p.length > 0);
-      const cityName = locationParts[0] || ""; // First part is usually the city
-
-      for (const [centerId, centerInfo] of Object.entries(centerToPartnerMap)) {
-        const dbName = centerInfo.center_name;
-        let matchScore = 0;
-
-        // Priority 1: Exact match (center name + city)
-        if (jsonName === dbName) {
-          matchScore = 100;
-        }
-        // Priority 2: Center name matches AND city appears in DB name
-        // Example: "Dalmia Bharat Foundation" + "Rajgangpur" → "Dalmia Bharat Foundation Rajgangpur"
-        else if (cityName && dbName.includes(cityName)) {
-          // Filter out common words for better matching
-          const commonWords = [
-            "foundation",
-            "university",
-            "college",
-            "institute",
-            "school",
-            "centre",
-            "center",
-            "training",
-          ];
-          const centerNameWords = jsonName
-            .split(/\s+/)
-            .filter(
-              (w) => w.length > 3 && !commonWords.includes(w.toLowerCase()),
-            );
-          const dbNameLower = dbName.toLowerCase();
-          const matchingWords = centerNameWords.filter((w) =>
-            dbNameLower.includes(w),
-          );
-
-          if (matchingWords.length >= 2) {
-            // Both center name and city match - high confidence
-            matchScore = 95;
-          } else if (matchingWords.length >= 1) {
-            // City + at least one word from center name
-            matchScore = 85;
-          } else {
-            // Just city name matches
-            matchScore = 70; // Lowered from 75 for more lenient matching
-          }
-        }
-        // Priority 3: Bidirectional contains (center name)
-        else if (jsonName.includes(dbName) || dbName.includes(jsonName)) {
-          matchScore = 75; // Lowered from 80
-        }
-        // Priority 4: Check for alternate city names and partial word matches
-        else if (locationParts.length > 0) {
-          const locationWords = locationParts.flatMap((part) =>
-            part.split(/\s+/).filter((w) => w.length > 3),
-          );
-          const dbNameLower = dbName.toLowerCase();
-          const matchingLocationWords = locationWords.filter((w) =>
-            dbNameLower.includes(w),
-          );
-
-          if (matchingLocationWords.length > 0) {
-            // Filter common words from center name
-            const commonWords = [
-              "foundation",
-              "university",
-              "college",
-              "institute",
-              "school",
-              "centre",
-              "center",
-              "training",
-            ];
-            const centerNameWords = jsonName
-              .split(/\s+/)
-              .filter(
-                (w) => w.length > 3 && !commonWords.includes(w.toLowerCase()),
-              );
-            const matchingCenterWords = centerNameWords.filter((w) =>
-              dbNameLower.includes(w),
-            );
-
-            if (matchingCenterWords.length >= 1) {
-              // Location word + center name word match
-              matchScore = 65; // Lowered from 70
-            } else {
-              // Just location word matches
-              matchScore = 55; // Lowered from 60
-            }
-          }
-        }
-
-        // Keep best match (threshold lowered from 60 to 50 for more lenient matching)
-        if (matchScore >= 50 && matchScore > bestMatchScore) {
-          bestMatchScore = matchScore;
-          matchedPartner = {
-            partner_id: centerInfo.partner_id,
-            partner_name: centerInfo.partner_name,
-            match_score: matchScore,
-            matched_city: cityName, // Store for debugging
-          };
-        }
-      }
-
-      // If matched, aggregate students by partner
-      if (matchedPartner) {
-        const partnerId = matchedPartner.partner_id;
-        if (!historicalPartnerMap[partnerId]) {
-          historicalPartnerMap[partnerId] = {
-            partner_id: partnerId,
-            partner_name: matchedPartner.partner_name,
-            total_students: 0,
-          };
-        }
-
-        // Add students based on financial year filter
-        if (filters.financialYear === "all") {
-          historicalPartnerMap[partnerId].total_students +=
-            (jsonCenter.students_2022_23 || 0) +
-            (jsonCenter.students_2023_24 || 0) +
-            (jsonCenter.students_2024_25 || 0);
-        } else if (filters.financialYear === "2022-23") {
-          historicalPartnerMap[partnerId].total_students +=
-            jsonCenter.students_2022_23 || 0;
-        } else if (filters.financialYear === "2023-24") {
-          historicalPartnerMap[partnerId].total_students +=
-            jsonCenter.students_2023_24 || 0;
-        } else if (filters.financialYear === "2024-25") {
-          historicalPartnerMap[partnerId].total_students +=
-            jsonCenter.students_2024_25 || 0;
-        }
-      } else {
-        // Track unmatched centers for admin review
-        const totalStudents =
-          (jsonCenter.students_2022_23 || 0) +
-          (jsonCenter.students_2023_24 || 0) +
-          (jsonCenter.students_2024_25 || 0);
-
-        if (totalStudents > 0) {
-          // Extract city for debugging
-          const locationParts = jsonLocation
-            .split(",")
-            .map((p) => p.trim())
-            .filter((p) => p.length > 0);
-          const cityName = locationParts[0] || "Unknown";
-
-          unmatchedCenters.push({
-            centerName: jsonCenter.centerName,
-            extractedCity: cityName,
-            fullLocation: jsonCenter.location,
-            state: jsonCenter.state,
-            totalStudents: totalStudents,
-            suggestion: `${jsonCenter.centerName} ${cityName}`, // Suggested DB center name
-          });
-        }
-      }
-    });
-
-    // Return matching results for useEffect logging
-    window.__matchingResults = {
-      unmatchedCenters,
-      historicalPartnerMap,
-      totalCenters: getFilteredHistoricalData.length,
-      matchedCount: getFilteredHistoricalData.length - unmatchedCenters.length,
-      dbCentersCount: Object.keys(centerToPartnerMap).length,
-    };
-
-    // Merge historical partner data with API partner data (ADDITION)
-    Object.values(historicalPartnerMap).forEach((historicalPartner) => {
-      const existingPartner = mergedPartnerData.find(
-        (p) => p.partner_id === historicalPartner.partner_id,
-      );
-      if (existingPartner) {
-        // Add JSON students to API students (ADDITION formula)
-        existingPartner.total_students =
-          (parseInt(existingPartner.total_students) || 0) +
-          (historicalPartner.total_students || 0);
-      } else {
-        // Add as new partner with only historical data (no gender breakdown)
-        mergedPartnerData.push({
-          partner_id: historicalPartner.partner_id,
-          partner_name: historicalPartner.partner_name,
-          total_students: historicalPartner.total_students,
-          male_students: 0, // JSON has no gender data
-          female_students: 0, // JSON has no gender data
-          centers_count: 0, // Can't determine from JSON
-        });
-      }
-    });
-
-    // Sort partners by total students and limit to top 10
-    mergedPartnerData.sort(
-      (a, b) =>
-        (parseInt(b.total_students) || 0) - (parseInt(a.total_students) || 0),
-    );
-    const topMergedPartners = mergedPartnerData.slice(0, 10);
-
-    // Merge center breakdown with historical data
-    const mergedCenterBreakdown = mergeCenterData(
-      historicalCenterData,
-      analytics.centerBreakdown || [],
-      filters.financialYear
-    );
-
-    return {
-      ...analytics,
-      studentsByState: mergedStateData,
-      topCenters: topMergedCenters,
-      partnerBreakdown: topMergedPartners,
-      centerBreakdown: mergedCenterBreakdown,
-    };
-  }, [
-    analytics,
-    getHistoricalStateDistribution,
-    getHistoricalTopCenters,
-    getFilteredHistoricalData,
-    filterOptions.centers,
-    filters.financialYear,
-  ]);
-
   // Log matching results ONCE (prevents console spam)
   useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
+    if (import.meta.env.MODE !== "development") return;
 
     // Wait for results to be available
     const results = window.__matchingResults;
@@ -907,12 +716,13 @@ const OverviewTab = () => {
                 Financial year-wise filtering with partner and center breakdowns
               </p>
             </div>
-            {/* Filters Only (No Search Bar) */}
+            {/* Filters with Search Bar */}
             <div className="mb-6">
               <AdvancedSearchBar
-                value=""
-                onChange={undefined}
-                placeholder=""
+                value={filters.searchQuery}
+                onChange={(value) => handleFilterChange("searchQuery", value)}
+                placeholder="Search centers, partners, or locations..."
+                suggestions={searchSuggestions}
                 filterGroups={[
                   {
                     label: "Financial Year",
@@ -922,6 +732,7 @@ const OverviewTab = () => {
                       { value: "2022-23", label: "FY 2022-23" },
                       { value: "2023-24", label: "FY 2023-24" },
                       { value: "2024-25", label: "FY 2024-25" },
+                      { value: "2025-26", label: "FY 2025-26" },
                       ...(Array.isArray(analytics?.availableYears)
                         ? analytics.availableYears
                             .filter(
@@ -1008,45 +819,125 @@ const OverviewTab = () => {
             {analytics && !analyticsLoading && !analyticsError && (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-                  <StatCard
-                    title="Total Students"
-                    value={mergedStats?.total_students || 0}
-                    trend="up"
-                    graphData={
-                      Array.isArray(analytics.yearlyTrend) &&
-                      analytics.yearlyTrend.length > 0
-                        ? analytics.yearlyTrend.map((year) => ({
-                            value:
-                              parseInt(year.male_students || 0) +
-                              parseInt(year.female_students || 0),
-                          }))
-                        : dummyGraphData
-                    }
-                  />
+                  <StudentBreakdownTooltip
+                    breakdown={{
+                      india:
+                        (analytics.summary?.india || 0) +
+                        (getFilteredDashboardData.india || 0),
+                      greater_india:
+                        (analytics.summary?.greater_india || 0) +
+                        (getFilteredDashboardData.greater_india || 0),
+                      nsi:
+                        (analytics.summary?.nsi || 0) +
+                        (getFilteredDashboardData.nsi || 0),
+                      total:
+                        (analytics.summary?.total_students || 0) +
+                        (getFilteredDashboardData.total_students || 0),
+                    }}
+                  >
+                    <StatCard
+                      title="Total Students"
+                      value={
+                        (analytics.summary?.total_students || 0) +
+                        (getFilteredDashboardData.total_students || 0)
+                      }
+                      trend="up"
+                      graphData={
+                        filters.financialYear === "2025-26" &&
+                        dashboardData["2025"]?.monthly
+                          ? Object.values(dashboardData["2025"].monthly).map(
+                              (month) => ({
+                                value: (month.male || 0) + (month.female || 0),
+                              }),
+                            )
+                          : filters.financialYear === "all"
+                            ? [
+                                {
+                                  value:
+                                    dashboardData["2022"]?.total_students || 0,
+                                },
+                                {
+                                  value:
+                                    dashboardData["2023"]?.total_students || 0,
+                                },
+                                {
+                                  value:
+                                    dashboardData["2024"]?.total_students || 0,
+                                },
+                                {
+                                  value:
+                                    dashboardData["2025"]?.total_students || 0,
+                                },
+                              ]
+                            : Array.isArray(analytics.yearlyTrend) &&
+                                analytics.yearlyTrend.length > 0
+                              ? analytics.yearlyTrend.map((year) => ({
+                                  value:
+                                    parseInt(year.male_students || 0) +
+                                    parseInt(year.female_students || 0),
+                                }))
+                              : dummyGraphData
+                      }
+                    />
+                  </StudentBreakdownTooltip>
                   <StatCard
                     title="Male Students"
-                    value={analytics.summary?.male_students || 0}
+                    value={
+                      (analytics.summary?.male_students || 0) +
+                      (getFilteredDashboardData.male || 0)
+                    }
                     trend="up"
                     graphData={
-                      Array.isArray(analytics.yearlyTrend) &&
-                      analytics.yearlyTrend.length > 0
-                        ? analytics.yearlyTrend.map((year) => ({
-                            value: parseInt(year.male_students || 0),
-                          }))
-                        : dummyGraphData
+                      filters.financialYear === "2025-26" &&
+                      dashboardData["2025"]?.monthly
+                        ? Object.values(dashboardData["2025"].monthly).map(
+                            (month) => ({
+                              value: month.male || 0,
+                            }),
+                          )
+                        : filters.financialYear === "all"
+                          ? [
+                              { value: dashboardData["2022"]?.male || 0 },
+                              { value: dashboardData["2023"]?.male || 0 },
+                              { value: dashboardData["2024"]?.male || 0 },
+                              { value: dashboardData["2025"]?.male || 0 },
+                            ]
+                          : Array.isArray(analytics.yearlyTrend) &&
+                              analytics.yearlyTrend.length > 0
+                            ? analytics.yearlyTrend.map((year) => ({
+                                value: parseInt(year.male_students || 0),
+                              }))
+                            : dummyGraphData
                     }
                   />
                   <StatCard
                     title="Female Students"
-                    value={analytics.summary?.female_students || 0}
+                    value={
+                      (analytics.summary?.female_students || 0) +
+                      (getFilteredDashboardData.female || 0)
+                    }
                     trend="up"
                     graphData={
-                      Array.isArray(analytics.yearlyTrend) &&
-                      analytics.yearlyTrend.length > 0
-                        ? analytics.yearlyTrend.map((year) => ({
-                            value: parseInt(year.female_students || 0),
-                          }))
-                        : dummyGraphData
+                      filters.financialYear === "2025-26" &&
+                      dashboardData["2025"]?.monthly
+                        ? Object.values(dashboardData["2025"].monthly).map(
+                            (month) => ({
+                              value: month.female || 0,
+                            }),
+                          )
+                        : filters.financialYear === "all"
+                          ? [
+                              { value: dashboardData["2022"]?.female || 0 },
+                              { value: dashboardData["2023"]?.female || 0 },
+                              { value: dashboardData["2024"]?.female || 0 },
+                              { value: dashboardData["2025"]?.female || 0 },
+                            ]
+                          : Array.isArray(analytics.yearlyTrend) &&
+                              analytics.yearlyTrend.length > 0
+                            ? analytics.yearlyTrend.map((year) => ({
+                                value: parseInt(year.female_students || 0),
+                              }))
+                            : dummyGraphData
                     }
                   />
                   <StatCard
@@ -1054,12 +945,40 @@ const OverviewTab = () => {
                     value={analytics.summary?.total_partners || 0}
                     trend="up"
                     graphData={
-                      Array.isArray(analytics.partnerBreakdown) &&
-                      analytics.partnerBreakdown.length > 0
-                        ? analytics.partnerBreakdown.map((partner) => ({
-                            value: parseInt(partner.total_students || 0),
-                          }))
-                        : dummyGraphData
+                      filters.financialYear === "2025-26" &&
+                      dashboardData["2025"]?.monthly
+                        ? Object.values(dashboardData["2025"].monthly).map(
+                            (month) => ({
+                              value: (month.male || 0) + (month.female || 0),
+                            }),
+                          )
+                        : filters.financialYear === "all"
+                          ? [
+                              {
+                                value:
+                                  dashboardData["2022"]?.total_students || 0,
+                              },
+                              {
+                                value:
+                                  dashboardData["2023"]?.total_students || 0,
+                              },
+                              {
+                                value:
+                                  dashboardData["2024"]?.total_students || 0,
+                              },
+                              {
+                                value:
+                                  dashboardData["2025"]?.total_students || 0,
+                              },
+                            ]
+                          : Array.isArray(analytics.partnerBreakdown) &&
+                              analytics.partnerBreakdown.length > 0
+                            ? analytics.partnerBreakdown
+                                .slice(0, 6)
+                                .map((partner) => ({
+                                  value: parseInt(partner.total_students || 0),
+                                }))
+                            : dummyGraphData
                     }
                   />
                   <StatCard
@@ -1067,27 +986,90 @@ const OverviewTab = () => {
                     value={analytics.summary?.total_centers || 0}
                     trend="up"
                     graphData={
-                      Array.isArray(analytics.centerBreakdown) &&
-                      analytics.centerBreakdown.length > 0
-                        ? analytics.centerBreakdown
-                            .slice(0, 6)
-                            .map((center) => ({
-                              value: parseInt(center.total_students || 0),
-                            }))
-                        : dummyGraphData
+                      filters.financialYear === "2025-26" &&
+                      dashboardData["2025"]?.monthly
+                        ? Object.values(dashboardData["2025"].monthly).map(
+                            (month) => ({
+                              value: (month.male || 0) + (month.female || 0),
+                            }),
+                          )
+                        : filters.financialYear === "all"
+                          ? [
+                              {
+                                value:
+                                  dashboardData["2022"]?.total_students || 0,
+                              },
+                              {
+                                value:
+                                  dashboardData["2023"]?.total_students || 0,
+                              },
+                              {
+                                value:
+                                  dashboardData["2024"]?.total_students || 0,
+                              },
+                              {
+                                value:
+                                  dashboardData["2025"]?.total_students || 0,
+                              },
+                            ]
+                          : Array.isArray(analytics.centerBreakdown) &&
+                              analytics.centerBreakdown.length > 0
+                            ? analytics.centerBreakdown
+                                .slice(0, 6)
+                                .map((center) => ({
+                                  value: parseInt(center.total_students || 0),
+                                }))
+                            : dummyGraphData
+                    }
+                  />
+                  <StatCard
+                    title="Total Trainers (TOT)"
+                    value={
+                      (analytics.summary?.tot || 0) +
+                      (getFilteredDashboardData.tot || 0)
+                    }
+                    trend="up"
+                    graphData={
+                      filters.financialYear === "2025-26" &&
+                      dashboardData["2025"]?.monthly
+                        ? Object.values(dashboardData["2025"].monthly).map(
+                            (month) => ({
+                              value: month.tot || 0,
+                            }),
+                          )
+                        : filters.financialYear === "all"
+                          ? [
+                              { value: dashboardData["2022"]?.tot || 0 },
+                              { value: dashboardData["2023"]?.tot || 0 },
+                              { value: dashboardData["2024"]?.tot || 0 },
+                              { value: dashboardData["2025"]?.tot || 0 },
+                            ]
+                          : dummyGraphData
                     }
                   />
                   <StatCard
                     title="Total Employments"
-                    value={analytics.summary?.total_employments || 0}
+                    value={
+                      (analytics.summary?.employment || 0) +
+                      (getFilteredDashboardData.employment || 0)
+                    }
                     trend="up"
                     graphData={
-                      Array.isArray(analytics.yearlyTrend) &&
-                      analytics.yearlyTrend.length > 0
-                        ? analytics.yearlyTrend.map((year) => ({
-                            value: parseInt(year.total_employments || 0),
-                          }))
-                        : dummyGraphData
+                      filters.financialYear === "2025-26" &&
+                      dashboardData["2025"]?.monthly
+                        ? Object.values(dashboardData["2025"].monthly).map(
+                            (month) => ({
+                              value: month.employment || 0,
+                            }),
+                          )
+                        : filters.financialYear === "all"
+                          ? [
+                              { value: dashboardData["2022"]?.employment || 0 },
+                              { value: dashboardData["2023"]?.employment || 0 },
+                              { value: dashboardData["2024"]?.employment || 0 },
+                              { value: dashboardData["2025"]?.employment || 0 },
+                            ]
+                          : dummyGraphData
                     }
                   />
                 </div>
@@ -1099,29 +1081,53 @@ const OverviewTab = () => {
                     <h3 className="text-lg font-semibold text-gray-800 mb-4">
                       Gender Distribution
                     </h3>
-                    {Array.isArray(analytics.genderDistribution) &&
-                    analytics.genderDistribution.length > 0 ? (
-                      <div className="flex items-center gap-8">
-                        {/* Donut Chart */}
-                        <div className="flex-1">
-                          <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                              <Pie
-                                data={analytics.genderDistribution}
-                                dataKey="count"
-                                nameKey="gender"
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={80}
-                                outerRadius={120}
-                                paddingAngle={2}
-                                label={({ percent }) =>
-                                  `${(percent * 100).toFixed(0)}%`
-                                }
-                                labelLine={false}
-                              >
-                                {analytics.genderDistribution.map(
-                                  (entry, index) => (
+                    {(() => {
+                      // Combine API data + dashboardData.json
+                      const maleFromAPI =
+                        analytics.genderDistribution?.find(
+                          (g) => g.gender === "Male",
+                        )?.count || 0;
+                      const femaleFromAPI =
+                        analytics.genderDistribution?.find(
+                          (g) => g.gender === "Female",
+                        )?.count || 0;
+                      const maleFromDashboard =
+                        getFilteredDashboardData.male || 0;
+                      const femaleFromDashboard =
+                        getFilteredDashboardData.female || 0;
+
+                      const combinedGenderData = [
+                        {
+                          gender: "Male",
+                          count: maleFromAPI + maleFromDashboard,
+                        },
+                        {
+                          gender: "Female",
+                          count: femaleFromAPI + femaleFromDashboard,
+                        },
+                      ];
+
+                      return combinedGenderData.some((g) => g.count > 0) ? (
+                        <div className="flex items-center gap-8">
+                          {/* Donut Chart */}
+                          <div className="flex-1">
+                            <ResponsiveContainer width="100%" height={300}>
+                              <PieChart>
+                                <Pie
+                                  data={combinedGenderData}
+                                  dataKey="count"
+                                  nameKey="gender"
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={80}
+                                  outerRadius={120}
+                                  paddingAngle={2}
+                                  label={({ percent }) =>
+                                    `${(percent * 100).toFixed(0)}%`
+                                  }
+                                  labelLine={false}
+                                >
+                                  {combinedGenderData.map((entry, index) => (
                                     <Cell
                                       key={`cell-${index}`}
                                       fill={
@@ -1130,74 +1136,74 @@ const OverviewTab = () => {
                                           : "#FF7400"
                                       }
                                     />
-                                  ),
-                                )}
-                              </Pie>
-                              <Tooltip />
-                            </PieChart>
-                          </ResponsiveContainer>
+                                  ))}
+                                </Pie>
+                                <Tooltip />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Stats Panel */}
+                          <div className="flex-shrink-0 w-64 space-y-4">
+                            <div className="bg-white rounded-xl p-4 border border-gray-100">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                                  <UserIcon className="w-6 h-6 text-blue-500" />
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-600 font-medium">
+                                    Female students
+                                  </p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    {combinedGenderData.find(
+                                      (g) => g.gender === "Female",
+                                    )?.count || 0}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-white rounded-xl p-4 border border-gray-100">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                                  <UserIcon className="w-6 h-6 text-red-500" />
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-600 font-medium">
+                                    Male students
+                                  </p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    {combinedGenderData.find(
+                                      (g) => g.gender === "Male",
+                                    )?.count || 0}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-white rounded-xl p-4 border border-gray-100">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                  <UserGroupIcon className="w-6 h-6 text-gray-700" />
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-600 font-medium">
+                                    Total Students
+                                  </p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    {analytics.summary?.total_students || 0}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-
-                        {/* Stats Panel */}
-                        <div className="flex-shrink-0 w-64 space-y-4">
-                          <div className="bg-white rounded-xl p-4 border border-gray-100">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                <UserIcon className="w-6 h-6 text-blue-500" />
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-600 font-medium">
-                                  Female students
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                  {analytics.genderDistribution.find(
-                                    (g) => g.gender === "Female",
-                                  )?.count || 0}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="bg-white rounded-xl p-4 border border-gray-100">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
-                                <UserIcon className="w-6 h-6 text-red-500" />
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-600 font-medium">
-                                  Male students
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                  {analytics.genderDistribution.find(
-                                    (g) => g.gender === "Male",
-                                  )?.count || 0}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="bg-white rounded-xl p-4 border border-gray-100">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                <UserGroupIcon className="w-6 h-6 text-gray-700" />
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-600 font-medium">
-                                  Total Students
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                  {analytics.summary?.total_students || 0}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-[300px] text-gray-400">
+                          No gender data available
                         </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-[300px] text-gray-400">
-                        No gender data available
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
 
                   {/* Yearly Trend Bar Chart */}
@@ -1206,55 +1212,99 @@ const OverviewTab = () => {
                       <CardTitle className="text-lg">Year-wise Trend</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      {Array.isArray(analytics.yearlyTrend) &&
-                      analytics.yearlyTrend.length > 0 ? (
-                        <ChartContainer
-                          config={{
-                            male_students: {
-                              label: "Male",
-                              color: "#FF7400",
-                            },
-                            female_students: {
-                              label: "Female",
-                              color: "#017FC5",
-                            },
-                          }}
-                          className="h-[300px] w-full"
-                        >
-                          <BarChart
-                            data={analytics.yearlyTrend}
-                            accessibilityLayer
+                      {(() => {
+                        // Combine API yearlyTrend + dashboardData.json yearly data
+                        const apiYears = analytics.yearlyTrend || [];
+                        const dashboardYears = ["2022", "2023", "2024", "2025"];
+
+                        // Create a map of financial years from API data
+                        const yearMap = {};
+                        apiYears.forEach((year) => {
+                          yearMap[year.financial_year] = {
+                            financial_year: year.financial_year,
+                            male_students: parseInt(year.male_students || 0),
+                            female_students: parseInt(
+                              year.female_students || 0,
+                            ),
+                          };
+                        });
+
+                        // Add/merge dashboardData.json data
+                        dashboardYears.forEach((year) => {
+                          const dashYear = dashboardData[year];
+                          if (dashYear) {
+                            const financialYear = `${year}-${parseInt(year) + 1}`;
+                            if (yearMap[financialYear]) {
+                              // Merge with existing
+                              yearMap[financialYear].male_students +=
+                                dashYear.male || 0;
+                              yearMap[financialYear].female_students +=
+                                dashYear.female || 0;
+                            } else {
+                              // Add new year
+                              yearMap[financialYear] = {
+                                financial_year: financialYear,
+                                male_students: dashYear.male || 0,
+                                female_students: dashYear.female || 0,
+                              };
+                            }
+                          }
+                        });
+
+                        const combinedYearlyData = Object.values(yearMap).sort(
+                          (a, b) =>
+                            a.financial_year.localeCompare(b.financial_year),
+                        );
+
+                        return combinedYearlyData.length > 0 ? (
+                          <ChartContainer
+                            config={{
+                              male_students: {
+                                label: "Male",
+                                color: "#FF7400",
+                              },
+                              female_students: {
+                                label: "Female",
+                                color: "#017FC5",
+                              },
+                            }}
+                            className="h-[300px] w-full"
                           >
-                            <CartesianGrid vertical={false} />
-                            <XAxis
-                              dataKey="financial_year"
-                              tickLine={false}
-                              tickMargin={10}
-                              axisLine={false}
-                            />
-                            <ChartTooltip
-                              content={<ChartTooltipContent hideLabel />}
-                            />
-                            <ChartLegend content={<ChartLegendContent />} />
-                            <Bar
-                              dataKey="female_students"
-                              stackId="a"
-                              fill="var(--color-female_students)"
-                              radius={[0, 0, 4, 4]}
-                            />
-                            <Bar
-                              dataKey="male_students"
-                              stackId="a"
-                              fill="var(--color-male_students)"
-                              radius={[4, 4, 0, 0]}
-                            />
-                          </BarChart>
-                        </ChartContainer>
-                      ) : (
-                        <div className="flex items-center justify-center h-[300px] text-gray-400">
-                          No yearly trend data available
-                        </div>
-                      )}
+                            <BarChart
+                              data={combinedYearlyData}
+                              accessibilityLayer
+                            >
+                              <CartesianGrid vertical={false} />
+                              <XAxis
+                                dataKey="financial_year"
+                                tickLine={false}
+                                tickMargin={10}
+                                axisLine={false}
+                              />
+                              <ChartTooltip
+                                content={<ChartTooltipContent hideLabel />}
+                              />
+                              <ChartLegend content={<ChartLegendContent />} />
+                              <Bar
+                                dataKey="female_students"
+                                stackId="a"
+                                fill="var(--color-female_students)"
+                                radius={[0, 0, 4, 4]}
+                              />
+                              <Bar
+                                dataKey="male_students"
+                                stackId="a"
+                                fill="var(--color-male_students)"
+                                radius={[4, 4, 0, 0]}
+                              />
+                            </BarChart>
+                          </ChartContainer>
+                        ) : (
+                          <div className="flex items-center justify-center h-[300px] text-gray-400">
+                            No yearly trend data available
+                          </div>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 </div>
@@ -1286,30 +1336,32 @@ const OverviewTab = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {Array.isArray(mergedAnalytics?.partnerBreakdown) &&
-                        mergedAnalytics.partnerBreakdown.length > 0 ? (
-                          mergedAnalytics.partnerBreakdown.map((partner) => (
-                            <tr
-                              key={partner.partner_id}
-                              className="hover:bg-gray-50"
-                            >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {partner.partner_name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {partner.total_students}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {partner.male_students}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {partner.female_students}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {partner.centers_count}
-                              </td>
-                            </tr>
-                          ))
+                        {Array.isArray(analytics?.partnerBreakdown) &&
+                        analytics.partnerBreakdown.length > 0 ? (
+                          analytics.partnerBreakdown
+                            .slice(0, 10)
+                            .map((partner) => (
+                              <tr
+                                key={partner.partner_id}
+                                className="hover:bg-gray-50"
+                              >
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {partner.partner_name}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {partner.total_students}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                  {partner.male_students}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                  {partner.female_students}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                  {partner.centers_count}
+                                </td>
+                              </tr>
+                            ))
                         ) : (
                           <tr>
                             <td
@@ -1328,7 +1380,7 @@ const OverviewTab = () => {
                 {/* Center-wise Breakdown Table */}
                 <div className="bg-white rounded-lg p-6 shadow-sm">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    Center-wise Breakdown (Top 20)
+                    Center-wise Breakdown
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -1339,9 +1391,6 @@ const OverviewTab = () => {
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Partner
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Location
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Total Students
@@ -1355,9 +1404,9 @@ const OverviewTab = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {Array.isArray(mergedAnalytics?.centerBreakdown) &&
-                        mergedAnalytics.centerBreakdown.length > 0 ? (
-                          mergedAnalytics.centerBreakdown.map((center) => (
+                        {Array.isArray(analytics?.centerBreakdown) &&
+                        analytics.centerBreakdown.length > 0 ? (
+                          analytics.centerBreakdown.map((center) => (
                             <tr
                               key={center.center_id}
                               className="hover:bg-gray-50"
@@ -1367,9 +1416,6 @@ const OverviewTab = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {center.partner_name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {center.city}, {center.state}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {center.total_students}
@@ -1385,7 +1431,7 @@ const OverviewTab = () => {
                         ) : (
                           <tr>
                             <td
-                              colSpan="6"
+                              colSpan="5"
                               className="px-6 py-8 text-center text-gray-400"
                             >
                               No center data available

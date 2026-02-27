@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks";
 import { getMenuItemsByRole } from "../../constants";
+import refurbishmentService from "../../services/refurbishment.service";
 import { Logo } from "../common";
 import { cn } from "../../utils/cn";
 import {
@@ -23,6 +24,24 @@ const Sidebar = () => {
 
   // Get menu items based on user role
   const menuItems = getMenuItemsByRole(role);
+
+  // Unread refurbishment alert count for sidebar badge
+  const [refurbishmentBadgeCount, setRefurbishmentBadgeCount] = useState(0);
+
+  useEffect(() => {
+    if (role !== "ADMIN" && role !== "SUPER_ADMIN") return;
+    let active = true;
+    const fetchCount = async () => {
+      const count = await refurbishmentService.getAlertsUnreadCount();
+      if (active) setRefurbishmentBadgeCount(count);
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000); // refresh every 30s
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [role]);
 
   /**
    * Check if route is active
@@ -79,7 +98,7 @@ const Sidebar = () => {
           // Mobile
           "lg:static lg:translate-x-0",
           "fixed top-0 left-0",
-          isMobileOpen ? "translate-x-0 w-54" : "-translate-x-full w-54"
+          isMobileOpen ? "translate-x-0 w-54" : "-translate-x-full w-54",
         )}
       >
         {/* Sidebar Header */}
@@ -112,7 +131,7 @@ const Sidebar = () => {
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2.5 transition-colors border-r-2 border-r-transparent",
                           "hover:border-r-2 hover:border-r-gray-300",
-                          submenuHasActive && "border-r-2 border-[#000000]"
+                          submenuHasActive && "border-r-2 border-[#000000]",
                         )}
                       >
                         <Icon className="p-2 h-9 w-9 flex-shrink-0 text-black bg-[#D9D9D9] rounded-full" />
@@ -139,7 +158,7 @@ const Sidebar = () => {
                                   className={cn(
                                     "block px-3 py-2 text-sm text-black rounded-md transition-colors",
                                     "hover:bg-[#F3F4F6]",
-                                    subActive && "bg-[#E5E7EB] font-medium"
+                                    subActive && "bg-[#E5E7EB] font-medium",
                                   )}
                                 >
                                   {subItem.name}
@@ -159,7 +178,7 @@ const Sidebar = () => {
                         "flex items-center gap-3 px-3 py-2.5 transition-colors border-r-2 border-r-transparent",
                         "hover:border-r-2 hover:border-r-gray-300",
                         active &&
-                          "border-r-2 border-[#000000] bg-[#3DCD58]/10 text-[#009530]"
+                          "border-r-2 border-[#000000] bg-[#3DCD58]/10 text-[#009530]",
                       )}
                     >
                       <Icon
@@ -167,17 +186,25 @@ const Sidebar = () => {
                           "p-2 h-9 w-9 flex-shrink-0 bg-[#D9D9D9] rounded-full",
                           active
                             ? "text-[#009530] bg-transparent"
-                            : "text-black"
+                            : "text-black",
                         )}
                       />
                       <span
                         className={cn(
-                          "text-sm",
-                          active ? "text-[#009530]" : "text-black"
+                          "text-sm flex-1",
+                          active ? "text-[#009530]" : "text-black",
                         )}
                       >
                         {item.name}
                       </span>
+                      {item.name === "Refurbishment" &&
+                        refurbishmentBadgeCount > 0 && (
+                          <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">
+                            {refurbishmentBadgeCount > 99
+                              ? "99+"
+                              : refurbishmentBadgeCount}
+                          </span>
+                        )}
                     </Link>
                   )}
                 </li>

@@ -11,7 +11,7 @@ describe('DashboardService', () => {
   describe('getPartnerDashboard', () => {
     it('should return partner dashboard statistics', async () => {
       const mockPartnerId = 'partner-123';
-      
+
       // Mock all database queries for partner dashboard
       db.query
         .mockResolvedValueOnce([[{ total: 5 }]]) // totalCenters
@@ -21,9 +21,18 @@ describe('DashboardService', () => {
         .mockResolvedValueOnce([[{ total: 8 }]]) // approvedUploads
         .mockResolvedValueOnce([[{ total: 1 }]]) // rejectedUploads
         .mockResolvedValueOnce([[{ total: 3 }]]) // activeRequests
-        .mockResolvedValueOnce([[ // recentUploads
-          { id: 'upload-1', file_name: 'test.csv', status: 'approved', created_at: new Date(), total_records: 50 }
-        ]])
+        .mockResolvedValueOnce([
+          [
+            // recentUploads
+            {
+              id: 'upload-1',
+              file_name: 'test.csv',
+              status: 'approved',
+              created_at: new Date(),
+              total_records: 50,
+            },
+          ],
+        ])
         .mockResolvedValueOnce([[{ total: 2 }]]); // refurbishmentEligibleCenters
 
       const result = await DashboardService.getPartnerDashboard(mockPartnerId);
@@ -46,14 +55,14 @@ describe('DashboardService', () => {
     it('should handle database errors', async () => {
       db.query.mockRejectedValueOnce(new Error('Database error'));
 
-      await expect(
-        DashboardService.getPartnerDashboard('partner-123')
-      ).rejects.toThrow('Failed to fetch partner dashboard data');
+      await expect(DashboardService.getPartnerDashboard('partner-123')).rejects.toThrow(
+        'Failed to fetch partner dashboard data'
+      );
     });
 
     it('should query with correct partner_id', async () => {
       const mockPartnerId = 'partner-456';
-      
+
       db.query
         .mockResolvedValueOnce([[{ total: 0 }]])
         .mockResolvedValueOnce([[{ total: 0 }]])
@@ -85,16 +94,25 @@ describe('DashboardService', () => {
         .mockResolvedValueOnce([[{ total: 5 }]]) // pendingUploads
         .mockResolvedValueOnce([[{ total: 10 }]]) // pendingRequests
         .mockResolvedValueOnce([[{ total: 15 }]]) // refurbishmentEligibleCenters
-        .mockResolvedValueOnce([[ // recentUploads
-          { id: 'upload-1', file_name: 'test.csv', status: 'pending', partner_name: 'Partner A' }
-        ]])
-        .mockResolvedValueOnce([[ // centersByRegion
-          { region: 'North', count: 30 },
-          { region: 'South', count: 40 }
-        ]])
-        .mockResolvedValueOnce([[ // centersByState
-          { state: 'Maharashtra', count: 25 }
-        ]]);
+        .mockResolvedValueOnce([
+          [
+            // recentUploads
+            { id: 'upload-1', file_name: 'test.csv', status: 'pending', partner_name: 'Partner A' },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            // centersByRegion
+            { region: 'North', count: 30 },
+            { region: 'South', count: 40 },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            // centersByState
+            { state: 'Maharashtra', count: 25 },
+          ],
+        ]);
 
       const result = await DashboardService.getAdminDashboard();
 
@@ -117,9 +135,9 @@ describe('DashboardService', () => {
     it('should handle database errors', async () => {
       db.query.mockRejectedValueOnce(new Error('Database error'));
 
-      await expect(
-        DashboardService.getAdminDashboard()
-      ).rejects.toThrow('Failed to fetch admin dashboard data');
+      await expect(DashboardService.getAdminDashboard()).rejects.toThrow(
+        'Failed to fetch admin dashboard data'
+      );
     });
 
     it('should include partner names in recent uploads', async () => {
@@ -131,9 +149,12 @@ describe('DashboardService', () => {
         .mockResolvedValueOnce([[{ total: 0 }]])
         .mockResolvedValueOnce([[{ total: 0 }]])
         .mockResolvedValueOnce([[{ total: 0 }]])
-        .mockResolvedValueOnce([[ // recentUploads
-          { id: 'upload-1', partner_name: 'Test Partner' }
-        ]])
+        .mockResolvedValueOnce([
+          [
+            // recentUploads
+            { id: 'upload-1', partner_name: 'Test Partner' },
+          ],
+        ])
         .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([[]]);
 
@@ -150,19 +171,31 @@ describe('DashboardService', () => {
         .mockResolvedValueOnce([[{ total: 25 }]]) // totalPartners
         .mockResolvedValueOnce([[{ total: 200 }]]) // totalBatches
         .mockResolvedValueOnce([[{ total: 5000 }]]) // totalStudents
-        .mockResolvedValueOnce([[ // centersByRegion
-          { region: 'North', count: 30 }
-        ]])
-        .mockResolvedValueOnce([[ // centersByState
-          { state: 'Maharashtra', count: 25 }
-        ]])
-        .mockResolvedValueOnce([[ // centersByType
-          { center_type: 'Short Term', count: 50 }
-        ]])
+        .mockResolvedValueOnce([
+          [
+            // centersByRegion
+            { region: 'North', count: 30 },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            // centersByState
+            { state: 'Maharashtra', count: 25 },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            // centersByType
+            { center_type: 'Short Term', count: 50 },
+          ],
+        ])
         .mockResolvedValueOnce([[{ male: 3000, female: 2000 }]]) // genderDistribution
-        .mockResolvedValueOnce([[ // batchesByYear
-          { year: 2025, count: 50 }
-        ]]);
+        .mockResolvedValueOnce([
+          [
+            // batchesByYear
+            { year: 2025, count: 50 },
+          ],
+        ]);
 
       const result = await DashboardService.getSEIFDashboard();
 
@@ -274,9 +307,9 @@ describe('DashboardService', () => {
     it('should handle database errors', async () => {
       db.query.mockRejectedValueOnce(new Error('Database error'));
 
-      await expect(
-        DashboardService.getSEIFDashboard()
-      ).rejects.toThrow('Failed to fetch SEIF dashboard data');
+      await expect(DashboardService.getSEIFDashboard()).rejects.toThrow(
+        'Failed to fetch SEIF dashboard data'
+      );
     });
 
     it('should handle null gender distribution gracefully', async () => {

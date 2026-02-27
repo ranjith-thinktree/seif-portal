@@ -97,8 +97,12 @@ class AuthService {
    * @returns {Object} User object with tokens
    */
   static async login(email, password) {
+    console.log('🟡 Service login called:', email);
+
     // Find user by email
+    console.log('🟡 Finding user...');
     const user = await UserModel.findByEmail(email);
+    console.log('🟡 User found:', !!user);
 
     if (!user) {
       // More specific error for non-existent email
@@ -121,7 +125,9 @@ class AuthService {
     }
 
     // Verify password
+    console.log('🟡 Comparing passwords...');
     const isPasswordValid = await this.comparePassword(password, user.password_hash);
+    console.log('🟡 Password valid:', isPasswordValid);
 
     if (!isPasswordValid) {
       // More helpful error for wrong password
@@ -256,10 +262,13 @@ class AuthService {
    * @returns {Object} Success message
    */
   static async changePassword(userId, currentPassword, newPassword) {
+    console.log('[AUTH_SERVICE] changePassword called for userId:', userId);
     // Get user with password hash
     const user = await UserModel.findById(userId);
+    console.log('[AUTH_SERVICE] User found:', user ? 'YES' : 'NO');
 
     if (!user) {
+      console.log('[AUTH_SERVICE] User not found, throwing error');
       throw new NotFoundError('User not found');
     }
 
@@ -271,9 +280,12 @@ class AuthService {
     }
 
     // Verify current password
+    console.log('[AUTH_SERVICE] Verifying current password');
     const isPasswordValid = await this.comparePassword(currentPassword, user.password_hash);
+    console.log('[AUTH_SERVICE] Password valid:', isPasswordValid);
 
     if (!isPasswordValid) {
+      console.log('[AUTH_SERVICE] Current password incorrect');
       throw new AuthenticationError('Current password is incorrect. Please try again.');
     }
 
@@ -293,7 +305,9 @@ class AuthService {
     }
 
     // Get password history (last 3 passwords)
+    console.log('[AUTH_SERVICE] Getting password history');
     const passwordHistory = await UserModel.getPasswordHistory(userId, 3);
+    console.log('[AUTH_SERVICE] Password history entries:', passwordHistory.length);
 
     // Check if new password matches any recent passwords
     for (const historyEntry of passwordHistory) {
@@ -309,13 +323,19 @@ class AuthService {
     }
 
     // Hash new password
+    console.log('[AUTH_SERVICE] Hashing new password');
     const newPasswordHash = await this.hashPassword(newPassword);
+    console.log('[AUTH_SERVICE] Password hashed successfully');
 
     // Add current password to history before updating
+    console.log('[AUTH_SERVICE] Adding password to history');
     await UserModel.addPasswordToHistory(userId, user.password_hash);
+    console.log('[AUTH_SERVICE] Password added to history');
 
     // Update password and related fields
+    console.log('[AUTH_SERVICE] Updating password in database');
     await UserModel.updatePassword(userId, newPasswordHash);
+    console.log('[AUTH_SERVICE] Password updated successfully');
 
     return {
       message: 'Password changed successfully. Please login again with your new password.',

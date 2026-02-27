@@ -323,10 +323,9 @@ class UserService {
       LEFT JOIN partners p ON u.partner_id = p.id
       ${whereSQL}
       ORDER BY u.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
     `;
-    const queryParams = [...params, parseInt(limit), parseInt(offset)];
-    const [users] = await db.query(dataSQL, queryParams);
+    const [users] = await db.query(dataSQL, params);
 
     return { users, total, page, limit };
   }

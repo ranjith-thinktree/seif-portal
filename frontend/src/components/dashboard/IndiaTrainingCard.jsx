@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
 } from "@heroicons/react/24/outline";
 import IndiaMap from "./IndiaMap";
+import * as dataService from "../../services/data.service";
 
 /**
  * State code mapping for @react-map/india package
@@ -59,7 +60,7 @@ const IndiaMapComponent = ({ stateStats, selectedStateCode, onStateHover }) => {
 
   const statesWithData = React.useMemo(
     () => Object.keys(stateStats).filter((code) => stateStats[code]?.hasData),
-    [stateStats]
+    [stateStats],
   );
 
   // Calculate colors for each state
@@ -71,12 +72,16 @@ const IndiaMapComponent = ({ stateStats, selectedStateCode, onStateHover }) => {
       const hasData = statesWithData.includes(code);
 
       if (isHovered) {
-        if (isSelected) colors[code] = "#CC7100"; // Darker orange
-        else if (hasData) colors[code] = "#E5C560"; // Darker gold
+        if (isSelected)
+          colors[code] = "#CC7100"; // Darker orange
+        else if (hasData)
+          colors[code] = "#E5C560"; // Darker gold
         else colors[code] = "#D0D0D0"; // Darker grey
       } else {
-        if (isSelected) colors[code] = "#E47F00"; // Orange
-        else if (hasData) colors[code] = "#FFD978"; // Gold
+        if (isSelected)
+          colors[code] = "#E47F00"; // Orange
+        else if (hasData)
+          colors[code] = "#FFD978"; // Gold
         else colors[code] = "#E7E7E7"; // Grey
       }
     });
@@ -131,16 +136,16 @@ const StatItem = ({ icon: IconComponent, label, value }) => {
 
 /**
  * India Training Overview Card
+ * @param {string} selectedYear - The currently selected year ('all' or year number)
+ * @param {boolean} showOnlyCounts - If true, show only count statistics
  */
-const IndiaTrainingCard = () => {
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+const IndiaTrainingCard = ({
+  selectedYear = "all",
+  showOnlyCounts = false,
+}) => {
   const [hoveredStateCode, setHoveredStateCode] = useState("KA"); // Active state on hover, default Karnataka
   const [stateStats, setStateStats] = useState({});
   const [isLoading, setIsLoading] = useState(true);
-
-  // Generate year options (last 5 years)
-  const currentYear = new Date().getFullYear();
-  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   /**
    * Fetch state statistics from API
@@ -149,12 +154,21 @@ const IndiaTrainingCard = () => {
     const fetchStateStats = async () => {
       setIsLoading(true);
       try {
-        // TODO: Replace with actual API endpoint
-        // const response = await fetch(`/api/dashboard/state-stats?year=${selectedYear}`);
-        // const data = await response.json();
-        // setStateStats(data.stateStats);
+        // Fetch real data from backend API
+        const response = await dataService.getStateStats(selectedYear);
+        const data = response?.data || response;
 
-        // Mock data for demonstration
+        console.log("🗺️ Raw State Stats Response:", response);
+        console.log("🗺️ Processed State Stats:", data);
+        console.log("🗺️ State Stats Type:", typeof data);
+        console.log("🗺️ Number of States:", Object.keys(data || {}).length);
+
+        // Set state statistics from API
+        setStateStats(data);
+
+        console.log("✅ State Stats Set Successfully");
+
+        /* DEPRECATED: Mock data replaced with real API
         const mockData = {
           OD: {
             name: "Odisha",
@@ -382,27 +396,30 @@ const IndiaTrainingCard = () => {
             hasData: false,
           },
         };
-
         setStateStats(mockData);
+        */
 
         // Set first state with data as active if current hover state has no data
-        if (!mockData[hoveredStateCode]?.hasData) {
-          const firstStateWithData = Object.keys(mockData).find(
-            (code) => mockData[code].hasData
+        if (data && !data[hoveredStateCode]?.hasData) {
+          const firstStateWithData = Object.keys(data).find(
+            (code) => data[code].hasData,
           );
           if (firstStateWithData) {
             setHoveredStateCode(firstStateWithData);
+            console.log("🗺️ First state with data:", firstStateWithData);
           }
         }
       } catch (error) {
-        console.error("Error fetching state stats:", error);
+        console.error("❌ Error fetching state stats:", error);
+        console.error("❌ Error details:", error.message);
+        setStateStats({}); // Set empty object on error
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchStateStats();
-  }, [selectedYear, hoveredStateCode]);
+  }, [selectedYear]);
 
   /**
    * TODO: Real-time updates via WebSocket/SSE
@@ -475,23 +492,6 @@ const IndiaTrainingCard = () => {
         </div>
         {/* Stats Panel (Right - 1/3) */}
         <div className="lg:col-span-1 h-fit">
-          {/* Year Dropdown - Top Right */}
-          <div className="absolute top-6 right-6 z-10">
-            <div className="relative inline-block min-w-[220px]">
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="appearance-none w-full bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors cursor-pointer"
-              >
-                {yearOptions.map((year) => (
-                  <option key={year} value={year}>
-                    Calendar Year (CY) {year}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-gray-500" />
-            </div>
-          </div>
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             {/* State Name */}
             <h3 className="text-2xl font-bold text-gray-900 mb-6">
@@ -505,28 +505,50 @@ const IndiaTrainingCard = () => {
             )}
 
             {/* Stats List */}
-            <div className="space-y-5">
-              <StatItem
-                icon={BuildingOfficeIcon}
-                label="No. of centers"
-                value={selectedState.centers}
-              />
-              <StatItem
-                icon={AcademicCapIcon}
-                label="Trainers"
-                value={selectedState.trainers}
-              />
-              <StatItem
-                icon={UserGroupIcon}
-                label="Trainees"
-                value={selectedState.trainees}
-              />
-              <StatItem
-                icon={UsersIcon}
-                label="Female Trainees"
-                value={selectedState.femaleTrainees}
-              />
-            </div>
+            {showOnlyCounts ? (
+              /* Simplified view - only show counts */
+              <div className="space-y-5">
+                <StatItem
+                  icon={BuildingOfficeIcon}
+                  label="No. of centers"
+                  value={selectedState.centers}
+                />
+                <StatItem
+                  icon={AcademicCapIcon}
+                  label="Trainers"
+                  value={selectedState.trainers}
+                />
+                <StatItem
+                  icon={UserGroupIcon}
+                  label="Trainees"
+                  value={selectedState.trainees}
+                />
+              </div>
+            ) : (
+              /* Full view - show all stats including female trainees */
+              <div className="space-y-5">
+                <StatItem
+                  icon={BuildingOfficeIcon}
+                  label="No. of centers"
+                  value={selectedState.centers}
+                />
+                <StatItem
+                  icon={AcademicCapIcon}
+                  label="Trainers"
+                  value={selectedState.trainers}
+                />
+                <StatItem
+                  icon={UserGroupIcon}
+                  label="Trainees"
+                  value={selectedState.trainees}
+                />
+                <StatItem
+                  icon={UsersIcon}
+                  label="Female Trainees"
+                  value={selectedState.femaleTrainees}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

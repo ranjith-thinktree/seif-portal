@@ -23,7 +23,7 @@ const AppInitializer = ({ children }) => {
         console.log("🔐 Initializing authentication...");
         await dispatch(verifyTokenOnMount()).unwrap();
         console.log("✅ Authentication initialized successfully");
-      } catch (error) {
+      } catch (_error) {
         console.log("ℹ️ No valid session found");
         // Error is handled by authSlice, continue loading app
       } finally {

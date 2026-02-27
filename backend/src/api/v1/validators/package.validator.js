@@ -23,18 +23,7 @@ const packageValidators = {
       .isLength({ max: 1000 })
       .withMessage('Description cannot exceed 1000 characters'),
 
-    body('category')
-      .notEmpty()
-      .withMessage('Category is required')
-      .isIn(['electrical', 'equipment', 'furniture', 'infrastructure'])
-      .withMessage(
-        'Category must be one of: electrical, equipment, furniture, infrastructure'
-      ),
-
-    body('is_active')
-      .optional()
-      .isBoolean()
-      .withMessage('is_active must be a boolean'),
+    body('is_active').optional().isBoolean().withMessage('is_active must be a boolean'),
 
     body('display_order')
       .optional()
@@ -65,17 +54,7 @@ const packageValidators = {
       .isLength({ max: 1000 })
       .withMessage('Description cannot exceed 1000 characters'),
 
-    body('category')
-      .optional()
-      .isIn(['electrical', 'equipment', 'furniture', 'infrastructure'])
-      .withMessage(
-        'Category must be one of: electrical, equipment, furniture, infrastructure'
-      ),
-
-    body('is_active')
-      .optional()
-      .isBoolean()
-      .withMessage('is_active must be a boolean'),
+    body('is_active').optional().isBoolean().withMessage('is_active must be a boolean'),
 
     body('display_order')
       .optional()
@@ -99,13 +78,6 @@ const packageValidators = {
    * Validation for listing packages with filters
    */
   listPackages: [
-    query('category')
-      .optional()
-      .isIn(['electrical', 'equipment', 'furniture', 'infrastructure'])
-      .withMessage(
-        'Category must be one of: electrical, equipment, furniture, infrastructure'
-      ),
-
     query('is_active')
       .optional()
       .isIn(['true', 'false'])

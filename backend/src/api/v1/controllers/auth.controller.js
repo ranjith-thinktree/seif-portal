@@ -14,6 +14,7 @@ class AuthController {
    */
   static async login(req, res, next) {
     try {
+      console.log('🟢 Controller login called:', req.body.email);
       const { email, password } = req.body;
 
       const result = await AuthService.login(email, password);
@@ -126,25 +127,32 @@ class AuthController {
    */
   static async changePassword(req, res, next) {
     try {
+      console.log('[AUTH_CONTROLLER] changePassword called');
       const userId = req.user.id;
       const { currentPassword, newPassword, confirmPassword } = req.body;
+      console.log('[AUTH_CONTROLLER] userId:', userId);
 
       // Validate required fields
       if (!currentPassword || !newPassword || !confirmPassword) {
+        console.log('[AUTH_CONTROLLER] Missing required fields');
         return ApiResponse.error(
           res,
           'Current password, new password, and confirm password are required',
           400
         );
       }
+      console.log('[AUTH_CONTROLLER] All fields present');
 
       // Check if new password and confirm password match
       if (newPassword !== confirmPassword) {
+        console.log('[AUTH_CONTROLLER] Passwords do not match');
         return ApiResponse.error(res, 'New password and confirm password do not match', 400);
       }
+      console.log('[AUTH_CONTROLLER] Passwords match, calling service');
 
       // Change password
       const result = await AuthService.changePassword(userId, currentPassword, newPassword);
+      console.log('[AUTH_CONTROLLER] Service call completed, result:', result);
 
       return ApiResponse.success(res, result, result.message, 200);
     } catch (error) {

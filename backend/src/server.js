@@ -33,6 +33,7 @@ const app = require('./app');
 const config = require('./config');
 const { testConnection, closePool } = require('./database/connection');
 const { initializeWebSocket } = require('./websocket/socket');
+const cronService = require('./services/cron.service');
 
 const PORT = config.server.port;
 // CI/CD Test - Automated deployment active
@@ -63,11 +64,17 @@ const startServer = async () => {
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
       console.log(`📡 API Base URL: http://localhost:${PORT}/api/${config.server.apiVersion}`);
       console.log('================================================');
+
+      // Start cron jobs for scheduled notifications
+      cronService.start();
     });
 
     // Graceful shutdown
     const gracefulShutdown = async (signal) => {
       console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+      // Stop cron jobs first
+      cronService.stop();
 
       // Stop accepting new connections
       server.close(async () => {

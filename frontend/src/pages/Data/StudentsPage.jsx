@@ -32,10 +32,10 @@ const StudentsPage = ({ embedded = false }) => {
   const [students, setStudents] = useState([]);
   const [table, setTable] = useState(null);
   const [centerName, setCenterName] = useState(
-    location.state?.centerName || ""
+    location.state?.centerName || "",
   );
   const [batchNumber, setBatchNumber] = useState(
-    location.state?.batchNumber || ""
+    location.state?.batchNumber || "",
   );
   const [pagination, setPagination] = useState({
     page: 1,
@@ -114,7 +114,7 @@ const StudentsPage = ({ embedded = false }) => {
           (params[key] === "" ||
             params[key] === null ||
             (Array.isArray(params[key]) && params[key].length === 0)) &&
-          delete params[key]
+          delete params[key],
       );
 
       const response = await getStudents(params);
@@ -165,7 +165,7 @@ const StudentsPage = ({ embedded = false }) => {
       // Show success toast if any deletions succeeded
       if (response.data.summary.successful > 0) {
         toast.success(
-          `Successfully deleted ${response.data.summary.successful} student(s)`
+          `Successfully deleted ${response.data.summary.successful} student(s)`,
         );
         fetchStudents(); // Refresh table
         setSelectedRows([]); // Clear selection
@@ -249,6 +249,11 @@ const StudentsPage = ({ embedded = false }) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
   };
 
+  // Handle page size change
+  const handlePageSizeChange = (newPageSize) => {
+    setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
+  };
+
   // Handle export
   const handleExport = async () => {
     try {
@@ -263,7 +268,7 @@ const StudentsPage = ({ embedded = false }) => {
       // Remove empty filters
       Object.keys(params).forEach(
         (key) =>
-          (params[key] === "" || params[key] === null) && delete params[key]
+          (params[key] === "" || params[key] === null) && delete params[key],
       );
 
       const blob = await exportStudents(params);
@@ -432,8 +437,8 @@ const StudentsPage = ({ embedded = false }) => {
               {batchId
                 ? "Back to Batches"
                 : role === "PARTNER"
-                ? "Back to Centers"
-                : "Back to Centers"}
+                  ? "Back to Centers"
+                  : "Back to Centers"}
             </Button>
           </div>
         )}
@@ -445,19 +450,19 @@ const StudentsPage = ({ embedded = false }) => {
               {batchNumber
                 ? `${batchNumber} - Students`
                 : centerName
-                ? `${centerName} - Students`
-                : centerId
-                ? "Center Students"
-                : batchId
-                ? "Batch Students"
-                : "Students"}
+                  ? `${centerName} - Students`
+                  : centerId
+                    ? "Center Students"
+                    : batchId
+                      ? "Batch Students"
+                      : "Students"}
             </h1>
             <p className="text-gray-600 mt-1">
               {batchId
                 ? "View all students enrolled in this batch"
                 : centerId
-                ? "View all students enrolled in this center"
-                : "View all enrolled students across centers"}
+                  ? "View all students enrolled in this center"
+                  : "View all enrolled students across centers"}
             </p>
           </div>
         </div>
@@ -589,6 +594,7 @@ const StudentsPage = ({ embedded = false }) => {
           data={students}
           pagination={pagination}
           onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
           isLoading={isLoading}
           emptyMessage="No students found"
           showSerialNumber={true}

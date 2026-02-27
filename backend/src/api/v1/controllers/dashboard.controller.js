@@ -21,7 +21,7 @@ class DashboardController {
       }
 
       const dashboardData = await DashboardService.getPartnerDashboard(partnerId);
-      
+
       return ApiResponse.success(
         res,
         dashboardData,
@@ -40,12 +40,24 @@ class DashboardController {
   static async getAdminDashboard(req, res, next) {
     try {
       const dashboardData = await DashboardService.getAdminDashboard();
-      
-      return ApiResponse.success(
-        res,
-        dashboardData,
-        'Admin dashboard data retrieved successfully'
-      );
+
+      return ApiResponse.success(res, dashboardData, 'Admin dashboard data retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get state-wise statistics for India Map
+   * @route GET /api/v1/dashboard/state-stats
+   * @access Admin, Super Admin
+   */
+  static async getStateStats(req, res, next) {
+    try {
+      const { year } = req.query;
+      const stateStats = await DashboardService.getStateStats(year);
+
+      return ApiResponse.success(res, stateStats, 'State statistics retrieved successfully');
     } catch (error) {
       next(error);
     }
@@ -66,11 +78,49 @@ class DashboardController {
       if (year) filters.year = parseInt(year);
 
       const dashboardData = await DashboardService.getSEIFDashboard(filters);
-      
+
+      return ApiResponse.success(res, dashboardData, 'SEIF dashboard data retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get consolidated analytics for admin dashboard
+   * @route GET /api/v1/dashboard/analytics
+   * @access Admin, Super Admin
+   */
+  static async getConsolidatedAnalytics(req, res, next) {
+    try {
+      const { year } = req.query;
+
+      const dashboardData = await DashboardService.getConsolidatedAnalytics(year);
+
       return ApiResponse.success(
         res,
         dashboardData,
-        'SEIF dashboard data retrieved successfully'
+        'Consolidated analytics retrieved successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get centers grouped by year of establishment
+   * @route GET /api/v1/dashboard/centers-by-establishment
+   * @access Admin, Super Admin
+   */
+  static async getCentersByEstablishment(req, res, next) {
+    try {
+      const { year } = req.query;
+
+      const establishmentData = await DashboardService.getCentersByEstablishment(year);
+
+      return ApiResponse.success(
+        res,
+        establishmentData,
+        'Centers by establishment year retrieved successfully'
       );
     } catch (error) {
       next(error);

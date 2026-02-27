@@ -147,7 +147,8 @@ describe('RefurbishmentPackage Model', () => {
       const mockResult = {
         id: 'pkg-1',
         package_name: 'Test Package',
-        courses: '{"course_id":"c1","course_name":"Course 1"},{"course_id":"c2","course_name":"Course 2"}',
+        courses:
+          '{"course_id":"c1","course_name":"Course 1"},{"course_id":"c2","course_name":"Course 2"}',
       };
       db.query.mockResolvedValue([[mockResult]]);
 
@@ -188,10 +189,9 @@ describe('RefurbishmentPackage Model', () => {
       const result = await RefurbishmentPackage.findByName('Test Package');
 
       expect(result).toEqual(mockPackage);
-      expect(db.query).toHaveBeenCalledWith(
-        expect.stringContaining('WHERE package_name = ?'),
-        ['Test Package']
-      );
+      expect(db.query).toHaveBeenCalledWith(expect.stringContaining('WHERE package_name = ?'), [
+        'Test Package',
+      ]);
     });
 
     it('should return null when no match found', async () => {
@@ -206,7 +206,7 @@ describe('RefurbishmentPackage Model', () => {
   describe('create', () => {
     it('should create package with provided data', async () => {
       const mockPackage = { id: 'new-id', package_name: 'New Package', display_order: 999 };
-      
+
       db.query
         .mockResolvedValueOnce([{ insertId: 'new-id' }]) // INSERT
         .mockResolvedValueOnce([[mockPackage]]); // findById
@@ -228,7 +228,7 @@ describe('RefurbishmentPackage Model', () => {
 
     it('should use provided display_order if specified', async () => {
       const mockPackage = { id: 'new-id', package_name: 'New Package', display_order: 5 };
-      
+
       db.query
         .mockResolvedValueOnce([{ insertId: 'new-id' }])
         .mockResolvedValueOnce([[mockPackage]]);
@@ -245,7 +245,7 @@ describe('RefurbishmentPackage Model', () => {
 
     it('should default is_active to 1', async () => {
       const mockPackage = { id: 'new-id', is_active: 1 };
-      
+
       db.query
         .mockResolvedValueOnce([{ insertId: 'new-id' }])
         .mockResolvedValueOnce([[mockPackage]]);
@@ -259,7 +259,7 @@ describe('RefurbishmentPackage Model', () => {
   describe('update', () => {
     it('should update package fields', async () => {
       const mockUpdatedPackage = { id: 'pkg-1', package_name: 'Updated Name' };
-      
+
       db.query
         .mockResolvedValueOnce([{ affectedRows: 1 }]) // UPDATE
         .mockResolvedValueOnce([[mockUpdatedPackage]]); // findById
@@ -280,10 +280,8 @@ describe('RefurbishmentPackage Model', () => {
 
     it('should handle single field update', async () => {
       const mockPackage = { id: 'pkg-1', package_name: 'Test' };
-      
-      db.query
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([[mockPackage]]);
+
+      db.query.mockResolvedValueOnce([{ affectedRows: 1 }]).mockResolvedValueOnce([[mockPackage]]);
 
       await RefurbishmentPackage.update('pkg-1', { package_name: 'Updated' });
 
@@ -295,10 +293,8 @@ describe('RefurbishmentPackage Model', () => {
 
     it('should handle multiple field updates', async () => {
       const mockPackage = { id: 'pkg-1', package_name: 'Updated' };
-      
-      db.query
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([[mockPackage]]);
+
+      db.query.mockResolvedValueOnce([{ affectedRows: 1 }]).mockResolvedValueOnce([[mockPackage]]);
 
       const updates = {
         package_name: 'Updated',
@@ -360,9 +356,7 @@ describe('RefurbishmentPackage Model', () => {
     });
 
     it('should return true when package deleted', async () => {
-      db.query
-        .mockResolvedValueOnce([[{ count: 0 }]])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]);
+      db.query.mockResolvedValueOnce([[{ count: 0 }]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
 
       const result = await RefurbishmentPackage.hardDelete('pkg-1');
 
@@ -370,9 +364,7 @@ describe('RefurbishmentPackage Model', () => {
     });
 
     it('should return false when package not found', async () => {
-      db.query
-        .mockResolvedValueOnce([[{ count: 0 }]])
-        .mockResolvedValueOnce([{ affectedRows: 0 }]);
+      db.query.mockResolvedValueOnce([[{ count: 0 }]]).mockResolvedValueOnce([{ affectedRows: 0 }]);
 
       const result = await RefurbishmentPackage.hardDelete('non-existent');
 

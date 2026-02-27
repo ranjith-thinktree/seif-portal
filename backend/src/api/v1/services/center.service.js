@@ -144,7 +144,11 @@ class CenterService {
           (SELECT COUNT(*) FROM batches WHERE center_id = c.id) as total_batches,
           (SELECT COUNT(*) FROM students WHERE center_id = c.id) as total_students,
           (SELECT COUNT(*) FROM students WHERE center_id = c.id AND gender = 'Male') as total_male_students,
-          (SELECT COUNT(*) FROM students WHERE center_id = c.id AND gender = 'Female') as total_female_students
+          (SELECT COUNT(*) FROM students WHERE center_id = c.id AND gender = 'Female') as total_female_students,
+          (SELECT GROUP_CONCAT(cr.course_name ORDER BY cr.course_name SEPARATOR '||')
+           FROM center_courses cc
+           JOIN courses cr ON cr.id = cc.course_id
+           WHERE cc.center_id = c.id) as courses_offered_raw
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
         LEFT JOIN users u ON c.approved_by = u.id
@@ -154,8 +158,15 @@ class CenterService {
         queryParams
       );
 
+      // Transform courses_offered_raw string into an array
+      const centersWithCourses = centers.map((center) => ({
+        ...center,
+        courses_offered: center.courses_offered_raw ? center.courses_offered_raw.split('||') : [],
+        courses_offered_raw: undefined,
+      }));
+
       return {
-        data: centers,
+        data: centersWithCourses,
         pagination: {
           page: validPage,
           limit: validLimit,

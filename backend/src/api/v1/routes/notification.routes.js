@@ -24,6 +24,20 @@ router.get(
   notificationController.getUploadCenterDetails
 );
 
+// Get refurbishment notification details
+router.get(
+  '/:notificationId/refurbishment-details',
+  authenticate,
+  notificationController.getRefurbishmentDetails
+);
+
+// Submit refurbishment response
+router.post(
+  '/:notificationId/refurbishment-response',
+  authenticate,
+  notificationController.submitRefurbishmentResponse
+);
+
 // Get notification by ID
 router.get('/:id', authenticate, notificationController.getNotificationById);
 

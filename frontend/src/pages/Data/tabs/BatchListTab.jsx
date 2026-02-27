@@ -133,7 +133,7 @@ const BatchListTab = () => {
       // Show success toast if any deletions succeeded
       if (response.data.summary.successful > 0) {
         toast.success(
-          `Successfully deleted ${response.data.summary.successful} batch(es)`
+          `Successfully deleted ${response.data.summary.successful} batch(es)`,
         );
         fetchBatches(); // Refresh table
         setSelectedRows([]); // Clear selection
@@ -189,6 +189,10 @@ const BatchListTab = () => {
 
   const handlePageChange = (newPage) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
+  };
+
+  const handlePageSizeChange = (newPageSize) => {
+    setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
   };
 
   const handleExport = async () => {
@@ -487,6 +491,7 @@ const BatchListTab = () => {
         data={batches}
         pagination={pagination}
         onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
         onRowClick={(row) =>
           navigate(`/data/batches/${row.id}/students`, {
             state: { batchNumber: row.batch_number },

@@ -21,21 +21,30 @@ const {
  * @desc    Login user
  * @access  Public
  */
-router.post('/login', loginValidator, validate, AuthController.login);
+router.post(
+  '/login',
+  (req, res, next) => {
+    console.log('🔵 Login route hit:', req.body);
+    next();
+  },
+  loginValidator,
+  validate(),
+  AuthController.login
+);
 
 /**
  * @route   POST /api/v1/auth/register
  * @desc    Register new user
  * @access  Public (or can be protected for admin-only registration)
  */
-router.post('/register', registerValidator, validate, AuthController.register);
+router.post('/register', registerValidator, validate(), AuthController.register);
 
 /**
  * @route   POST /api/v1/auth/refresh
  * @desc    Refresh access token
  * @access  Public
  */
-router.post('/refresh', refreshTokenValidator, validate, AuthController.refreshToken);
+router.post('/refresh', refreshTokenValidator, validate(), AuthController.refreshToken);
 
 /**
  * @route   POST /api/v1/auth/logout
@@ -73,7 +82,7 @@ router.post(
   '/change-password',
   authenticate,
   changePasswordValidator,
-  validate,
+  validate(),
   AuthController.changePassword
 );
 

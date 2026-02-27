@@ -156,7 +156,7 @@ const CentersPage = ({ embedded = false }) => {
           (params[key] === "" ||
             params[key] === null ||
             (Array.isArray(params[key]) && params[key].length === 0)) &&
-          delete params[key]
+          delete params[key],
       );
 
       const response = await getCenters(params);
@@ -208,6 +208,11 @@ const CentersPage = ({ embedded = false }) => {
   // Handle page change
   const handlePageChange = (newPage) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
+  };
+
+  // Handle page size change
+  const handlePageSizeChange = (newPageSize) => {
+    setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
   };
 
   // Handle create center
@@ -288,7 +293,7 @@ const CentersPage = ({ embedded = false }) => {
       // Show success toast if any deletions succeeded
       if (response.data.summary.successful > 0) {
         toast.success(
-          `Successfully deleted ${response.data.summary.successful} center(s)`
+          `Successfully deleted ${response.data.summary.successful} center(s)`,
         );
         fetchCenters(); // Refresh table
         setSelectedRows([]); // Clear selection
@@ -424,7 +429,7 @@ const CentersPage = ({ embedded = false }) => {
 
   // Handle edit click
   const handleEditClick = (e, center) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     setEditingCenter(center);
     setShowForm(true);
   };
@@ -761,6 +766,7 @@ const CentersPage = ({ embedded = false }) => {
             data={centers}
             pagination={pagination}
             onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
             onRowClick={handleRowClick}
             isLoading={isLoading}
             emptyMessage="No centers found"

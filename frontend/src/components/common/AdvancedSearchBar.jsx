@@ -26,6 +26,7 @@ import ColumnVisibilityToggle from "./ColumnVisibilityToggle";
  * @param {array} actions - Array of action button objects: { label, onClick, variant, icon, disabled }
  * @param {object} table - TanStack table instance (optional, for column visibility)
  * @param {string} storageKey - Storage key for column visibility (optional)
+ * @param {array} suggestions - Array of suggestion objects: { value, label, type }
  */
 const AdvancedSearchBar = ({
   value,
@@ -42,12 +43,23 @@ const AdvancedSearchBar = ({
   actions = [],
   table,
   storageKey,
+  suggestions = [],
 }) => {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [filterSearchTerms, setFilterSearchTerms] = useState({});
   const filterRef = useRef(null);
+  const suggestionsRef = useRef(null);
+
+  // Filter suggestions based on search value
+  const filteredSuggestions = suggestions
+    .filter(
+      (suggestion) =>
+        value && suggestion.label.toLowerCase().includes(value.toLowerCase()),
+    )
+    .slice(0, 10); // Limit to 10 suggestions
   const sortRef = useRef(null);
 
   // Close dropdowns when clicking outside
@@ -141,7 +153,7 @@ const AdvancedSearchBar = ({
     if (!searchTerm) return group.options;
 
     return group.options.filter((option) =>
-      option.label.toLowerCase().includes(searchTerm)
+      option.label.toLowerCase().includes(searchTerm),
     );
   };
 
@@ -169,16 +181,48 @@ const AdvancedSearchBar = ({
 
   return (
     <div className="flex gap-3">
-      {/* Search Input */}
-      <div className="relative flex-1">
+      {/* Search Input with Autocomplete */}
+      <div className="relative flex-1" ref={suggestionsRef}>
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
         <input
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setShowSuggestions(true);
+          }}
+          onFocus={() => value && setShowSuggestions(true)}
           placeholder={placeholder}
           className="w-full h-10 pl-10 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
+
+        {/* Autocomplete Suggestions Dropdown */}
+        {showSuggestions && filteredSuggestions.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            {filteredSuggestions.map((suggestion, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  onChange(suggestion.value);
+                  setShowSuggestions(false);
+                }}
+                className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between group"
+              >
+                <div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {suggestion.label}
+                  </div>
+                  {suggestion.type && (
+                    <div className="text-xs text-gray-500 capitalize">
+                      {suggestion.type}
+                    </div>
+                  )}
+                </div>
+                <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Advanced Filter Dropdown */}
@@ -227,7 +271,7 @@ const AdvancedSearchBar = ({
                         <button
                           onClick={() =>
                             setExpandedGroup(
-                              expandedGroup === group.key ? null : group.key
+                              expandedGroup === group.key ? null : group.key,
                             )
                           }
                           className="flex-1 flex items-center justify-between"
@@ -296,13 +340,13 @@ const AdvancedSearchBar = ({
                                     checked={isOptionSelected(
                                       group.key,
                                       option.value,
-                                      group.multi
+                                      group.multi,
                                     )}
                                     onChange={() =>
                                       handleFilterSelect(
                                         group.key,
                                         option.value,
-                                        group.multi
+                                        group.multi,
                                       )
                                     }
                                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
@@ -394,17 +438,20 @@ const AdvancedSearchBar = ({
 
       {/* Action Buttons */}
       {actions.length > 0 &&
-        actions.map((action, index) => (
-          <button
-            key={index}
-            onClick={action.onClick}
-            disabled={action.disabled}
-            className={getActionButtonStyles(action.variant)}
-          >
-            {action.icon && <span className="h-5 w-5">{action.icon}</span>}
-            {action.label}
-          </button>
-        ))}
+        actions.map((action, index) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={index}
+              onClick={action.onClick}
+              disabled={action.disabled}
+              className={getActionButtonStyles(action.variant)}
+            >
+              {Icon && <Icon className="h-5 w-5" />}
+              {action.label}
+            </button>
+          );
+        })}
     </div>
   );
 };

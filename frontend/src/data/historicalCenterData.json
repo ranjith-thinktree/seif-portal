@@ -1,8 +1,9 @@
-[
+﻿[
   {
     "id": 1,
-    "centerName": "Centurian University Jatni",
-    "location": "Jatni",
+    "partnerName": "Centurian University",
+    "centerName": "Centurion University Jatni",
+    "location": "Jatni, Odisha",
     "state": "Odisha",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -16,8 +17,9 @@
   },
   {
     "id": 2,
-    "centerName": "Centurian University Jatni",
-    "location": "Jatni",
+    "partnerName": "Centurian University",
+    "centerName": "Centurion University Jatni Solar",
+    "location": "Jatni, Odisha",
     "state": "Odisha",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -27,12 +29,13 @@
     "students_2022_23": 65,
     "students_2023_24": 60,
     "students_2024_25": 70,
-    "city": "Jatni-solar"
+    "city": "Jatni"
   },
   {
     "id": 3,
-    "centerName": "Centurian University Balasore",
-    "location": "Balasore",
+    "partnerName": "Centurian University",
+    "centerName": "Centurion University Balasore",
+    "location": "Balasore, Odisha",
     "state": "Odisha",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -46,8 +49,9 @@
   },
   {
     "id": 4,
-    "centerName": "Centurian University Chatrrapur",
-    "location": "Chatrrapur",
+    "partnerName": "Centurian University",
+    "centerName": "Centurion University Chhatarpur",
+    "location": "Chhatarpur, Odisha",
     "state": "Odisha",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -57,12 +61,13 @@
     "students_2022_23": 70,
     "students_2023_24": 85,
     "students_2024_25": 97,
-    "city": "Chatrrapur"
+    "city": "Chhatarpur"
   },
   {
     "id": 5,
-    "centerName": "SRF Foundation BETP Gohad",
-    "location": "BETP Gohad",
+    "partnerName": "SRF Foundation",
+    "centerName": "BETP Gohad",
+    "location": "Gohad, Madhya Pradesh",
     "state": "Madhya Pradesh",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -72,12 +77,13 @@
     "students_2022_23": 89,
     "students_2023_24": 88,
     "students_2024_25": 90,
-    "city": "BETP Gohad"
+    "city": "Gohad"
   },
   {
     "id": 6,
-    "centerName": "SRF Foundation BETP Gummidipoondi",
-    "location": "BETP Gummidipoondi",
+    "partnerName": "SRF Foundation",
+    "centerName": "BETP Gummidipoondi",
+    "location": "Gummidipoondi, Tamil Nadu",
     "state": "Tamil Nadu",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -87,14 +93,15 @@
     "students_2022_23": 90,
     "students_2023_24": 90,
     "students_2024_25": 80,
-    "city": "BETP Gummidipoondi"
+    "city": "Gummidipoondi"
   },
   {
     "id": 7,
-    "centerName": "SSRDT Tihar Jail",
-    "location": "Tihar Jail",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Tihar Jail",
+    "location": "Tihar, Delhi",
     "state": "Delhi",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2012,
     "labs": "Electrician",
@@ -102,14 +109,15 @@
     "students_2022_23": 90,
     "students_2023_24": 95,
     "students_2024_25": 93,
-    "city": "Tihar Jail"
+    "city": "Tihar"
   },
   {
     "id": 8,
-    "centerName": "SSRDT Ranchi Jail",
-    "location": "Ranchi Jail",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Ranchi Jail",
+    "location": "Ranchi, Jharkhand",
     "state": "Jharkhand",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2012,
     "labs": "Electrician",
@@ -117,14 +125,15 @@
     "students_2022_23": 200,
     "students_2023_24": 210,
     "students_2024_25": 150,
-    "city": "Ranchi Jail"
+    "city": "Ranchi"
   },
   {
     "id": 9,
-    "centerName": "SSRDT SSKVK ( NITS ) Jammu",
-    "location": "SSKVK ( NITS ) Jammu",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Jammu",
+    "location": "Jammu, Jammu and Kashmir",
     "state": "Jammu and Kashmir",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2014,
     "labs": "Electrician",
@@ -132,14 +141,15 @@
     "students_2022_23": 180,
     "students_2023_24": 190,
     "students_2024_25": 230,
-    "city": "SSKVK ( NITS ) Jammu"
+    "city": "Jammu"
   },
   {
     "id": 10,
-    "centerName": "SSRDT SSKVK Rawanapara",
-    "location": "SSKVK Rawanapara",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Rawanapara",
+    "location": "Rawanapara, Assam",
     "state": "Assam",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2018,
     "labs": "Electrician",
@@ -147,14 +157,15 @@
     "students_2022_23": 100,
     "students_2023_24": 80,
     "students_2024_25": 113,
-    "city": "SSKVK Rawanapara"
+    "city": "Rawanapara"
   },
   {
     "id": 11,
-    "centerName": "SSRDT Pune Central Jail",
-    "location": "Pune Central Jail",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Pune Central Jail",
+    "location": "Pune, Maharashtra",
     "state": "Maharashtra",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2019,
     "labs": "Electrician",
@@ -162,14 +173,15 @@
     "students_2022_23": 100,
     "students_2023_24": 90,
     "students_2024_25": 97,
-    "city": "Pune Central Jail"
+    "city": "Pune"
   },
   {
     "id": 12,
-    "centerName": "SSRDT ITI Kajalgaon / Silchar",
-    "location": "ITI Kajalgaon / Silchar",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Kajalgaon",
+    "location": "Kajalgaon, Assam",
     "state": "Assam",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2018,
     "labs": "Electrician",
@@ -177,14 +189,15 @@
     "students_2022_23": 74,
     "students_2023_24": 100,
     "students_2024_25": 100,
-    "city": "ITI Kajalgaon / Silchar"
+    "city": "Kajalgaon"
   },
   {
     "id": 13,
-    "centerName": "SSRDT SSKVK Nagapattinum",
-    "location": "SSKVK Nagapattinum",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Nagapattinum",
+    "location": "Nagapattinum, Tamil Nadu",
     "state": "Tamil Nadu",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2015,
     "labs": "Electrician",
@@ -192,12 +205,13 @@
     "students_2022_23": 218,
     "students_2023_24": 222,
     "students_2024_25": 264,
-    "city": "SSKVK Nagapattinum"
+    "city": "Nagapattinum"
   },
   {
     "id": 14,
-    "centerName": "Ambuja Cement Foundation Bhatapara",
-    "location": "Bhatapara",
+    "partnerName": "Ambuja Cement Foundation",
+    "centerName": "SEDI Bhatapara",
+    "location": "Bhatapara, Chhattisgarh",
     "state": "Chhattisgarh",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -211,8 +225,9 @@
   },
   {
     "id": 15,
-    "centerName": "Ambuja Cement Foundation Bhatinda",
-    "location": "Bhatinda",
+    "partnerName": "Ambuja Cement Foundation",
+    "centerName": "SEDI Bhatinda",
+    "location": "Bhatinda, Punjab",
     "state": "Punjab",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -226,8 +241,9 @@
   },
   {
     "id": 16,
-    "centerName": "Ambuja Cement Foundation Bhagwanpur",
-    "location": "Bhagwanpur",
+    "partnerName": "Ambuja Cement Foundation",
+    "centerName": "SEDI Bhagwanpur",
+    "location": "Bhagwanpur, Uttarakhand",
     "state": "Uttarakhand",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -241,8 +257,9 @@
   },
   {
     "id": 17,
-    "centerName": "Ambuja Cement Foundation Farakka(Murshidabad)",
-    "location": "Farakka(Murshidabad)",
+    "partnerName": "Ambuja Cement Foundation",
+    "centerName": "SEDI Farakka",
+    "location": "Farakka, West Bengal",
     "state": "West Bengal",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -252,14 +269,15 @@
     "students_2022_23": 140,
     "students_2023_24": 120,
     "students_2024_25": 140,
-    "city": "Farakka(Murshidabad)"
+    "city": "Farakka"
   },
   {
     "id": 18,
-    "centerName": "GMR Varalakshmi Foundation Nagaram",
-    "location": "Nagaram",
+    "partnerName": "GMR Varalakshmi Foundation",
+    "centerName": "Nagaram",
+    "location": "Nagaram, Telangana",
     "state": "Telangana",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2017,
     "labs": "Electrician",
@@ -271,10 +289,11 @@
   },
   {
     "id": 19,
-    "centerName": "GMR Varalakshmi Foundation Raikal",
-    "location": "Raikal",
+    "partnerName": "GMR Varalakshmi Foundation",
+    "centerName": "Raikal",
+    "location": "Raikal, Telangana",
     "state": "Telangana",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2016,
     "labs": "Electrician",
@@ -286,10 +305,11 @@
   },
   {
     "id": 20,
-    "centerName": "GMR Varalakshmi Foundation Vizianagaram",
-    "location": "Vizianagaram",
+    "partnerName": "GMR Varalakshmi Foundation",
+    "centerName": "Vizianagaram",
+    "location": "Vizianagaram, Andhra Pradesh",
     "state": "Andhra Pradesh",
-    "refurbishmentType": "Refurbishment",
+    "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2015,
     "labs": "Electrician",
@@ -301,8 +321,9 @@
   },
   {
     "id": 21,
-    "centerName": "SSRDT SSKVK Tinsukia",
-    "location": "SSKVK Tinsukia",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Tinsukia ITI",
+    "location": "Tinsukia, Assam",
     "state": "Assam",
     "refurbishmentType": "Upgradation - Solar",
     "instituteType": "ITI",
@@ -312,12 +333,13 @@
     "students_2022_23": 110,
     "students_2023_24": 114,
     "students_2024_25": 112,
-    "city": "SSKVK Tinsukia"
+    "city": "Tinsukia"
   },
   {
     "id": 22,
-    "centerName": "SSRDT SSKVK Ghar Jamula",
-    "location": "SSKVK Ghar Jamula",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Ghar Jamula ITI",
+    "location": "Ghar Jamula, Himachal Pradesh",
     "state": "Himachal Pradesh",
     "refurbishmentType": "Upgradation - Solar",
     "instituteType": "ITI",
@@ -327,12 +349,13 @@
     "students_2022_23": 0,
     "students_2023_24": 178,
     "students_2024_25": 168,
-    "city": "SSKVK Ghar Jamula"
+    "city": "Ghar Jamula"
   },
   {
     "id": 23,
-    "centerName": "SSRDT ITI Gyalshing",
-    "location": "ITI Gyalshing",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT ITI Gyalshing",
+    "location": "Gyalshing, Sikkim",
     "state": "Sikkim",
     "refurbishmentType": "Upgradation - Solar",
     "instituteType": "ITI",
@@ -342,12 +365,13 @@
     "students_2022_23": 0,
     "students_2023_24": 109,
     "students_2024_25": 117,
-    "city": "ITI Gyalshing"
+    "city": "Gyalshing"
   },
   {
     "id": 24,
-    "centerName": "SSRDT Cuttack",
-    "location": "Cuttack",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Cuttack",
+    "location": "Cuttack, Odisha",
     "state": "Odisha",
     "refurbishmentType": "Upgradation - Automation",
     "instituteType": "Short term",
@@ -361,8 +385,9 @@
   },
   {
     "id": 25,
-    "centerName": "SSRDT Nashik Jail",
-    "location": "Nashik Jail",
+    "partnerName": "Sri Sri Rural Development Trust",
+    "centerName": "SSRDPT Nashik Jail",
+    "location": "Nashik, Maharashtra",
     "state": "Maharashtra",
     "refurbishmentType": "Upgradation - Solar",
     "instituteType": "Short term",
@@ -372,12 +397,13 @@
     "students_2022_23": 100,
     "students_2023_24": 120,
     "students_2024_25": 150,
-    "city": "Nashik Jail"
+    "city": "Nashik"
   },
   {
     "id": 26,
-    "centerName": "SRF Foundation Sanjay Nagar Gwalior",
-    "location": "Sanjay Nagar Gwalior",
+    "partnerName": "SRF Foundation",
+    "centerName": "BETP Sanjay Nagar Gwalior",
+    "location": "Sanjay Nagar Gwalior, Madhya Pradesh",
     "state": "Madhya Pradesh",
     "refurbishmentType": "Upgradation - Motor Starter",
     "instituteType": "Short term",
@@ -391,8 +417,9 @@
   },
   {
     "id": 27,
-    "centerName": "SRF Foundation Bengaluru",
-    "location": "Bengaluru",
+    "partnerName": "SRF Foundation",
+    "centerName": "BETP Bengaluru",
+    "location": "Bengaluru, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Upgradation - Motor Starter",
     "instituteType": "Short term",
@@ -406,8 +433,9 @@
   },
   {
     "id": 28,
-    "centerName": "Ambuja Cement Foundation Mathura",
-    "location": "Mathura",
+    "partnerName": "Ambuja Cement Foundation",
+    "centerName": "BETP Mathura",
+    "location": "Mathura, Uttar Pradesh",
     "state": "Uttar Pradesh",
     "refurbishmentType": "Upgradation - Solar",
     "instituteType": "Short term",
@@ -421,8 +449,9 @@
   },
   {
     "id": 29,
-    "centerName": "Ambuja Cement Foundation Sanand",
-    "location": "Sanand",
+    "partnerName": "Ambuja Cement Foundation",
+    "centerName": "BETP Sanand",
+    "location": "Sanand, Gujarat",
     "state": "Gujarat",
     "refurbishmentType": "Upgradation - Solar",
     "instituteType": "Short term",
@@ -436,8 +465,9 @@
   },
   {
     "id": 30,
-    "centerName": "Dalmia Bharath Foundation Belagavi",
-    "location": "Belagavi",
+    "partnerName": "Dalmia Bharat Foundation",
+    "centerName": "DIKSHa Belgaum",
+    "location": "Belgaum, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -447,12 +477,13 @@
     "students_2022_23": 97,
     "students_2023_24": 25,
     "students_2024_25": 115,
-    "city": "Belagavi"
+    "city": "Belgaum"
   },
   {
     "id": 31,
-    "centerName": "Dalmia Bharath Foundation Rajgangpur",
-    "location": "Rajgangpur",
+    "partnerName": "Dalmia Bharat Foundation",
+    "centerName": "DIKSHa Rajgangpur",
+    "location": "Rajgangpur, Odisha",
     "state": "Odisha",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -466,8 +497,9 @@
   },
   {
     "id": 32,
-    "centerName": "Dalmia Bharath Foundation Medinipur",
-    "location": "Medinipur",
+    "partnerName": "Dalmia Bharat Foundation",
+    "centerName": "DIKSHa Midnapore",
+    "location": "Midnapore, West Bengal",
     "state": "West Bengal",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -477,12 +509,13 @@
     "students_2022_23": 60,
     "students_2023_24": 52,
     "students_2024_25": 110,
-    "city": "Medinipur"
+    "city": "Midnapore"
   },
   {
     "id": 33,
-    "centerName": "TATA Strive TSSDC Aligarh",
-    "location": "TSSDC Aligarh",
+    "partnerName": "TATA Strive",
+    "centerName": "TSSDC Aligarh",
+    "location": "Aligarh, Uttar Pradesh",
     "state": "Uttar Pradesh",
     "refurbishmentType": "Refurbuishment & Upgradation",
     "instituteType": "Short term",
@@ -492,12 +525,13 @@
     "students_2022_23": 95,
     "students_2023_24": 95,
     "students_2024_25": 77,
-    "city": "TSSDC Aligarh"
+    "city": "Aligarh"
   },
   {
     "id": 34,
-    "centerName": "TATA Strive Extension Center",
-    "location": "TATA STRIVE Extension Center",
+    "partnerName": "TATA Strive",
+    "centerName": "TATA STRIVE Extension Center",
+    "location": "Hyderabad, Telangana",
     "state": "Telangana",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -507,12 +541,13 @@
     "students_2022_23": 63,
     "students_2023_24": 60,
     "students_2024_25": 53,
-    "city": "TATA STRIVE Extension Center"
+    "city": "Hyderabad"
   },
   {
     "id": 35,
-    "centerName": "TATA Strive TSSDC - Hyderabab",
-    "location": "TSSDC - Hyderabab",
+    "partnerName": "TATA Strive",
+    "centerName": "TSSDC Hyderabad",
+    "location": "Hyderabad, Telangana",
     "state": "Telangana",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -522,27 +557,29 @@
     "students_2022_23": 74,
     "students_2023_24": 59,
     "students_2024_25": 61,
-    "city": "TSSDC - Hyderabab"
+    "city": "Hyderabad"
   },
   {
     "id": 36,
-    "centerName": "TATA Strive TSEC _Chanderia",
-    "location": "TSEC _Chanderia",
+    "partnerName": "TATA Strive",
+    "centerName": "TSEC Chanderia",
+    "location": "Chanderia, Rajasthan",
     "state": "Rajasthan",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
     "yearEstablished": 2020,
     "labs": "Electrical & Solar",
-    "spaceAvailability": "Assistant Electrician - 300 Sq Feet Solar PV Installer - 300 Sq Feet",
+    "spaceAvailability": "Assistant Electrician - 300 Sq Feet, Solar PV Installer - 300 Sq Feet",
     "students_2022_23": 53,
     "students_2023_24": 72,
     "students_2024_25": 120,
-    "city": "TSEC _Chanderia"
+    "city": "Chanderia"
   },
   {
     "id": 37,
-    "centerName": "Dr. APJ ABDUL KALAM SKILL DEVELOPMENT TRAINING INSTITUTE",
-    "location": "Dr. APJ ABDUL KALAM SKILL DEVELOPMENT TRAINING INSTITUTE",
+    "partnerName": "APJ Swarna Bharath Trust",
+    "centerName": "APJ Swarna Bharath Trust Vijawada",
+    "location": "Vijawada, Andhra Pradesh",
     "state": "Andhra Pradesh",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -552,12 +589,13 @@
     "students_2022_23": 74,
     "students_2023_24": 97,
     "students_2024_25": 88,
-    "city": "Dr. APJ ABDUL KALAM SKILL DEVELOPMENT TRAINING INSTITUTE"
+    "city": "Vijawada"
   },
   {
     "id": 38,
-    "centerName": "Dr. APJ ABDUL KALAM SKILL DEVELOPMENT TRAINING INSTITUTE",
-    "location": "Dr. APJ ABDUL KALAM SKILL DEVELOPMENT TRAINING INSTITUTE",
+    "partnerName": "APJ Swarna Bharath Trust",
+    "centerName": "APJ Swarna Bharath Trust Vijawada Solar",
+    "location": "Vijawada, Andhra Pradesh",
     "state": "Andhra Pradesh",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -567,12 +605,13 @@
     "students_2022_23": 0,
     "students_2023_24": 84,
     "students_2024_25": 86,
-    "city": "Dr. APJ ABDUL KALAM SKILL DEVELOPMENT TRAINING INSTITUTE"
+    "city": "Vijawada"
   },
   {
     "id": 39,
+    "partnerName": "NAC Hyderabad",
     "centerName": "NAC Hyderabad Mahabubnagar",
-    "location": "Mahabubnagar",
+    "location": "Mahabubnagar, Telangana",
     "state": "Telangana",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -586,8 +625,9 @@
   },
   {
     "id": 40,
-    "centerName": "NAC Hyderabad NAC Nizamabad",
-    "location": "NAC Nizamabad",
+    "partnerName": "NAC Hyderabad",
+    "centerName": "NAC Hyderabad Nizamabad",
+    "location": "Nizamabad, Telangana",
     "state": "Telangana",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -597,12 +637,13 @@
     "students_2022_23": 30,
     "students_2023_24": 30,
     "students_2024_25": 50,
-    "city": "NAC Nizamabad"
+    "city": "Nizamabad"
   },
   {
     "id": 41,
+    "partnerName": "NAC Hyderabad",
     "centerName": "NAC Hyderabad",
-    "location": "NAC Hyderabad",
+    "location": "Hyderabad, Telangana",
     "state": "Telangana",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -612,12 +653,13 @@
     "students_2022_23": 100,
     "students_2023_24": 120,
     "students_2024_25": 120,
-    "city": "NAC HYD"
+    "city": "Hyderabad"
   },
   {
     "id": 42,
-    "centerName": "Dalmia Bharath Foundation Jharsuguda",
-    "location": "Jharsuguda",
+    "partnerName": "Dalmia Bharat Foundation",
+    "centerName": "Dalmia Bharat Foundation Jharsuguda",
+    "location": "Jharsuguda, Odisha",
     "state": "Odisha",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -631,8 +673,9 @@
   },
   {
     "id": 43,
-    "centerName": "PSG Polytechnic College",
-    "location": "PSG Polytechnic",
+    "partnerName": "PSG Polytechnic",
+    "centerName": "Coimbatore",
+    "location": "Coimbatore, Tamil Nadu",
     "state": "Tamil Nadu",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI & Polytechnic",
@@ -642,12 +685,13 @@
     "students_2022_23": 100,
     "students_2023_24": 105,
     "students_2024_25": 100,
-    "city": "PSG Polytechnic"
+    "city": "Coimbatore"
   },
   {
     "id": 44,
-    "centerName": "SDM ITI",
-    "location": "SDM Trust",
+    "partnerName": "SDM ITI",
+    "centerName": "Ujire",
+    "location": "Ujire, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI",
@@ -657,12 +701,13 @@
     "students_2022_23": 110,
     "students_2023_24": 120,
     "students_2024_25": 118,
-    "city": "SDM Trust"
+    "city": "Ujire"
   },
   {
     "id": 45,
+    "partnerName": "Govt ITI Hassan",
     "centerName": "Govt ITI Hassan",
-    "location": "Govt ITI Hassan",
+    "location": "Hassan, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "ITI",
@@ -672,12 +717,13 @@
     "students_2022_23": 100,
     "students_2023_24": 110,
     "students_2024_25": 95,
-    "city": "Govt ITI Hassan"
+    "city": "Hassan"
   },
   {
     "id": 46,
+    "partnerName": "Govt ITI Hubli",
     "centerName": "Govt ITI Hubli",
-    "location": "Govt ITI Hubli",
+    "location": "Hubli, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI",
@@ -687,12 +733,13 @@
     "students_2022_23": 184,
     "students_2023_24": 150,
     "students_2024_25": 160,
-    "city": "Govt ITI Hubli"
+    "city": "Hubli"
   },
   {
     "id": 47,
-    "centerName": "APSSDC",
-    "location": "APSSDC",
+    "partnerName": "APSSDC",
+    "centerName": "Ananthpur",
+    "location": "Ananthpur, Andhra Pradesh",
     "state": "Andhra Pradesh",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "ITI",
@@ -702,12 +749,13 @@
     "students_2022_23": 80,
     "students_2023_24": 85,
     "students_2024_25": 95,
-    "city": "APSSDC"
+    "city": "Ananthpur"
   },
   {
     "id": 48,
+    "partnerName": "GITI Hosur road",
     "centerName": "GITI Hosur road Women",
-    "location": "GITI Hosur road Women",
+    "location": "Hosur road, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI",
@@ -717,12 +765,13 @@
     "students_2022_23": 80,
     "students_2023_24": 90,
     "students_2024_25": 100,
-    "city": "GITI Hosur road Women"
+    "city": "Hosur road"
   },
   {
     "id": 49,
+    "partnerName": "GITI Mysore",
     "centerName": "GITI Mysore",
-    "location": "GITI Mysore",
+    "location": "Mysore, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI",
@@ -732,12 +781,13 @@
     "students_2022_23": 60,
     "students_2023_24": 85,
     "students_2024_25": 90,
-    "city": "GITI Mysore"
+    "city": "Mysore"
   },
   {
     "id": 50,
+    "partnerName": "Sri Sri Rural Development Trust",
     "centerName": "GITI Tarshali",
-    "location": "GITI Tarshali",
+    "location": "Tarshali, Gujarat",
     "state": "Gujarat",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI",
@@ -747,12 +797,13 @@
     "students_2022_23": 199,
     "students_2023_24": 210,
     "students_2024_25": 200,
-    "city": "GITI Tarshali"
+    "city": "Tarshali"
   },
   {
     "id": 51,
+    "partnerName": "GITI Ahmednagar",
     "centerName": "GITI Ahmednagar",
-    "location": "GITI Ahmednagar",
+    "location": "Ahmednagar, Maharashtra",
     "state": "Maharashtra",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI",
@@ -762,12 +813,13 @@
     "students_2022_23": 110,
     "students_2023_24": 115,
     "students_2024_25": 120,
-    "city": "GITI Ahmednagar"
+    "city": "Ahmednagar"
   },
   {
     "id": 52,
+    "partnerName": "Sri Sri Rural Development Trust",
     "centerName": "Govt ITI Waghodia",
-    "location": "Govt ITI Waghodia",
+    "location": "Waghodia, Gujarat",
     "state": "Gujarat",
     "refurbishmentType": "Upgradation",
     "instituteType": "ITI",
@@ -777,12 +829,13 @@
     "students_2022_23": 0,
     "students_2023_24": 0,
     "students_2024_25": 110,
-    "city": "Govt ITI Waghodia"
+    "city": "Waghodia"
   },
   {
     "id": 53,
-    "centerName": "Dalmia Bharath Foundation Bokaro",
-    "location": "Bokaro",
+    "partnerName": "Dalmia Bharat Foundation",
+    "centerName": "DIKSHa Bokaro",
+    "location": "Bokaro, Jharkhand",
     "state": "Jharkhand",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -796,8 +849,9 @@
   },
   {
     "id": 54,
-    "centerName": "Dalmia Bharath Foundation Jagiroad",
-    "location": "Jagiroad",
+    "partnerName": "Dalmia Bharat Foundation",
+    "centerName": "DIKSHa Jagiroad",
+    "location": "Jagiroad, Assam",
     "state": "Assam",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -811,23 +865,25 @@
   },
   {
     "id": 55,
-    "centerName": "TATA Strive TSSDC-Nashik",
-    "location": "TSSDC-Nashik",
+    "partnerName": "TATA Strive",
+    "centerName": "TSSDC Nashik",
+    "location": "Nashik, Maharashtra",
     "state": "Maharashtra",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
     "yearEstablished": 2019,
     "labs": "Electrical & Solar",
-    "spaceAvailability": "550 Sq 550 Sq Feet",
+    "spaceAvailability": "550 Sq, 550 Sq Feet",
     "students_2022_23": 23,
     "students_2023_24": 88,
     "students_2024_25": 77,
-    "city": "TSSDC-Nashik"
+    "city": "Nashik"
   },
   {
     "id": 56,
-    "centerName": "TATA Strive TSSDC-Pune",
-    "location": "TSSDC-Pune",
+    "partnerName": "TATA Strive",
+    "centerName": "TSSDC Pune",
+    "location": "Pune, Maharashtra",
     "state": "Maharashtra",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -837,12 +893,13 @@
     "students_2022_23": 8,
     "students_2023_24": 31,
     "students_2024_25": 0,
-    "city": "TSSDC-Pune"
+    "city": "Pune"
   },
   {
     "id": 57,
-    "centerName": "Indian Institute of Infrastructure & Construction",
-    "location": "Indian Institute of Infrastructure & Construction",
+    "partnerName": "IIIC",
+    "centerName": "Kollam",
+    "location": "Kollam, Kerala",
     "state": "Kerala",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -852,12 +909,13 @@
     "students_2022_23": 0,
     "students_2023_24": 70,
     "students_2024_25": 78,
-    "city": "Indian Institute of Infrastructure & Construction"
+    "city": "Kollam"
   },
   {
     "id": 58,
+    "partnerName": "Don Bosco Tech Society",
     "centerName": "Govt ITI Nand nagari",
-    "location": "Govt ITI Nand nagari",
+    "location": "Nand nagari, Delhi",
     "state": "Delhi",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -867,12 +925,13 @@
     "students_2022_23": 0,
     "students_2023_24": 100,
     "students_2024_25": 90,
-    "city": "Govt ITI Nand nagari"
+    "city": "Nand nagari"
   },
   {
     "id": 59,
+    "partnerName": "Don Bosco Tech Society",
     "centerName": "Govt ITI Narel",
-    "location": "Govt ITI Narel",
+    "location": "Narel, Delhi",
     "state": "Delhi",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -882,12 +941,13 @@
     "students_2022_23": 0,
     "students_2023_24": 75,
     "students_2024_25": 78,
-    "city": "Govt ITI Narel"
+    "city": "Narel"
   },
   {
     "id": 60,
+    "partnerName": "Don Bosco Tech Society",
     "centerName": "Govt ITI Dheerpur",
-    "location": "Govt ITI Dheerpur",
+    "location": "Dheerpur, Delhi",
     "state": "Delhi",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -897,12 +957,13 @@
     "students_2022_23": 0,
     "students_2023_24": 110,
     "students_2024_25": 98,
-    "city": "Govt ITI Dheerpur"
+    "city": "Dheerpur"
   },
   {
     "id": 61,
-    "centerName": "SWAMI VIVEKANANDA RURAL COMMUNITY COLLEGE",
-    "location": "SWAMI VIVEKANANDA RURAL COMMUNITY COLLEGE",
+    "partnerName": "Swami Vivekananda Rural Community College",
+    "centerName": "Pondicherry",
+    "location": "Pondicherry, Tamil Nadu",
     "state": "Tamil Nadu",
     "refurbishmentType": "Refurbuishment",
     "instituteType": "Short term",
@@ -912,12 +973,13 @@
     "students_2022_23": 40,
     "students_2023_24": 60,
     "students_2024_25": 65,
-    "city": "SWAMI VIVEKANANDA RURAL COMMUNITY COLLEGE"
+    "city": "Pondicherry"
   },
   {
     "id": 62,
-    "centerName": "Prayas Juvenile Aid Centre Society",
-    "location": "Prayas Juvenile Aid Centre Society",
+    "partnerName": "PRAYAS JAC SOCIETY",
+    "centerName": "Delhi",
+    "location": "Delhi, Delhi",
     "state": "Delhi",
     "refurbishmentType": "Refurbuishment & Upgradation",
     "instituteType": "Short term",
@@ -927,12 +989,13 @@
     "students_2022_23": 73,
     "students_2023_24": 75,
     "students_2024_25": 93,
-    "city": "Prayas Juvenile Aid Centre Society"
+    "city": "Delhi"
   },
   {
     "id": 63,
-    "centerName": "NAC AP ASTI-Bommuru",
-    "location": "ASTI-Bommuru",
+    "partnerName": "NAC AP",
+    "centerName": "ASTI-Bommuru",
+    "location": "Bommuru, Andhra Pradesh",
     "state": "Andhra Pradesh",
     "refurbishmentType": "Refurbuishment & Upgradation",
     "instituteType": "Short term",
@@ -942,12 +1005,13 @@
     "students_2022_23": 109,
     "students_2023_24": 84,
     "students_2024_25": 150,
-    "city": "ASTI-Bommuru"
+    "city": "Bommuru"
   },
   {
     "id": 64,
-    "centerName": "NAC AP Pulivendula",
-    "location": "Pulivendula",
+    "partnerName": "NAC AP",
+    "centerName": "ASTI-Pulivendula",
+    "location": "Pulivendula, Andhra Pradesh",
     "state": "Andhra Pradesh",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -961,8 +1025,9 @@
   },
   {
     "id": 65,
-    "centerName": "Don Bosco ITI, Hassan H.N Pura Road",
-    "location": "H.N Pura Road",
+    "partnerName": "Don Bosco Tech Society",
+    "centerName": "Don Bosco ITI Hassan",
+    "location": "Hassan, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Refurbishment/Upgradation",
     "instituteType": "ITI",
@@ -972,12 +1037,13 @@
     "students_2022_23": 85,
     "students_2023_24": 87,
     "students_2024_25": 90,
-    "city": "H.N Pura Road"
+    "city": "Hassan"
   },
   {
     "id": 66,
-    "centerName": "Don Bosco ITI - Bhadravathi Ujjanipura – Paper Town Bhadravati – 577 302",
-    "location": "Ujjanipura – Paper Town Bhadravati – 577 302",
+    "partnerName": "Don Bosco Tech Society",
+    "centerName": "Don Bosco ITI Bhadravathi",
+    "location": "Bhadravathi, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Refurbishment/Upgradation",
     "instituteType": "ITI",
@@ -987,12 +1053,13 @@
     "students_2022_23": 107,
     "students_2023_24": 107,
     "students_2024_25": 104,
-    "city": "Ujjanipura – Paper Town Bhadravati – 577 302"
+    "city": "Bhadravathi"
   },
   {
     "id": 67,
-    "centerName": "Don Bosco ITI, KGF",
-    "location": "Don Bosco ITI",
+    "partnerName": "Don Bosco Tech Society",
+    "centerName": "Don Bosco ITI KGF",
+    "location": "KGF, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Refurbishment",
     "instituteType": "ITI",
@@ -1002,12 +1069,13 @@
     "students_2022_23": 39,
     "students_2023_24": 18,
     "students_2024_25": 34,
-    "city": "Don Bosco ITI"
+    "city": "KGF"
   },
   {
     "id": 68,
-    "centerName": "Don Bosco ITI, Bidar AURAD ROAD",
-    "location": "AURAD ROAD",
+    "partnerName": "Don Bosco Tech Society",
+    "centerName": "Don Bosco ITI Bidar",
+    "location": "Bidar, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Refurbishment",
     "instituteType": "ITI",
@@ -1017,12 +1085,13 @@
     "students_2022_23": 32,
     "students_2023_24": 36,
     "students_2024_25": 38,
-    "city": "AURAD ROAD"
+    "city": "Bidar"
   },
   {
     "id": 69,
-    "centerName": "Don Bosco ITI Pinguli Bosco Udyogshala Pinguli Kudal Sindhudurg Dist Maharashtra 416528",
-    "location": "Bosco Udyogshala Pinguli Kudal Sindhudurg Dist Maharashtra 416528",
+    "partnerName": "Don Bosco Tech Society",
+    "centerName": "Don Bosco ITI Pinguli",
+    "location": "Pinguli, Maharashtra",
     "state": "Maharashtra",
     "refurbishmentType": "Refurbishment",
     "instituteType": "ITI",
@@ -1032,12 +1101,13 @@
     "students_2022_23": 35,
     "students_2023_24": 25,
     "students_2024_25": 25,
-    "city": "Bosco Udyogshala Pinguli Kudal Sindhudurg Dist Maharashtra 416528"
+    "city": "Pinguli"
   },
   {
     "id": 70,
+    "partnerName": "Don Bosco Tech Society",
     "centerName": "Don Bosco Tech Mampetta",
-    "location": "Mampetta",
+    "location": "Mampetta, Kerala",
     "state": "Kerala",
     "refurbishmentType": "Refurbishment",
     "instituteType": "Formal Long Term",
@@ -1051,8 +1121,9 @@
   },
   {
     "id": 71,
-    "centerName": "Bangalore Don Bosco Skill Mission",
-    "location": "Don Bosco Skill Mission",
+    "partnerName": "Don Bosco Tech Society",
+    "centerName": "Don Bosco Skill Mission Bangalore",
+    "location": "Bangalore, Karnataka",
     "state": "Karnataka",
     "refurbishmentType": "Refurbishment",
     "instituteType": "Formal/Non Formal Training",
@@ -1062,12 +1133,13 @@
     "students_2022_23": 0,
     "students_2023_24": 0,
     "students_2024_25": 50,
-    "city": "Don Bosco Skill Mission"
+    "city": "Bangalore"
   },
   {
     "id": 72,
-    "centerName": "Park circus 23 Darga Road",
-    "location": "23 Darga Road",
+    "partnerName": "SLIEM Skills",
+    "centerName": "Park Circus",
+    "location": "Park Circus, West Bengal",
     "state": "West Bengal",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
@@ -1077,81 +1149,70 @@
     "students_2022_23": 0,
     "students_2023_24": 0,
     "students_2024_25": 50,
-    "city": "23 Darga Road"
+    "city": "Park Circus"
   },
   {
     "id": 73,
-    "centerName": "Medchal",
-    "location": "Medchal",
-    "state": "Telangana",
+    "partnerName": "Gram Vikas Society",
+    "centerName": "Srirangapatna",
+    "location": "Srirangapatna, Karnataka",
+    "state": "Karnataka",
     "refurbishmentType": "Upgradation",
-    "instituteType": "Govt ITI",
-    "yearEstablished": 2022,
+    "instituteType": "Short term",
+    "yearEstablished": 2023,
     "labs": "Electrician",
-    "spaceAvailability": "1500 Sq. Ft",
+    "spaceAvailability": "1000 Sq ft",
     "students_2022_23": 0,
-    "students_2023_24": 197,
-    "students_2024_25": 190,
-    "city": "Medchal"
+    "students_2023_24": 80,
+    "students_2024_25": 75,
+    "city": "Srirangapatna"
   },
   {
     "id": 74,
-    "centerName": "Alwal",
-    "location": "Alwal",
-    "state": "Telangana",
-    "refurbishmentType": "Upgradation",
-    "instituteType": "Govt ITI",
-    "yearEstablished": 2022,
-    "labs": "Electrician",
-    "spaceAvailability": "1500 Sq. Ft",
-    "students_2022_23": 0,
-    "students_2023_24": 174,
-    "students_2024_25": 180,
-    "city": "Alwal"
-  },
-  {
-    "id": 75,
-    "centerName": "Kubernagar",
-    "location": "Kubernagar",
-    "state": "Gujarat",
-    "refurbishmentType": "Upgradation",
-    "instituteType": "Govt ITI",
-    "yearEstablished": 2023,
-    "labs": "Electrician",
-    "spaceAvailability": "1500 Sq. Ft",
-    "students_2022_23": 0,
-    "students_2023_24": 193,
-    "students_2024_25": 256,
-    "city": "Kubernagar"
-  },
-  {
-    "id": 76,
-    "centerName": "Amara Raja Skill Development Centre Petamitta",
-    "location": "Petamitta",
+    "partnerName": "Rajanna Foundation",
+    "centerName": "Lingutla",
+    "location": "Lingutla, Andhra Pradesh",
     "state": "Andhra Pradesh",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
-    "yearEstablished": 2021,
+    "yearEstablished": 2023,
     "labs": "Electrician",
-    "spaceAvailability": "1800 sq.ft",
-    "students_2022_23": 719,
-    "students_2023_24": 566,
-    "students_2024_25": 987,
-    "city": "Petamitta"
+    "spaceAvailability": "1100 Sq ft",
+    "students_2022_23": 0,
+    "students_2023_24": 80,
+    "students_2024_25": 95,
+    "city": "Lingutla"
   },
   {
-    "id": 77,
-    "centerName": "Dalmia Bharath Foundation Bokaro",
-    "location": "Bokaro",
-    "state": "Jharkhand",
+    "id": 75,
+    "partnerName": "GITI Hyderabad",
+    "centerName": "Gachibowli",
+    "location": "Gachibowli, Telangana",
+    "state": "Telangana",
+    "refurbishmentType": "Upgradation",
+    "instituteType": "ITI",
+    "yearEstablished": 2023,
+    "labs": "Electrician",
+    "spaceAvailability": "900 Sq ft",
+    "students_2022_23": 0,
+    "students_2023_24": 75,
+    "students_2024_25": 85,
+    "city": "Gachibowli"
+  },
+  {
+    "id": 76,
+    "partnerName": "Ambuja Cement Foundation",
+    "centerName": "BETP Roorkee",
+    "location": "Roorkee, Uttarakhand",
+    "state": "Uttarakhand",
     "refurbishmentType": "Upgradation",
     "instituteType": "Short term",
     "yearEstablished": 2023,
     "labs": "Electrician",
-    "spaceAvailability": "1000 sqft.",
+    "spaceAvailability": "800 Sq ft",
     "students_2022_23": 0,
-    "students_2023_24": 51,
-    "students_2024_25": 169,
-    "city": "Bokaro"
+    "students_2023_24": 80,
+    "students_2024_25": 90,
+    "city": "Roorkee"
   }
 ]

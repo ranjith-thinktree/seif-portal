@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSelector } from "react-redux";
 import { MainLayout } from "../../components/layout";
 import {
   Tabs,
@@ -34,6 +35,9 @@ import {
 } from "../../services/notification.service";
 import { toast } from "react-toastify";
 import NotificationDetailCard from "./NotificationDetailCard";
+import RefurbishmentDetailCard from "./RefurbishmentDetailCard";
+import RefurbishmentStatusCard from "./RefurbishmentStatusCard";
+import PartnerPastRequestsTab from "./PartnerPastRequestsTab";
 
 /**
  * Format date helper
@@ -131,10 +135,10 @@ const NotificationItem = ({
               notification.alert_type === "success"
                 ? "bg-primary-100"
                 : notification.alert_type === "error"
-                ? "bg-destructive/10"
-                : notification.alert_type === "warning"
-                ? "bg-secondary-100"
-                : "bg-blue-100"
+                  ? "bg-destructive/10"
+                  : notification.alert_type === "warning"
+                    ? "bg-secondary-100"
+                    : "bg-blue-100"
             }`}
           >
             <BellIcon
@@ -142,10 +146,10 @@ const NotificationItem = ({
                 notification.alert_type === "success"
                   ? "text-primary-600"
                   : notification.alert_type === "error"
-                  ? "text-destructive"
-                  : notification.alert_type === "warning"
-                  ? "text-secondary-600"
-                  : "text-blue-600"
+                    ? "text-destructive"
+                    : notification.alert_type === "warning"
+                      ? "text-secondary-600"
+                      : "text-blue-600"
               }`}
             />
           </div>
@@ -246,6 +250,8 @@ const NotificationItem = ({
  * Inbox Page Component
  */
 const InboxPage = () => {
+  const { user } = useSelector((state) => state.auth);
+  const isPartner = user?.role === "PARTNER";
   const {
     unreadCount,
     markNotificationAsRead,
@@ -293,7 +299,7 @@ const InboxPage = () => {
         setLoading(false);
       }
     },
-    [searchQuery, statusFilter, sortBy]
+    [searchQuery, statusFilter, sortBy],
   );
 
   /**
@@ -307,8 +313,8 @@ const InboxPage = () => {
       // Update local state
       setNotifications((prev) =>
         prev.map((notif) =>
-          notif.id === notificationId ? { ...notif, is_read: true } : notif
-        )
+          notif.id === notificationId ? { ...notif, is_read: true } : notif,
+        ),
       );
 
       toast.success("Notification marked as read");
@@ -328,7 +334,7 @@ const InboxPage = () => {
 
       // Update local state
       setNotifications((prev) =>
-        prev.map((notif) => ({ ...notif, is_read: true }))
+        prev.map((notif) => ({ ...notif, is_read: true })),
       );
 
       toast.success("All notifications marked as read");
@@ -348,7 +354,7 @@ const InboxPage = () => {
 
       // Update local state
       setNotifications((prev) =>
-        prev.filter((notif) => notif.id !== notificationId)
+        prev.filter((notif) => notif.id !== notificationId),
       );
 
       // Clear selection if deleted notification was selected
@@ -407,7 +413,7 @@ const InboxPage = () => {
     if (activeTab === "alerts") {
       fetchNotifications(1);
     }
-  }, [activeTab, statusFilter, sortBy]);
+  }, [activeTab, statusFilter, sortBy, fetchNotifications]);
 
   return (
     <MainLayout>
@@ -422,7 +428,9 @@ const InboxPage = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2 mb-6 bg-transparent border-b border-gray-300 rounded-none p-0">
+          <TabsList
+            className={`grid w-full mb-6 bg-transparent border-b border-gray-300 rounded-none p-0 ${isPartner ? "max-w-xl grid-cols-3" : "max-w-md grid-cols-2"}`}
+          >
             <TabsTrigger
               value="alerts"
               className="relative bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-[#009530] data-[state=active]:border-b-2 data-[state=active]:border-[#009530] text-gray-500 rounded-none pb-3"
@@ -443,6 +451,14 @@ const InboxPage = () => {
             >
               Requests
             </TabsTrigger>
+            {isPartner && (
+              <TabsTrigger
+                value="past-requests"
+                className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-[#009530] data-[state=active]:border-b-2 data-[state=active]:border-[#009530] text-gray-500 rounded-none pb-3"
+              >
+                Past Requests
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Alerts Tab */}
@@ -580,7 +596,7 @@ const InboxPage = () => {
                       Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
                       {Math.min(
                         pagination.page * pagination.limit,
-                        pagination.total
+                        pagination.total,
                       )}{" "}
                       of {pagination.total} notifications
                     </div>
@@ -612,15 +628,29 @@ const InboxPage = () => {
               {/* Right side - Notification Detail Card */}
               {selectedNotification && (
                 <div className="h-[450px]">
-                  <NotificationDetailCard
-                    notification={selectedNotification}
-                    csvData={csvData}
-                    centerDetails={centerDetails}
-                    onReview={() => {
-                      // Navigation is handled in the component
-                    }}
-                    onDismiss={handleDismissDetail}
-                  />
+                  {selectedNotification.alert_type === "refurbishment" ? (
+                    <RefurbishmentDetailCard
+                      notification={selectedNotification}
+                      onDismiss={handleDismissDetail}
+                    />
+                  ) : selectedNotification.alert_type?.startsWith(
+                      "refurbishment",
+                    ) ? (
+                    <RefurbishmentStatusCard
+                      notification={selectedNotification}
+                      onDismiss={handleDismissDetail}
+                    />
+                  ) : (
+                    <NotificationDetailCard
+                      notification={selectedNotification}
+                      csvData={csvData}
+                      centerDetails={centerDetails}
+                      onReview={() => {
+                        // Navigation is handled in the component
+                      }}
+                      onDismiss={handleDismissDetail}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -640,6 +670,13 @@ const InboxPage = () => {
               </div>
             </div>
           </TabsContent>
+
+          {/* Past Requests Tab - Partners only */}
+          {isPartner && (
+            <TabsContent value="past-requests">
+              <PartnerPastRequestsTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </MainLayout>

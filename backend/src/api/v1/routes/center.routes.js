@@ -40,7 +40,7 @@ router.get(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'PARTNER']),
   listCentersValidator,
-  validate,
+  validate(),
   centerController.getAllCenters
 );
 
@@ -103,7 +103,7 @@ router.get(
   authenticate,
   checkRole(['PARTNER']),
   listCentersValidator,
-  validate,
+  validate(),
   centerController.getMyCenters
 );
 
@@ -129,7 +129,7 @@ router.get(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'PARTNER']),
   centerIdValidator,
-  validate,
+  validate(),
   centerController.getCenterById
 );
 
@@ -143,7 +143,7 @@ router.post(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER']),
   createCenterValidator,
-  validate,
+  validate(),
   centerController.createCenter
 );
 
@@ -157,7 +157,7 @@ router.put(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER']),
   updateCenterValidator,
-  validate,
+  validate(),
   centerController.updateCenter
 );
 
@@ -171,7 +171,7 @@ router.get(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER']),
   centerIdValidator,
-  validate,
+  validate(),
   centerController.getCenterDeletionImpact
 );
 
@@ -185,7 +185,7 @@ router.delete(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   centerIdValidator,
-  validate,
+  validate(),
   centerController.deleteCenter
 );
 
@@ -211,7 +211,7 @@ router.patch(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   approveCenterValidator,
-  validate,
+  validate(),
   centerController.approveCenter
 );
 
@@ -225,7 +225,7 @@ router.patch(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   rejectCenterValidator,
-  validate,
+  validate(),
   centerController.rejectCenter
 );
 

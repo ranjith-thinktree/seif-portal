@@ -8,6 +8,7 @@ documents/
 # Database files (you may want to exclude actual database files)
 *.sql
 !schema.sql
+!Database.sql
 db/
 
 # Environment variables

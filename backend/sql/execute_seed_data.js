@@ -1,6 +1,6 @@
 /**
  * Execute Refurbishment Seed Data SQL Scripts
- * 
+ *
  * This script:
  * 1. Reads MySQL credentials from .env
  * 2. Executes seed SQL scripts in order
@@ -90,14 +90,20 @@ async function executeSQLFile(fileInfo) {
 
       if (fileInfo.expectedCount !== null) {
         if (actualCount === fileInfo.expectedCount) {
-          console.log(`${colors.green}✓ Verification passed: ${actualCount} rows inserted (expected ${fileInfo.expectedCount})${colors.reset}`);
+          console.log(
+            `${colors.green}✓ Verification passed: ${actualCount} rows inserted (expected ${fileInfo.expectedCount})${colors.reset}`
+          );
         } else {
-          console.log(`${colors.red}✗ Verification failed: ${actualCount} rows found (expected ${fileInfo.expectedCount})${colors.reset}`);
+          console.log(
+            `${colors.red}✗ Verification failed: ${actualCount} rows found (expected ${fileInfo.expectedCount})${colors.reset}`
+          );
           throw new Error(`Row count mismatch for ${fileInfo.name}`);
         }
       } else {
         if (actualCount > 0) {
-          console.log(`${colors.green}✓ Verification passed: ${actualCount} rows inserted${colors.reset}`);
+          console.log(
+            `${colors.green}✓ Verification passed: ${actualCount} rows inserted${colors.reset}`
+          );
         } else {
           console.log(`${colors.red}✗ Verification failed: No rows inserted${colors.reset}`);
           throw new Error(`No rows inserted for ${fileInfo.name}`);
@@ -107,7 +113,10 @@ async function executeSQLFile(fileInfo) {
 
     return true;
   } catch (error) {
-    console.error(`${colors.red}✗ Failed to execute ${fileInfo.name}:${colors.reset}`, error.message);
+    console.error(
+      `${colors.red}✗ Failed to execute ${fileInfo.name}:${colors.reset}`,
+      error.message
+    );
     throw error;
   }
 }
@@ -123,7 +132,9 @@ async function displaySummary() {
   try {
     // 1. Total packages
     const [packagesResult] = await db.query('SELECT COUNT(*) as count FROM refurbishment_packages');
-    console.log(`\n${colors.green}✓ Refurbishment Packages:${colors.reset} ${packagesResult[0].count} total`);
+    console.log(
+      `\n${colors.green}✓ Refurbishment Packages:${colors.reset} ${packagesResult[0].count} total`
+    );
 
     // 2. Packages per course
     const [coursePkgsResult] = await db.query(`
@@ -154,12 +165,16 @@ async function displaySummary() {
 
     console.log(`\n${colors.green}✓ Center-Course Links:${colors.reset}`);
     centerCoursesResult.forEach((row) => {
-      console.log(`  • ${row.center_type}: ${row.num_centers} centers × ${row.avg_courses_per_center} avg courses = ${row.total_links} links`);
+      console.log(
+        `  • ${row.center_type}: ${row.num_centers} centers × ${row.avg_courses_per_center} avg courses = ${row.total_links} links`
+      );
     });
 
     // 4. Total center-course links
     const [totalLinksResult] = await db.query('SELECT COUNT(*) as count FROM center_courses');
-    console.log(`\n${colors.green}✓ Total Center-Course Links:${colors.reset} ${totalLinksResult[0].count}`);
+    console.log(
+      `\n${colors.green}✓ Total Center-Course Links:${colors.reset} ${totalLinksResult[0].count}`
+    );
 
     // 5. Sample verification (show one Lab center with all its courses)
     const [sampleResult] = await db.query(`
@@ -179,7 +194,9 @@ async function displaySummary() {
       console.log(`\n${colors.yellow}📋 Sample Verification (Lab center):${colors.reset}`);
       console.log(`  • ${sampleResult[0].center_name}`);
       console.log(`  • Courses: ${sampleResult[0].courses}`);
-      console.log(`  ${colors.green}✓ Lab centers correctly linked to all 3 courses${colors.reset}`);
+      console.log(
+        `  ${colors.green}✓ Lab centers correctly linked to all 3 courses${colors.reset}`
+      );
     }
 
     // 6. Sample verification (show one ITI center)
@@ -200,13 +217,16 @@ async function displaySummary() {
       console.log(`\n${colors.yellow}📋 Sample Verification (ITI center):${colors.reset}`);
       console.log(`  • ${itiSampleResult[0].center_name}`);
       console.log(`  • Courses: ${itiSampleResult[0].courses}`);
-      console.log(`  ${colors.green}✓ ITI centers correctly linked to Electrician + Automation${colors.reset}`);
+      console.log(
+        `  ${colors.green}✓ ITI centers correctly linked to Electrician + Automation${colors.reset}`
+      );
     }
 
     console.log(`\n${colors.cyan}${'═'.repeat(60)}${colors.reset}`);
-    console.log(`${colors.green}${colors.bright}✓ ALL SEED DATA SUCCESSFULLY INSERTED AND VERIFIED!${colors.reset}`);
+    console.log(
+      `${colors.green}${colors.bright}✓ ALL SEED DATA SUCCESSFULLY INSERTED AND VERIFIED!${colors.reset}`
+    );
     console.log(`${colors.cyan}${'═'.repeat(60)}${colors.reset}\n`);
-
   } catch (error) {
     console.error(`${colors.red}✗ Error in summary:${colors.reset}`, error.message);
   }
@@ -216,11 +236,19 @@ async function displaySummary() {
  * Main execution function
  */
 async function main() {
-  console.log(`\n${colors.bright}${colors.blue}╔════════════════════════════════════════════════════════════╗${colors.reset}`);
-  console.log(`${colors.bright}${colors.blue}║  SEIF Portal - Refurbishment Seed Data Executor           ║${colors.reset}`);
-  console.log(`${colors.bright}${colors.blue}╚════════════════════════════════════════════════════════════╝${colors.reset}`);
+  console.log(
+    `\n${colors.bright}${colors.blue}╔════════════════════════════════════════════════════════════╗${colors.reset}`
+  );
+  console.log(
+    `${colors.bright}${colors.blue}║  SEIF Portal - Refurbishment Seed Data Executor           ║${colors.reset}`
+  );
+  console.log(
+    `${colors.bright}${colors.blue}╚════════════════════════════════════════════════════════════╝${colors.reset}`
+  );
 
-  console.log(`\n${colors.yellow}⚙${colors.reset}  Database: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 3306}`);
+  console.log(
+    `\n${colors.yellow}⚙${colors.reset}  Database: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 3306}`
+  );
   console.log(`${colors.yellow}⚙${colors.reset}  Database Name: ${process.env.DB_NAME || 'seif'}`);
   console.log(`${colors.yellow}⚙${colors.reset}  User: ${process.env.DB_USER || 'root'}\n`);
 
@@ -233,8 +261,12 @@ async function main() {
     // Display summary
     await displaySummary();
 
-    console.log(`${colors.green}${colors.bright}🎉 SUCCESS! All seed data has been inserted.${colors.reset}`);
-    console.log(`${colors.yellow}💡 Next step: Run unit tests to verify data integrity${colors.reset}\n`);
+    console.log(
+      `${colors.green}${colors.bright}🎉 SUCCESS! All seed data has been inserted.${colors.reset}`
+    );
+    console.log(
+      `${colors.yellow}💡 Next step: Run unit tests to verify data integrity${colors.reset}\n`
+    );
 
     process.exit(0);
   } catch (error) {

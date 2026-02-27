@@ -122,6 +122,7 @@ class PartnerService {
         `SELECT
           p.*,
           u.full_name as approved_by_name,
+          (SELECT id FROM users WHERE partner_id = p.id AND role = 'PARTNER' LIMIT 1) as user_id,
           (SELECT COUNT(*) FROM centers WHERE partner_id = p.id AND approval_status = 'approved') as total_centers,
           (SELECT COUNT(*) FROM students WHERE partner_id = p.id) as total_students,
           (SELECT COUNT(*) FROM students WHERE partner_id = p.id AND gender = 'Male') as total_male_students,

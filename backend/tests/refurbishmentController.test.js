@@ -236,7 +236,9 @@ describe('RefurbishmentController - Unit Tests', () => {
 
       // Assert
       expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
-      expect(next.mock.calls[0][0].message).toBe('Within months must be between 1 and 120 (10 years)');
+      expect(next.mock.calls[0][0].message).toBe(
+        'Within months must be between 1 and 120 (10 years)'
+      );
     });
 
     it('should throw ValidationError if limit is invalid', async () => {
@@ -375,8 +377,17 @@ describe('RefurbishmentController - Unit Tests', () => {
       // Arrange
       req.query = { recentlyRefurbishedWithin: '6' };
       RefurbishmentService.getEligibleCenters.mockResolvedValue({ centers: [], totalCount: 0 });
-      RefurbishmentService.getRecentlyRefurbishedCenters.mockResolvedValue({ centers: [], totalCount: 0, withinMonths: 6 });
-      RefurbishmentService.getAllCentersWithStatus.mockResolvedValue({ centers: [], totalCount: 0, eligibleCount: 0, ineligibleCount: 0 });
+      RefurbishmentService.getRecentlyRefurbishedCenters.mockResolvedValue({
+        centers: [],
+        totalCount: 0,
+        withinMonths: 6,
+      });
+      RefurbishmentService.getAllCentersWithStatus.mockResolvedValue({
+        centers: [],
+        totalCount: 0,
+        eligibleCount: 0,
+        ineligibleCount: 0,
+      });
 
       // Act
       await RefurbishmentController.getDashboardSummary(req, res, next);
@@ -394,7 +405,9 @@ describe('RefurbishmentController - Unit Tests', () => {
 
       // Assert
       expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
-      expect(next.mock.calls[0][0].message).toBe('Within months must be between 1 and 120 (10 years)');
+      expect(next.mock.calls[0][0].message).toBe(
+        'Within months must be between 1 and 120 (10 years)'
+      );
     });
 
     it('should call next with error if any service call fails', async () => {

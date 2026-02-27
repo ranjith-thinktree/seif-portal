@@ -11,15 +11,10 @@ class RefurbishmentPackageModel {
    * Find all packages with optional filters
    */
   static async findAll(filters = {}) {
-    const { category, is_active, search, limit = 100, offset = 0 } = filters;
+    const { is_active, search, limit = 100, offset = 0 } = filters;
 
     let query = 'SELECT * FROM refurbishment_packages WHERE 1=1';
     const params = [];
-
-    if (category) {
-      query += ' AND category = ?';
-      params.push(category);
-    }
 
     if (is_active !== undefined) {
       query += ' AND is_active = ?';
@@ -32,26 +27,64 @@ class RefurbishmentPackageModel {
     }
 
     query += ' ORDER BY display_order ASC, package_name ASC';
-    query += ' LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    query += ` LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
 
     const [rows] = await db.query(query, params);
     return rows;
   }
 
   /**
+   * Find all packages with course names (optimized for display)
+   */
+  static async findAllWithCourses(filters = {}) {
+    const { is_active, search, limit = 100, offset = 0 } = filters;
+
+    let query = `
+      SELECT 
+        rp.*,
+        GROUP_CONCAT(c.course_name ORDER BY c.course_name ASC SEPARATOR ', ') as course_names,
+        GROUP_CONCAT(c.id ORDER BY c.course_name ASC SEPARATOR ',') as course_ids
+      FROM refurbishment_packages rp
+      LEFT JOIN course_packages cp ON rp.id = cp.package_id
+      LEFT JOIN courses c ON cp.course_id = c.id
+      WHERE 1=1
+    `;
+
+    const params = [];
+
+    if (is_active !== undefined) {
+      query += ' AND rp.is_active = ?';
+      params.push(is_active ? 1 : 0);
+    }
+
+    if (search) {
+      query += ' AND (rp.package_name LIKE ? OR rp.description LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    query += ' GROUP BY rp.id';
+    query += ' ORDER BY rp.display_order ASC, rp.package_name ASC';
+    query += ` LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
+
+    const [rows] = await db.query(query, params);
+
+    // Convert course_ids string to array for frontend use
+    // Use camelCase for frontend compatibility
+    return rows.map((row) => ({
+      ...row,
+      courseIds: row.course_ids ? row.course_ids.split(',') : [],
+      course_names: row.course_names || '', // Keep as comma-separated string
+    }));
+  }
+
+  /**
    * Count total packages with filters
    */
   static async count(filters = {}) {
-    const { category, is_active, search } = filters;
+    const { is_active, search } = filters;
 
     let query = 'SELECT COUNT(*) as total FROM refurbishment_packages WHERE 1=1';
     const params = [];
-
-    if (category) {
-      query += ' AND category = ?';
-      params.push(category);
-    }
 
     if (is_active !== undefined) {
       query += ' AND is_active = ?';
@@ -92,25 +125,25 @@ class RefurbishmentPackageModel {
     const {
       package_name,
       description,
-      category,
       is_active = true,
       display_order = 999,
+      images = null,
     } = packageData;
 
     const id = uuidv4();
 
     const query = `
       INSERT INTO refurbishment_packages (
-        id, package_name, description, category, is_active, display_order,
+        id, package_name, description, images, is_active, display_order,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+      ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())
     `;
 
     await db.query(query, [
       id,
       package_name,
       description,
-      category,
+      images ? JSON.stringify(images) : null,
       is_active ? 1 : 0,
       display_order,
     ]);
@@ -122,13 +155,7 @@ class RefurbishmentPackageModel {
    * Update package
    */
   static async update(id, packageData) {
-    const {
-      package_name,
-      description,
-      category,
-      is_active,
-      display_order,
-    } = packageData;
+    const { package_name, description, is_active, display_order, images } = packageData;
 
     const updates = [];
     const params = [];
@@ -143,9 +170,9 @@ class RefurbishmentPackageModel {
       params.push(description);
     }
 
-    if (category !== undefined) {
-      updates.push('category = ?');
-      params.push(category);
+    if (images !== undefined) {
+      updates.push('images = ?');
+      params.push(images ? JSON.stringify(images) : null);
     }
 
     if (is_active !== undefined) {

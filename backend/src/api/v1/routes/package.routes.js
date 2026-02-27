@@ -6,6 +6,10 @@ const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 const { validate } = require('../../../middleware/validate.middleware');
 const packageValidators = require('../validators/package.validator');
+const {
+  uploadPackageImages,
+  handleImageUploadError,
+} = require('../../../middleware/imageUpload.middleware');
 
 /**
  * Package Routes
@@ -46,12 +50,14 @@ router.get(
  * @route   POST /api/v1/admin/packages
  * @desc    Create new package
  * @access  SUPER_ADMIN only
- * @body    { package_name, description, category, is_active, display_order }
+ * @body    { package_name, description, category, is_active, display_order, images[] }
  */
 router.post(
   '/',
   authenticate,
   checkRole(['SUPER_ADMIN']),
+  uploadPackageImages,
+  handleImageUploadError,
   validate(packageValidators.createPackage),
   PackageController.createPackage
 );
@@ -60,12 +66,14 @@ router.post(
  * @route   PUT /api/v1/admin/packages/:id
  * @desc    Update package
  * @access  SUPER_ADMIN only
- * @body    { package_name?, description?, category?, is_active?, display_order? }
+ * @body    { package_name?, description?, category?, is_active?, display_order?, images[], existingImages }
  */
 router.put(
   '/:id',
   authenticate,
   checkRole(['SUPER_ADMIN']),
+  uploadPackageImages,
+  handleImageUploadError,
   validate(packageValidators.updatePackage),
   PackageController.updatePackage
 );

@@ -1,5 +1,6 @@
 const reviewService = require('../../src/api/v1/services/review.service');
 const db = require('../../src/database/connection');
+const { v4: uuidv4 } = require('uuid');
 
 jest.mock('../../src/database/connection');
 
@@ -24,9 +25,9 @@ describe('Review Service - Admin Editing Tests', () => {
 
   describe('saveAdminEdits - during initial review', () => {
     it('should save edits to uploaded_students table', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
       const mockStudents = [
         {
           id: 'student-uuid',
@@ -82,9 +83,9 @@ describe('Review Service - Admin Editing Tests', () => {
     });
 
     it('should log changes in data_edit_logs with admin user ID', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid-1234';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
       const mockStudents = [{ id: 's1', student_name: 'Test' }];
       const mockChanges = [
         {
@@ -119,9 +120,9 @@ describe('Review Service - Admin Editing Tests', () => {
     });
 
     it('should mark students with is_edited = 1', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
       const mockStudents = [{ id: 's1', student_name: 'Test', partner_student_id: 'S001' }];
       const mockChanges = [];
 
@@ -145,9 +146,9 @@ describe('Review Service - Admin Editing Tests', () => {
     });
 
     it('should handle multiple students in batch', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
       const mockStudents = [
         { id: 's1', partner_student_id: 'S001', student_name: 'Student 1' },
         { id: 's2', partner_student_id: 'S002', student_name: 'Student 2' },
@@ -183,9 +184,9 @@ describe('Review Service - Admin Editing Tests', () => {
 
   describe('approveCenter - with edited data', () => {
     it('should copy edited data to production students table', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
 
       // Mock center and students (including edited ones)
       mockConnection.query
@@ -248,9 +249,9 @@ describe('Review Service - Admin Editing Tests', () => {
     });
 
     it('should handle approval after admin edits', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
 
       // Simulate: Admin edited data → Approve → Data goes to production
 
@@ -324,7 +325,7 @@ describe('Review Service - Admin Editing Tests', () => {
 
   describe('edit history - admin vs partner visibility', () => {
     it('should show admin edits in history with admin user ID', async () => {
-      const mockStudentId = 'student-uuid';
+      const mockStudentId = uuidv4();
 
       mockConnection.query.mockResolvedValueOnce([
         [
@@ -358,7 +359,7 @@ describe('Review Service - Admin Editing Tests', () => {
 
     it('should be visible to both admin and partner', async () => {
       // This is a business requirement test
-      const mockStudentId = 'student-uuid';
+      const mockStudentId = uuidv4();
 
       mockConnection.query.mockResolvedValueOnce([
         [
@@ -377,9 +378,9 @@ describe('Review Service - Admin Editing Tests', () => {
 
   describe('transaction safety', () => {
     it('should rollback admin edits on error', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
       const mockStudents = [{ id: 's1', student_name: 'Test' }];
       const mockChanges = [{ studentId: 's1', field: 'name', oldValue: 'Old', newValue: 'Test' }];
 
@@ -402,9 +403,9 @@ describe('Review Service - Admin Editing Tests', () => {
     });
 
     it('should commit successfully on valid admin edits', async () => {
-      const mockUploadId = 'upload-uuid';
-      const mockCenterId = 'center-uuid';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
       const mockStudents = [{ id: 's1', student_name: 'Test', partner_student_id: 'S001' }];
       const mockChanges = [{ studentId: 's1', field: 'name', oldValue: 'Old', newValue: 'Test' }];
 
@@ -428,9 +429,9 @@ describe('Review Service - Admin Editing Tests', () => {
 
   describe('validation - center verification', () => {
     it('should throw error if center not found in upload', async () => {
-      const mockUploadId = 'upload-uuid';
+      const mockUploadId = uuidv4();
       const mockCenterId = 'non-existent-center';
-      const mockAdminId = 'admin-uuid';
+      const mockAdminId = uuidv4();
       const mockStudents = [];
       const mockChanges = [];
 
@@ -451,9 +452,9 @@ describe('Review Service - Admin Editing Tests', () => {
     });
 
     it('should verify center belongs to correct upload', async () => {
-      const mockUploadId = 'upload-1';
-      const mockCenterId = 'center-1';
-      const mockAdminId = 'admin-uuid';
+      const mockUploadId = uuidv4();
+      const mockCenterId = uuidv4();
+      const mockAdminId = uuidv4();
 
       mockConnection.query.mockResolvedValueOnce([[{ id: mockCenterId }]]);
 

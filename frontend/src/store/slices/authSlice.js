@@ -27,20 +27,21 @@ const initialState = getInitialState();
  */
 export const login = createAsyncThunk(
   "auth/login",
-  async (credentials, { rejectWithValue }) => {
+  async (credentials, { rejectWithValue: _rejectWithValue }) => {
     try {
       const response = await authApi.login(credentials);
 
       console.log("Login response:", response);
 
-      // Store tokens and user in localStorage
-      authApi.storeTokens(
-        response.data.accessToken,
-        response.data.refreshToken
-      );
-      authApi.storeUser(response.data.user);
+      // The API returns { success, message, data: { user, accessToken, refreshToken } }
+      // authApi.login already returns response.data, so we have the outer wrapper
+      const loginData = response.data || response;
 
-      return response.data;
+      // Store tokens and user in localStorage
+      authApi.storeTokens(loginData.accessToken, loginData.refreshToken);
+      authApi.storeUser(loginData.user);
+
+      return loginData;
     } catch (error) {
       console.error("Login error caught:", error);
       console.error("Error response:", error.response);
@@ -51,7 +52,7 @@ export const login = createAsyncThunk(
 
       return rejectWithValue(message);
     }
-  }
+  },
 );
 
 /**
@@ -71,7 +72,7 @@ export const logout = createAsyncThunk(
       authApi.clearAuth();
     }
     return null;
-  }
+  },
 );
 
 /**
@@ -105,7 +106,7 @@ export const verifyTokenOnMount = createAsyncThunk(
       authApi.clearAuth();
       return rejectWithValue("Token verification failed");
     }
-  }
+  },
 );
 
 /**
@@ -116,14 +117,16 @@ export const fetchUserProfile = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await authApi.getProfile();
-      authApi.storeUser(response.data.user);
-      return response.data.user;
+      // API returns { success, message, data: user }
+      const userData = response.data || response;
+      authApi.storeUser(userData);
+      return userData;
     } catch (error) {
       const message =
         error.response?.data?.message || "Failed to fetch profile";
       return rejectWithValue(message);
     }
-  }
+  },
 );
 
 /**
@@ -134,14 +137,16 @@ export const updateUserProfile = createAsyncThunk(
   async (profileData, { rejectWithValue }) => {
     try {
       const response = await authApi.updateProfile(profileData);
-      authApi.storeUser(response.data.user);
-      return response.data.user;
+      // API returns { success, message, data: user }
+      const userData = response.data || response;
+      authApi.storeUser(userData);
+      return userData;
     } catch (error) {
       const message =
         error.response?.data?.message || "Failed to update profile";
       return rejectWithValue(message);
     }
-  }
+  },
 );
 
 /**

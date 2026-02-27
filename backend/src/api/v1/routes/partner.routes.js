@@ -40,7 +40,7 @@ router.get(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY']),
   listPartnersValidator,
-  validate,
+  validate(),
   partnerController.getAllPartners
 );
 
@@ -115,7 +115,7 @@ router.get(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY']),
   partnerIdValidator,
-  validate,
+  validate(),
   partnerController.getPartnerById
 );
 
@@ -129,7 +129,7 @@ router.post(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   createPartnerValidator,
-  validate,
+  validate(),
   partnerController.createPartner
 );
 
@@ -143,7 +143,7 @@ router.put(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   updatePartnerValidator,
-  validate,
+  validate(),
   partnerController.updatePartner
 );
 
@@ -157,7 +157,7 @@ router.delete(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   partnerIdValidator,
-  validate,
+  validate(),
   partnerController.deletePartner
 );
 
@@ -183,7 +183,7 @@ router.patch(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   approvePartnerValidator,
-  validate,
+  validate(),
   partnerController.approvePartner
 );
 
@@ -197,7 +197,7 @@ router.patch(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   rejectPartnerValidator,
-  validate,
+  validate(),
   partnerController.rejectPartner
 );
 
@@ -211,7 +211,7 @@ router.post(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   partnerIdValidator,
-  validate,
+  validate(),
   partnerController.resendWelcomeEmail
 );
 

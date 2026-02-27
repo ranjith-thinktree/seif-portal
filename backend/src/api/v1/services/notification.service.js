@@ -459,6 +459,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
     }
 
     // Get center notifications (individual, not grouped)
+    // Excludes refurbishment notifications — those are shown only in the Refurbishment > Alerts tab
     const centerQuery = `
       SELECT 
         n.id,
@@ -475,7 +476,8 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       FROM notifications n
       ${whereClause}
         AND n.related_entity_type = 'center'
-        AND n.type IN ('center_created', 'center_approved')
+        AND n.type IN ('center_created', 'center_approved', 'alert')
+        AND (n.alert_type NOT LIKE 'refurbishment%' OR n.alert_type IS NULL)
       ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
     `;
 
@@ -504,9 +506,35 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       ORDER BY latest_created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
     `;
 
-    // Execute both queries
+    // Refurbishment-specific notifications query (all alert_type LIKE 'refurbishment%')
+    // Covers: eligibility alerts, new request, approved, rejected, completed, response
+    const refurbishmentQuery = `
+      SELECT 
+        n.id,
+        n.related_entity_id,
+        n.related_entity_type,
+        n.created_at,
+        n.type,
+        n.alert_type,
+        n.title,
+        n.message,
+        n.remark,
+        n.is_read,
+        n.payload,
+        'refurbishment' as notification_type
+      FROM notifications n
+      ${whereClause}
+        AND n.alert_type LIKE 'refurbishment%'
+      ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
+    `;
+
+    // Execute all three queries
     const [centerNotifications] = await pool.query(centerQuery, params);
     const [uploadGroupedResults] = await pool.query(uploadQuery, params);
+    // Refurbishment notifications only appear in partner inbox;
+    // admin sees them in the Refurbishment > Alerts tab instead.
+    const [refurbishmentResults] =
+      role === 'PARTNER' ? await pool.query(refurbishmentQuery, params) : [[]];
 
     // Process center notifications (simple format)
     const processedfCenterNotifications = centerNotifications.map((notif) => {
@@ -605,8 +633,31 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       })
     );
 
-    // Merge center and upload notifications, sort by created_at
-    const allNotifications = [...processedfCenterNotifications, ...processedUploadNotifications];
+    // Process refurbishment notifications
+    const processedRefurbishmentNotifications = refurbishmentResults.map((notif) => {
+      const payload = notif.payload ? JSON.parse(notif.payload) : {};
+      return {
+        id: notif.id,
+        type: notif.type,
+        alert_type: notif.alert_type,
+        title: notif.title,
+        message: notif.message,
+        remark: notif.remark,
+        is_read: Boolean(notif.is_read),
+        created_at: notif.created_at,
+        related_entity_type: notif.related_entity_type,
+        related_entity_id: notif.related_entity_id,
+        notification_type: 'refurbishment',
+        payload,
+      };
+    });
+
+    // Merge center, refurbishment and upload notifications, sort by created_at
+    const allNotifications = [
+      ...processedfCenterNotifications,
+      ...processedRefurbishmentNotifications,
+      ...processedUploadNotifications,
+    ];
     allNotifications.sort((a, b) => {
       const dateA = new Date(a.created_at);
       const dateB = new Date(b.created_at);
@@ -949,6 +1000,456 @@ const notifyPartnerAboutCenterApproval = async (centerId, partnerId) => {
   }
 };
 
+/**
+ * Get refurbishment notification details for partner
+ * Fetches RQ-XXXXX number, center details, partner details, and package information
+ * @param {string} notificationId - UUID of the notification
+ * @param {string} userId -UUID of the user
+ * @param {string} partnerId - UUID of the partner
+ * @returns {Object} Refurbishment details
+ */
+const getRefurbishmentDetails = async (notificationId, userId, partnerId) => {
+  try {
+    // Fetch notification details with join to get scheduled refurbishment notification
+    const [result] = await pool.query(
+      `
+      SELECT 
+        n.id AS notification_id,
+        n.title,
+        n.message,
+        n.remark,
+        n.created_at AS notification_date,
+        srn.id AS refurb_notification_id,
+        srn.request_number,
+        srn.message AS refurb_message,
+        srn.packages,
+        srn.upgradation_packages,
+        srn.partner_responded,
+        srn.response_received_at,
+        c.id AS center_id,
+        c.center_name,
+        c.city,
+        c.state,
+        p.id AS partner_id,
+        p.name AS partner_name
+      FROM notifications n
+      JOIN users u ON n.recipient_id = u.id
+      JOIN scheduled_refurbishment_notifications srn
+        ON u.partner_id = srn.partner_id
+        AND n.related_entity_id = srn.center_id
+      JOIN centers c ON srn.center_id = c.id
+      JOIN partners p ON srn.partner_id = p.id
+      WHERE n.id = ?
+        AND u.id = ?
+        AND srn.partner_id = ?
+        AND n.type = 'alert'
+        AND n.alert_type = 'refurbishment'
+      ORDER BY srn.created_at DESC
+      LIMIT 1
+    `,
+      [notificationId, userId, partnerId]
+    );
+
+    if (!result || result.length === 0) {
+      return null;
+    }
+
+    const notification = result[0];
+
+    // Parse course packages JSON
+    let packages = [];
+    if (notification.packages) {
+      try {
+        packages = JSON.parse(notification.packages);
+      } catch (err) {
+        console.error('Error parsing packages JSON:', err);
+        packages = [];
+      }
+    }
+
+    // Parse upgradation packages JSON
+    let upgradationPackageEntries = [];
+    if (notification.upgradation_packages) {
+      try {
+        upgradationPackageEntries = JSON.parse(notification.upgradation_packages);
+      } catch (err) {
+        console.error('Error parsing upgradation_packages JSON:', err);
+        upgradationPackageEntries = [];
+      }
+    }
+
+    // Group packages by course
+    const packageIds = packages.map((p) => `'${p.packageId}'`).join(',');
+    let coursePackages = [];
+
+    if (packageIds) {
+      const [packageDetails] = await pool.query(`
+        SELECT 
+          rp.id AS package_id,
+          rp.package_name,
+          rp.description,
+          rp.images,
+          c.id AS course_id,
+          c.course_name
+        FROM refurbishment_packages rp
+        JOIN package_courses pc ON rp.id = pc.package_id
+        JOIN courses c ON pc.course_id = c.id
+        WHERE rp.id IN (${packageIds}) AND rp.category = 'refurbishment'
+        ORDER BY c.course_name, rp.package_name
+      `);
+
+      // Group by course
+      const courseMap = new Map();
+      packageDetails.forEach((pkg) => {
+        if (!courseMap.has(pkg.course_id)) {
+          courseMap.set(pkg.course_id, {
+            course_id: pkg.course_id,
+            course_name: pkg.course_name,
+            packages: [],
+          });
+        }
+
+        const packageInfo = packages.find((p) => p.packageId === pkg.package_id);
+        courseMap.get(pkg.course_id).packages.push({
+          package_id: pkg.package_id,
+          package_name: pkg.package_name,
+          description: pkg.description,
+          images: pkg.images,
+          quantity: packageInfo?.quantity || 1,
+          notes: packageInfo?.notes || null,
+        });
+      });
+
+      coursePackages = Array.from(courseMap.values());
+    }
+
+    // Fetch upgradation package details
+    // If saved IDs exist use them; otherwise fall back to ALL available upgradation packages
+    // (handles notifications created before the upgradation_packages column was populated)
+    let upgradationPackages = [];
+    if (upgradationPackageEntries.length > 0) {
+      const upgPkgIds = upgradationPackageEntries
+        .map((p) => (typeof p === 'string' ? `'${p}'` : `'${p.packageId}'`))
+        .join(',');
+      const [upgPkgDetails] = await pool.query(`
+        SELECT id AS package_id, package_name, description, images, category
+        FROM refurbishment_packages
+        WHERE id IN (${upgPkgIds}) AND category = 'upgradation'
+        ORDER BY display_order ASC, package_name ASC
+      `);
+      upgradationPackages = upgPkgDetails;
+    }
+
+    // Fallback: if no upgradation packages resolved, return all available ones
+    // so the partner is always shown the upgradation prompt
+    if (upgradationPackages.length === 0) {
+      const [allUpgPkgs] = await pool.query(`
+        SELECT id AS package_id, package_name, description, images, category
+        FROM refurbishment_packages
+        WHERE category = 'upgradation'
+        ORDER BY display_order ASC, package_name ASC
+      `);
+      upgradationPackages = allUpgPkgs;
+    }
+
+    return {
+      request_number: notification.request_number
+        ? `RQ-${String(notification.request_number).padStart(6, '0')}`
+        : 'Pending',
+      partner_name: notification.partner_name,
+      subject: 'Request for Lab Refurbishment', // Fixed subject as per requirement
+      center_name: notification.center_name,
+      center_location: `${notification.city}, ${notification.state}`,
+      date: notification.notification_date,
+      description: notification.message || notification.refurb_message,
+      courses: coursePackages,
+      upgradation_packages: upgradationPackages,
+      has_upgradation_packages: upgradationPackages.length > 0,
+      partner_responded: notification.partner_responded === 1,
+      response_received_at: notification.response_received_at,
+      notification_id: notification.notification_id,
+      refurb_notification_id: notification.refurb_notification_id,
+    };
+  } catch (error) {
+    console.error('Error fetching refurbishment details:', error);
+    throw error;
+  }
+};
+
+/**
+ * Submit partner refurbishment response
+ * Saves partner's package selections and justifications
+ * Marks notification and scheduled notification as responded
+ * Notif ies admin of partner response
+ * @param {string} notificationId - UUID of the notification
+ * @param {string} userId - UUID of the user
+ * @param {string} partnerId - UUID of the partner
+ * @param {Array} selectedPackages - Array of {package_id, justification}
+ * @returns {Object} Submission result
+ */
+const submitRefurbishmentResponse = async (
+  notificationId,
+  userId,
+  partnerId,
+  selectedPackages,
+  upgradation = null
+) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Get notification and scheduled refurbishment details
+    const [notification] = await connection.query(
+      `
+      SELECT 
+        n.id AS notification_id,
+        n.related_entity_id AS center_id,
+        srn.id AS refurb_notification_id,
+        srn.request_number
+      FROM notifications n
+      JOIN users u ON n.recipient_id = u.id
+      JOIN scheduled_refurbishment_notifications srn
+        ON u.partner_id = srn.partner_id
+        AND n.related_entity_id = srn.center_id
+      WHERE n.id = ?
+        AND u.id = ?
+        AND srn.partner_id = ?
+        AND n.type = 'alert'
+        AND n.alert_type = 'refurbishment'
+        AND srn.partner_responded = 0
+      LIMIT 1
+    `,
+      [notificationId, userId, partnerId]
+    );
+
+    if (!notification || notification.length === 0) {
+      throw new Error('Notification not found or already responded');
+    }
+
+    const notifData = notification[0];
+    const uuid = require('uuid');
+    const refurbishmentRequestId = uuid.v4();
+
+    // Create main refurbishment request record
+    await connection.query(
+      `
+      INSERT INTO refurbishment_requests (
+        id,
+        request_id,
+        center_id,
+        refurbishment_type,
+        justification,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+    `,
+      [
+        refurbishmentRequestId,
+        notifData.refurb_notification_id, // Link to scheduled notification
+        notifData.center_id,
+        'package_selection',
+        'Partner package selection response',
+      ]
+    );
+
+    // Insert package selections with justifications and attachments
+    for (const pkg of selectedPackages) {
+      const packageEntryId = uuid.v4();
+
+      // Get course_id for this package (from join table package_courses)
+      const [packageInfo] = await connection.query(
+        `
+        SELECT course_id FROM package_courses WHERE package_id = ? LIMIT 1
+      `,
+        [pkg.package_id]
+      );
+
+      if (packageInfo.length > 0) {
+        const courseId = packageInfo[0].course_id;
+
+        // Insert package selection with justification
+        await connection.query(
+          `
+          INSERT INTO refurbishment_request_course_packages (
+            id,
+            refurbishment_request_id,
+            course_id,
+            package_id,
+            quantity,
+            justification,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+        `,
+          [
+            packageEntryId,
+            refurbishmentRequestId,
+            courseId,
+            pkg.package_id,
+            1, // Default quantity
+            pkg.justification || null, // Optional justification
+          ]
+        );
+
+        // Insert image attachments for this package (if provided)
+        if (pkg.image_urls && Array.isArray(pkg.image_urls) && pkg.image_urls.length > 0) {
+          for (const imageUrl of pkg.image_urls) {
+            const attachmentId = uuid.v4();
+
+            await connection.query(
+              `
+              INSERT INTO refurbishment_request_course_attachments (
+                id,
+                refurbishment_request_id,
+                course_id,
+                file_url,
+                file_name,
+                file_size_bytes,
+                file_mime_type,
+                uploaded_by,
+                created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            `,
+              [
+                attachmentId,
+                refurbishmentRequestId,
+                courseId,
+                imageUrl.url,
+                imageUrl.name || 'attachment.jpg',
+                imageUrl.size || null,
+                imageUrl.type || 'image/jpeg',
+                userId,
+              ]
+            );
+          }
+        }
+      }
+    }
+
+    // Handle upgradation request if provided
+    if (upgradation) {
+      // Mark request as having upgradation
+      await connection.query(
+        `UPDATE refurbishment_requests SET is_upgradation_requested = 1, updated_at = NOW() WHERE id = ?`,
+        [refurbishmentRequestId]
+      );
+
+      // Insert room details
+      const roomId = uuid.v4();
+      await connection.query(
+        `INSERT INTO refurbishment_upgradation_rooms
+          (id, refurbishment_request_id, length_feet, breadth_feet, height_feet, justification, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          roomId,
+          refurbishmentRequestId,
+          parseFloat(upgradation.length_feet) || 0,
+          parseFloat(upgradation.breadth_feet) || 0,
+          parseFloat(upgradation.height_feet) || 0,
+          upgradation.justification || null,
+        ]
+      );
+
+      // Insert room photos (if any)
+      if (Array.isArray(upgradation.photos) && upgradation.photos.length > 0) {
+        for (const photo of upgradation.photos) {
+          await connection.query(
+            `INSERT INTO refurbishment_upgradation_photos
+              (id, upgradation_room_id, file_url, file_name, uploaded_by, created_at)
+             VALUES (?, ?, ?, ?, ?, NOW())`,
+            [uuid.v4(), roomId, photo.url, photo.name || 'photo.jpg', userId]
+          );
+        }
+      }
+
+      // Insert partner-selected upgradation packages
+      if (Array.isArray(upgradation.package_ids) && upgradation.package_ids.length > 0) {
+        for (const packageId of upgradation.package_ids) {
+          await connection.query(
+            `INSERT INTO refurbishment_upgradation_request_packages
+              (id, refurbishment_request_id, package_id, created_at)
+             VALUES (?, ?, ?, NOW())`,
+            [uuid.v4(), refurbishmentRequestId, packageId]
+          );
+        }
+      }
+    }
+
+    // Mark scheduled notification as responded
+    await connection.query(
+      `
+      UPDATE scheduled_refurbishment_notifications
+      SET partner_responded = 1,
+          response_received_at = NOW(),
+          updated_at = NOW()
+      WHERE id = ?
+    `,
+      [notifData.refurb_notification_id]
+    );
+
+    // Mark notification as read
+    await connection.query(
+      `
+      UPDATE notifications
+      SET is_read = 1,
+          read_at = NOW()
+      WHERE id = ?
+    `,
+      [notificationId]
+    );
+
+    // Create notification for admins
+    const requestNumber =
+      notifData.request_number != null
+        ? `RQ-${String(notifData.request_number).padStart(6, '0')}`
+        : `RQ-${notifData.refurb_notification_id.substring(0, 8).toUpperCase()}`;
+    const [center] = await connection.query('SELECT center_name FROM centers WHERE id = ?', [
+      notifData.center_id,
+    ]);
+    const [partner] = await connection.query('SELECT name FROM partners WHERE id = ?', [partnerId]);
+
+    const adminNotificationId = uuid.v4();
+    await connection.query(
+      `
+      INSERT INTO notifications (
+        id,
+        recipient_role,
+        type,
+        alert_type,
+        title,
+        message,
+        related_entity_type,
+        related_entity_id,
+        is_read,
+        created_at
+      ) VALUES (?, 'ADMIN', 'alert', 'refurbishment_response', ?, ?, 'refurbishment_request', ?, 0, NOW())
+    `,
+      [
+        adminNotificationId,
+        `Partner Response - ${requestNumber}`,
+        `${partner[0]?.name || 'Partner'} has submitted their package selections for ${center[0]?.center_name || 'center'}. ${selectedPackages.length} package(s) selected.${upgradation ? ' Upgradation request included.' : ''}`,
+        refurbishmentRequestId,
+      ]
+    );
+
+    await connection.commit();
+
+    return {
+      refurbishment_request_id: refurbishmentRequestId,
+      request_number: requestNumber,
+      packages_submitted: selectedPackages.length,
+      upgradation_requested: !!upgradation,
+    };
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error submitting refurbishment response:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 module.exports = {
   NOTIFICATION_TYPES,
   ALERT_TYPES,
@@ -964,6 +1465,8 @@ module.exports = {
   createReviewNotification,
   getGroupedNotifications,
   getUploadCenterDetails,
+  getRefurbishmentDetails,
+  submitRefurbishmentResponse,
   getActualCenterStatus,
   sendNotificationToAdmins,
   notifyAdminsAboutNewCenter,

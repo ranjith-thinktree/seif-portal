@@ -219,17 +219,20 @@ const SearchBar = ({
 
       {/* Action Buttons */}
       {actions.length > 0 &&
-        actions.map((action, index) => (
-          <button
-            key={index}
-            onClick={action.onClick}
-            disabled={action.disabled}
-            className={getActionButtonStyles(action.variant)}
-          >
-            {action.icon && <span className="h-5 w-5">{action.icon}</span>}
-            {action.label}
-          </button>
-        ))}
+        actions.map((action, index) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={index}
+              onClick={action.onClick}
+              disabled={action.disabled}
+              className={getActionButtonStyles(action.variant)}
+            >
+              {Icon && <Icon className="h-5 w-5" />}
+              {action.label}
+            </button>
+          );
+        })}
     </div>
   );
 };
