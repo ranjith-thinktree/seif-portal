@@ -4,8 +4,10 @@
 documents/
 *.md
 !README.md
+!frontend/src/components/dashboard/README.md
+!frontend/tests/README.md
 
-# Database files (you may want to exclude actual database files)
+# Database files
 *.sql
 !schema.sql
 !Database.sql
@@ -35,6 +37,12 @@ tmp/
 *.bak
 *~
 
+# Archive files
+*.zip
+*.tar.gz
+*.tar
+*.gz
+
 # Compiled files
 *.class
 *.o
@@ -44,9 +52,68 @@ tmp/
 
 # Node modules
 node_modules/
+
 # Python cache
 __pycache__/
 
-#Unwanted files
+# Test results & coverage artifacts
+test-results/
+playwright-report/
+frontend/test-results/
+coverage/
+*.lcov
+
+# One-off debug / diagnostic scripts (backend root)
+backend/check-*.js
+backend/debug-*.js
+backend/diagnose-*.js
+backend/verify-*.js
+backend/investigate-*.js
+backend/fix-*.js
+backend/find-*.js
+backend/simple-*.js
+backend/manual-*.js
+backend/quick-*.js
+backend/test-*.js
+backend/test-*.ps1
+backend/assign-*.js
+backend/add-request-*.js
+backend/migrate-request-*.js
+backend/run-migration.js
+backend/finalcheck*.sh
+
+# One-off debug / test scripts (backend/scripts/)
+backend/scripts/check-*.js
+backend/scripts/find-*.js
+backend/scripts/get-test-data.js
+backend/scripts/inspect-*.js
+backend/scripts/list-*.js
+backend/scripts/test-*.js
+backend/scripts/backfill-*.js
+backend/scripts/fix-*.js
+backend/scripts/add-*-images.js
+backend/scripts/center-analysis-report.json
+
+# Migration artifacts (not the SQL schema files)
+backend/migrations/*.js
+backend/migrations/*.bat
+backend/migrations/*_summary.json
+
+# Root-level one-off utility scripts
+find-brace*.js
+checkup-*.ps1
+diagnose-*.ps1
+quick-backup.ps1
+restore-database.ps1
+final_import.sh
+test-output.txt
+
+# Frontend test artifacts
+frontend/run-fy-tests.ps1
+frontend/test-pagination.ps1
+frontend/test-results.json
+frontend/verify-components.js
+
+# Unwanted files
 solo/
 *.pem
