@@ -15,7 +15,7 @@ class ReviewService {
       const uploadUuid = convertToUUID(uploadId);
 
       // Get upload details with partner info
-      const uploads = await db.query(
+      const [uploadRows] = await db.query(
         `SELECT 
           ud.*,
           p.name as partner_name,
@@ -28,14 +28,14 @@ class ReviewService {
         [uploadUuid]
       );
 
-      if (uploads.length === 0) {
+      if (uploadRows.length === 0) {
         return null;
       }
 
-      const upload = uploads[0];
+      const upload = uploadRows[0];
 
       // Get review statistics
-      const stats = await db.query(
+      const [statsRows] = await db.query(
         `SELECT 
           COUNT(*) as total_centers,
           SUM(CASE WHEN review_status = 'approved' THEN 1 ELSE 0 END) as approved_centers,
@@ -46,7 +46,7 @@ class ReviewService {
         [uploadUuid]
       );
 
-      upload.review_stats = stats[0];
+      upload.review_stats = statsRows[0];
 
       return upload;
     } catch (error) {
@@ -75,7 +75,7 @@ class ReviewService {
       const whereClause = whereConditions.join(' AND ');
 
       // Get total count
-      const countResult = await db.query(
+      const [countResult] = await db.query(
         `SELECT COUNT(*) as total 
         FROM uploaded_centers uc
         WHERE ${whereClause}`,
@@ -86,7 +86,7 @@ class ReviewService {
       // Get paginated data
       const validLimit = parseInt(limit);
       const validOffset = parseInt(offset);
-      const centers = await db.query(
+      const [centers] = await db.query(
         `SELECT 
           uc.*,
           u.full_name as reviewed_by_name,
@@ -140,7 +140,7 @@ class ReviewService {
       const whereClause = whereConditions.join(' AND ');
 
       // Get total count
-      const countResult = await db.query(
+      const [countResult] = await db.query(
         `SELECT COUNT(*) as total 
         FROM uploaded_students us
         WHERE ${whereClause}`,
@@ -151,7 +151,7 @@ class ReviewService {
       // Get paginated data
       const validLimit = parseInt(limit);
       const validOffset = parseInt(offset);
-      const students = await db.query(
+      const [students] = await db.query(
         `SELECT 
           us.*,
           uc.center_name,
@@ -166,7 +166,7 @@ class ReviewService {
       );
 
       // Get center details
-      const centerResult = await db.query(
+      const [centerResult] = await db.query(
         `SELECT 
           uc.*,
           (SELECT COUNT(*) FROM uploaded_students WHERE uploaded_center_id = uc.id) as student_count
@@ -803,7 +803,7 @@ class ReviewService {
       const partnerUuid = convertToUUID(partnerId);
 
       // Get upload details
-      const uploads = await db.query(`SELECT * FROM data_uploads WHERE id = ? AND partner_id = ?`, [
+      const [uploads] = await db.query(`SELECT * FROM data_uploads WHERE id = ? AND partner_id = ?`, [
         uploadUuid,
         partnerUuid,
       ]);
@@ -813,7 +813,7 @@ class ReviewService {
       }
 
       // Get rejected centers
-      const centers = await db.query(
+      const [centers] = await db.query(
         `SELECT 
           uc.*,
           u.full_name as reviewed_by_name,
