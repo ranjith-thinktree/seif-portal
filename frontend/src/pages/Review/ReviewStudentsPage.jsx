@@ -6,6 +6,16 @@ import {
   PencilIcon,
   XMarkIcon,
   CheckIcon,
+  ScissorsIcon,
+  DocumentDuplicateIcon,
+  ClipboardDocumentIcon,
+  ChatBubbleLeftIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  TrashIcon,
+  BuildingOffice2Icon,
+  MapPinIcon,
+  UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { AgGridReact } from "ag-grid-react";
 import {
@@ -1217,61 +1227,65 @@ const ReviewStudentsPage = () => {
           <Breadcrumb items={breadcrumbItems} />
           <button
             onClick={handleBack}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
           >
             ← Back to Centers
           </button>
         </div>
 
         {/* Header */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {center?.center_name}
-                </h1>
-                {uploadVersion > 1 && (
-                  <Badge variant="secondary" className="text-sm">
-                    Version {uploadVersion}
-                  </Badge>
-                )}
+            <div className="flex items-start gap-4">
+              <div className="p-2.5 bg-blue-50 rounded-lg">
+                <BuildingOffice2Icon className="h-6 w-6 text-blue-600" />
               </div>
-              <div className="flex gap-6 text-sm text-gray-600">
-                <div>
-                  <span className="font-medium">City:</span> {center?.city}
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {center?.center_name}
+                  </h1>
+                  {uploadVersion > 1 && (
+                    <Badge variant="secondary" className="text-sm">
+                      Version {uploadVersion}
+                    </Badge>
+                  )}
                 </div>
-                <div>
-                  <span className="font-medium">State:</span> {center?.state}
-                </div>
-                <div>
-                  <span className="font-medium">Total Students:</span>{" "}
-                  {students.length}
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-1">
+                    <MapPinIcon className="h-4 w-4 text-gray-400" />
+                    <span>{center?.city}{center?.state ? `, ${center.state}` : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <UserGroupIcon className="h-4 w-4 text-gray-400" />
+                    <span>{students.length} students</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           {uploadVersion > 1 && getEditedStudentCount() > 0 && (
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
-              📝 This is a resubmission. {getEditedStudentCount()}{" "}
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm flex items-start gap-2">
+              <span className="text-base">📝</span>
+              <span>This is a resubmission. <strong>{getEditedStudentCount()}</strong>{" "}
               {getEditedStudentCount() === 1 ? "student has" : "students have"}{" "}
-              been edited by the partner. Edited rows are highlighted in yellow.
+              been edited by the partner. Edited rows are highlighted in yellow.</span>
             </div>
           )}
 
           {isReviewed && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-sm">
-              This center has already been {center?.review_status}. You cannot
-              modify the review status.
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-sm flex items-center gap-2">
+              <span className="text-base">ℹ️</span>
+              <span>This center has already been <strong>{center?.review_status}</strong>. You cannot modify the review status.</span>
             </div>
           )}
         </div>
 
         {hasChanges && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-            ℹ️ You have unsaved changes. Click "Save Changes" before approving
-            or rejecting.
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800 flex items-center gap-2">
+            <span className="text-base">⚠️</span>
+            You have unsaved changes. Click <strong>"Save Changes"</strong> before approving or rejecting.
           </div>
         )}
 
@@ -1396,7 +1410,7 @@ const ReviewStudentsPage = () => {
         </div>
 
         {/* AG Grid */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           {students.length === 0 ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-gray-500">No students in this center</div>
@@ -1468,96 +1482,116 @@ const ReviewStudentsPage = () => {
         {/* Context Menu */}
         {contextMenu && (
           <div
-            className="context-menu-container bg-white border border-gray-200 rounded-lg shadow-xl py-1 w-[200px]"
+            className="context-menu-container bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 w-[220px]"
             style={{
               left: `${contextMenu.x}px`,
               top: `${contextMenu.y}px`,
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Group 1: Clipboard */}
             <button
               onClick={handleCut}
               disabled={!isEditMode || !contextMenu.editable}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <ScissorsIcon className="h-4 w-4 text-gray-400" />
               Cut
             </button>
             <button
               onClick={handleCopyCell}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center gap-2.5"
             >
+              <DocumentDuplicateIcon className="h-4 w-4 text-gray-400" />
               Copy
             </button>
             <button
               onClick={handlePaste}
               disabled={!isEditMode || !contextMenu.editable}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <ClipboardDocumentIcon className="h-4 w-4 text-gray-400" />
               Paste
             </button>
+
+            {/* Group 2: Annotations */}
+            <div className="border-t border-gray-100 my-1" />
             <button
               onClick={handleComment}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <ChatBubbleLeftIcon className="h-4 w-4 text-gray-400" />
               Comment
             </button>
             <button
               onClick={handleInsertNote}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <PencilSquareIcon className="h-4 w-4 text-gray-400" />
               Insert note
             </button>
-            <div className="border-t border-gray-200 my-1"></div>
+
+            {/* Group 3: Insert rows/columns */}
+            <div className="border-t border-gray-100 my-1" />
             <button
               onClick={handleInsertRowAbove}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <PlusIcon className="h-4 w-4 text-gray-400" />
               Insert 1 row above
             </button>
             <button
               onClick={handleInsertRowBelow}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <PlusIcon className="h-4 w-4 text-gray-400" />
               Insert 1 row below
             </button>
             <button
               onClick={handleInsertColumnLeft}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <PlusIcon className="h-4 w-4 text-gray-400" />
               Insert 1 column left
             </button>
             <button
               onClick={handleInsertColumnRight}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <PlusIcon className="h-4 w-4 text-gray-400" />
               Insert 1 column Right
             </button>
-            <div className="border-t border-gray-200 my-1"></div>
+
+            {/* Group 4: Delete */}
+            <div className="border-t border-gray-100 my-1" />
             <button
               onClick={handleDeleteRow}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <TrashIcon className="h-4 w-4 text-red-400" />
               Delete row
             </button>
             <button
               onClick={handleDeleteColumn}
               disabled={!isEditMode}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <TrashIcon className="h-4 w-4 text-red-400" />
               Delete column
             </button>
             <button
               onClick={handleDeleteCell}
               disabled={!isEditMode || !contextMenu.editable}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2.5"
             >
+              <TrashIcon className="h-4 w-4 text-red-400" />
               Delete Cell
             </button>
           </div>

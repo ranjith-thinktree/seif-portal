@@ -7,6 +7,14 @@ import SearchBar from "../../components/common/SearchBar";
 import Pagination from "../../components/common/Pagination";
 import { showToast } from "../../utils/toast.util";
 import { ROUTES } from "../../constants/routes";
+import {
+  BuildingOffice2Icon,
+  ChevronRightIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  DocumentTextIcon,
+} from "@heroicons/react/24/outline";
 
 /**
  * ReviewCentersPage Component
@@ -257,38 +265,76 @@ const ReviewCentersPage = () => {
         <Breadcrumb items={breadcrumbItems} />
 
         {/* Header */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Review Upload - {upload?.partner_name}
-          </h1>
-          <div className="flex gap-6 text-sm text-gray-600">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="flex items-start gap-4 mb-5">
+            <div className="p-2.5 bg-blue-50 rounded-lg">
+              <DocumentTextIcon className="h-6 w-6 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-gray-900">
+                Review Upload
+              </h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {upload?.partner_name}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-100">
             <div>
-              <span className="font-medium">Uploaded by:</span>{" "}
-              {upload?.uploaded_by_name}
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Uploaded By</p>
+              <p className="text-sm font-medium text-gray-900">{upload?.uploaded_by_name || "-"}</p>
             </div>
             <div>
-              <span className="font-medium">Upload Date:</span>{" "}
-              {new Date(upload?.uploaded_at).toLocaleDateString()}
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Upload Date</p>
+              <p className="text-sm font-medium text-gray-900">{upload?.uploaded_at ? new Date(upload.uploaded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"}</p>
             </div>
             <div>
-              <span className="font-medium">Total Centers:</span>{" "}
-              {upload?.centers_total}
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">File</p>
+              <p className="text-sm font-medium text-gray-900 truncate">{upload?.file_name || "-"}</p>
             </div>
             <div>
-              <span className="font-medium">Reviewed:</span>{" "}
-              {upload?.centers_reviewed}
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Total Students</p>
+              <p className="text-sm font-medium text-gray-900">{upload?.total_students || "-"}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Stat Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <BuildingOffice2Icon className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <span className="font-medium">Approved:</span>{" "}
-              <span className="text-green-600 font-semibold">
-                {upload?.centers_approved}
-              </span>
+              <p className="text-2xl font-bold text-gray-900">{upload?.centers_total ?? 0}</p>
+              <p className="text-xs text-gray-500">Total Centers</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
+            <div className="p-2 bg-yellow-50 rounded-lg">
+              <ClockIcon className="h-5 w-5 text-yellow-600" />
             </div>
             <div>
-              <span className="font-medium">Rejected:</span>{" "}
-              <span className="text-red-600 font-semibold">
-                {upload?.centers_rejected}
-              </span>
+              <p className="text-2xl font-bold text-yellow-700">{(upload?.centers_total ?? 0) - (upload?.centers_reviewed ?? 0)}</p>
+              <p className="text-xs text-gray-500">Pending Review</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
+            <div className="p-2 bg-green-50 rounded-lg">
+              <CheckCircleIcon className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-green-700">{upload?.centers_approved ?? 0}</p>
+              <p className="text-xs text-gray-500">Approved</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
+            <div className="p-2 bg-red-50 rounded-lg">
+              <XCircleIcon className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-red-700">{upload?.centers_rejected ?? 0}</p>
+              <p className="text-xs text-gray-500">Rejected</p>
             </div>
           </div>
         </div>
@@ -313,7 +359,7 @@ const ReviewCentersPage = () => {
         />
 
         {/* Centers Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-gray-500">Loading centers...</div>
@@ -335,7 +381,7 @@ const ReviewCentersPage = () => {
                 className="overflow-x-auto custom-scrollbar"
               >
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead style={{ backgroundColor: "#EFEFEF" }}>
+                  <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                         S.NO
@@ -368,11 +414,11 @@ const ReviewCentersPage = () => {
                           center.review_status === "pending" &&
                           handleCenterClick(center)
                         }
-                        className={
+                        className={[
                           center.review_status === "pending"
-                            ? "hover:bg-gray-50 cursor-pointer transition-colors"
-                            : "opacity-60"
-                        }
+                            ? "hover:bg-blue-50 cursor-pointer transition-colors group"
+                            : "opacity-70 bg-gray-50/50",
+                        ].join(" ")}
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
@@ -380,7 +426,12 @@ const ReviewCentersPage = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {center.center_name}
+                          <div className="flex items-center gap-2">
+                            {center.center_name}
+                            {center.review_status === "pending" && (
+                              <ChevronRightIcon className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {center.city}

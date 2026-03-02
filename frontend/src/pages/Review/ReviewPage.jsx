@@ -5,11 +5,16 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   MagnifyingGlassIcon,
+  ChevronRightIcon,
+  ClipboardDocumentListIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 import reviewService from "../../services/review.service";
 import { MainLayout } from "../../components/layout";
 import SuccessModal from "../../components/common/SuccessModal";
 import RejectionModal from "../../components/common/RejectionModal";
+import Breadcrumb from "../../components/common/Breadcrumb";
+import { showToast } from "../../utils/toast.util";
 
 /**
  * Review Page - Two Tab System
@@ -18,6 +23,12 @@ import RejectionModal from "../../components/common/RejectionModal";
  */
 const ReviewPage = () => {
   const navigate = useNavigate();
+
+  // Breadcrumb items
+  const breadcrumbItems = [
+    { label: "Dashboard", path: "/dashboard" },
+    { label: "Review & Approval", path: "#" },
+  ];
 
   // Tab state
   const [activeTab, setActiveTab] = useState("centers");
@@ -124,7 +135,7 @@ const ReviewPage = () => {
       fetchPendingCenters();
     } catch (err) {
       console.error("Failed to approve center:", err);
-      alert(err.response?.data?.message || "Failed to approve center");
+      showToast.error(err.response?.data?.message || "Failed to approve center");
     } finally {
       setIsProcessing(false);
     }
@@ -144,7 +155,7 @@ const ReviewPage = () => {
       fetchPendingCenters();
     } catch (err) {
       console.error("Failed to reject center:", err);
-      alert(err.response?.data?.message || "Failed to reject center");
+      showToast.error(err.response?.data?.message || "Failed to reject center");
     } finally {
       setIsProcessing(false);
     }
@@ -194,44 +205,64 @@ const ReviewPage = () => {
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto">
+        {/* Breadcrumb */}
+        <div className="mb-6">
+          <Breadcrumb items={breadcrumbItems} />
+        </div>
+
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground">
-            Review & Approval
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Review and approve pending centers and data uploads
-          </p>
+        <div className="mb-8 flex items-center gap-4">
+          <div className="p-3 bg-primary-50 rounded-xl">
+            <ClipboardDocumentListIcon className="h-8 w-8 text-primary-600" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Review & Approval
+            </h1>
+            <p className="text-gray-500 mt-1">
+              Review and approve pending centers and data uploads
+            </p>
+          </div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-4 mb-6 border-b border-border">
           <button
             onClick={() => setActiveTab("centers")}
-            className={`pb-3 px-2 font-medium transition-colors relative ${
+            className={`pb-3 px-2 font-medium transition-colors relative flex items-center gap-2 ${
               activeTab === "centers"
                 ? "text-primary-600 border-b-2 border-primary-600"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
+            <BuildingOffice2Icon className="h-4 w-4" />
             Pending Centers
-            {centers.length > 0 && activeTab === "centers" && (
-              <span className="ml-2 px-2 py-0.5 bg-primary-500 text-white text-xs rounded-full">
+            {centersPagination.total > 0 && (
+              <span className={`ml-1 px-2 py-0.5 text-xs rounded-full font-semibold ${
+                activeTab === "centers"
+                  ? "bg-primary-500 text-white"
+                  : "bg-gray-100 text-gray-600"
+              }`}>
                 {centersPagination.total}
               </span>
             )}
           </button>
           <button
             onClick={() => setActiveTab("uploads")}
-            className={`pb-3 px-2 font-medium transition-colors relative ${
+            className={`pb-3 px-2 font-medium transition-colors relative flex items-center gap-2 ${
               activeTab === "uploads"
                 ? "text-primary-600 border-b-2 border-primary-600"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
+            <ClipboardDocumentListIcon className="h-4 w-4" />
             Pending Data Uploads
-            {uploads.length > 0 && activeTab === "uploads" && (
-              <span className="ml-2 px-2 py-0.5 bg-primary-500 text-white text-xs rounded-full">
+            {uploadsPagination.total > 0 && (
+              <span className={`ml-1 px-2 py-0.5 text-xs rounded-full font-semibold ${
+                activeTab === "uploads"
+                  ? "bg-primary-500 text-white"
+                  : "bg-gray-100 text-gray-600"
+              }`}>
                 {uploadsPagination.total}
               </span>
             )}
@@ -243,21 +274,21 @@ const ReviewPage = () => {
           /* Tab 1: Pending Centers */
           <div className="space-y-6">
             {/* Search Bar */}
-            <div className="bg-white p-4 rounded-lg shadow-card">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
               <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by center name, city, or state..."
                   value={centersSearch}
                   onChange={(e) => setCentersSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder:text-gray-400"
                 />
               </div>
             </div>
 
             {/* Centers Table */}
-            <div className="bg-white rounded-lg shadow-card overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               {centersLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <ArrowPathIcon className="h-8 w-8 text-primary-500 animate-spin" />
@@ -351,7 +382,7 @@ const ReviewPage = () => {
                                     setModalType("center");
                                     setShowApproveModal(true);
                                   }}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600"
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
                                 >
                                   <CheckCircleIcon className="h-4 w-4" />
                                   Approve
@@ -362,7 +393,7 @@ const ReviewPage = () => {
                                     setModalType("center");
                                     setShowRejectModal(true);
                                   }}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600"
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm"
                                 >
                                   <XCircleIcon className="h-4 w-4" />
                                   Reject
@@ -377,18 +408,14 @@ const ReviewPage = () => {
 
                   {/* Pagination */}
                   {centersPagination.totalPages > 1 && (
-                    <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-                      <div className="text-sm text-muted-foreground">
+                    <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
+                      <div className="text-sm text-gray-500">
                         Showing{" "}
-                        {(centersPagination.page - 1) *
-                          centersPagination.limit +
-                          1}{" "}
-                        to{" "}
-                        {Math.min(
-                          centersPagination.page * centersPagination.limit,
-                          centersPagination.total
-                        )}{" "}
-                        of {centersPagination.total} results
+                        <span className="font-medium text-gray-700">{(centersPagination.page - 1) * centersPagination.limit + 1}</span>
+                        {" "}to{" "}
+                        <span className="font-medium text-gray-700">{Math.min(centersPagination.page * centersPagination.limit, centersPagination.total)}</span>
+                        {" "}of{" "}
+                        <span className="font-medium text-gray-700">{centersPagination.total}</span> results
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -399,7 +426,7 @@ const ReviewPage = () => {
                             }))
                           }
                           disabled={centersPagination.page === 1}
-                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white hover:border-gray-300 transition-colors"
                         >
                           Previous
                         </button>
@@ -414,7 +441,7 @@ const ReviewPage = () => {
                             centersPagination.page ===
                             centersPagination.totalPages
                           }
-                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white hover:border-gray-300 transition-colors"
                         >
                           Next
                         </button>
@@ -429,21 +456,21 @@ const ReviewPage = () => {
           /* Tab 2: Pending Data Uploads */
           <div className="space-y-6">
             {/* Search Bar */}
-            <div className="bg-white p-4 rounded-lg shadow-card">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
               <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by file name or partner..."
                   value={uploadsSearch}
                   onChange={(e) => setUploadsSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder:text-gray-400"
                 />
               </div>
             </div>
 
             {/* Uploads Table */}
-            <div className="bg-white rounded-lg shadow-card overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               {uploadsLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <ArrowPathIcon className="h-8 w-8 text-primary-500 animate-spin" />
@@ -537,9 +564,10 @@ const ReviewPage = () => {
                                 onClick={() =>
                                   handleViewUploadDetails(upload.id)
                                 }
-                                className="text-primary-600 hover:text-primary-700 font-medium text-sm"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-700 text-sm font-medium rounded-lg hover:bg-primary-100 border border-primary-200 transition-colors"
                               >
-                                Review Details →
+                                Review Details
+                                <ChevronRightIcon className="h-4 w-4" />
                               </button>
                             </td>
                           </tr>
@@ -550,18 +578,14 @@ const ReviewPage = () => {
 
                   {/* Pagination */}
                   {uploadsPagination.totalPages > 1 && (
-                    <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-                      <div className="text-sm text-muted-foreground">
+                    <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
+                      <div className="text-sm text-gray-500">
                         Showing{" "}
-                        {(uploadsPagination.page - 1) *
-                          uploadsPagination.limit +
-                          1}{" "}
-                        to{" "}
-                        {Math.min(
-                          uploadsPagination.page * uploadsPagination.limit,
-                          uploadsPagination.total
-                        )}{" "}
-                        of {uploadsPagination.total} results
+                        <span className="font-medium text-gray-700">{(uploadsPagination.page - 1) * uploadsPagination.limit + 1}</span>
+                        {" "}to{" "}
+                        <span className="font-medium text-gray-700">{Math.min(uploadsPagination.page * uploadsPagination.limit, uploadsPagination.total)}</span>
+                        {" "}of{" "}
+                        <span className="font-medium text-gray-700">{uploadsPagination.total}</span> results
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -572,7 +596,7 @@ const ReviewPage = () => {
                             }))
                           }
                           disabled={uploadsPagination.page === 1}
-                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white hover:border-gray-300 transition-colors"
                         >
                           Previous
                         </button>
@@ -587,7 +611,7 @@ const ReviewPage = () => {
                             uploadsPagination.page ===
                             uploadsPagination.totalPages
                           }
-                          className="px-3 py-1 border border-border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-secondary"
+                          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white hover:border-gray-300 transition-colors"
                         >
                           Next
                         </button>
