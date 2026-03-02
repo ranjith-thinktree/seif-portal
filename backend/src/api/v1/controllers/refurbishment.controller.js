@@ -958,12 +958,14 @@ class RefurbishmentController {
     try {
       const { id } = req.params;
       const adminUserId = req.user.id;
-      const { adminRemarks } = req.body;
+      const { adminRemarks, adminAddedPackages = [], removedPackageIds = [] } = req.body;
 
       const result = await RefurbishmentService.approveRefurbishmentRequest(
         id,
         adminUserId,
-        adminRemarks
+        adminRemarks,
+        removedPackageIds,
+        adminAddedPackages
       );
 
       return ApiResponse.success(res, result, result.message);

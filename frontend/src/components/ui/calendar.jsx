@@ -8,7 +8,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 const Calendar = React.forwardRef(
   ({ className, selected, onSelect, minDate, maxDate, ...props }, ref) => {
     const [currentMonth, setCurrentMonth] = React.useState(
-      selected ? new Date(selected) : new Date()
+      selected ? new Date(selected) : new Date(),
     );
 
     const getDaysInMonth = (date) => {
@@ -39,13 +39,13 @@ const Calendar = React.forwardRef(
 
     const handlePrevMonth = () => {
       setCurrentMonth(
-        new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)
+        new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1),
       );
     };
 
     const handleNextMonth = () => {
       setCurrentMonth(
-        new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)
+        new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
       );
     };
 
@@ -53,7 +53,7 @@ const Calendar = React.forwardRef(
       const newDate = new Date(
         currentMonth.getFullYear(),
         currentMonth.getMonth(),
-        day
+        day,
       );
       if (!isDateDisabled(newDate)) {
         onSelect?.(newDate);
@@ -151,12 +151,12 @@ const Calendar = React.forwardRef(
                   transition-colors
                   ${
                     isSelected
-                      ? "bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                      ? "bg-green-600 text-white font-semibold hover:bg-green-700"
                       : isToday
-                      ? "bg-blue-50 text-blue-600 font-semibold hover:bg-blue-100"
-                      : isDisabled
-                      ? "text-gray-300 cursor-not-allowed"
-                      : "text-gray-700 hover:bg-gray-100"
+                        ? "bg-green-50 text-green-700 font-semibold hover:bg-green-100"
+                        : isDisabled
+                          ? "text-gray-300 cursor-not-allowed"
+                          : "text-gray-700 hover:bg-gray-100"
                   }
                 `}
               >
@@ -167,7 +167,7 @@ const Calendar = React.forwardRef(
         </div>
       </div>
     );
-  }
+  },
 );
 
 Calendar.displayName = "Calendar";

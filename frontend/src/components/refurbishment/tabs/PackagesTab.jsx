@@ -51,6 +51,9 @@ const PackagesTab = ({
   // Sub-tab: which category is active in the packages tab
   const [activeCategory, setActiveCategory] = useState("refurbishment");
 
+  // TanStack table instance for column visibility toggle
+  const [tableInstance, setTableInstance] = useState(null);
+
   // Image upload state
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
@@ -399,6 +402,8 @@ const PackagesTab = ({
         loading={loading}
         actions={actions}
         placeholder={`Search ${activeCategory} packages by name or description...`}
+        table={tableInstance}
+        storageKey={`refurbishment-packages-${activeCategory}`}
       />
 
       {/* Data Table */}
@@ -409,6 +414,8 @@ const PackagesTab = ({
         onPageChange={activeTable.goToPage}
         onPageSizeChange={activeTable.setPageSize}
         isLoading={loading}
+        storageKey={`refurbishment-packages-${activeCategory}`}
+        onTableReady={(t) => setTableInstance(t)}
         emptyMessage={
           activeCategory === "upgradation"
             ? "No upgradation packages found. Create your first upgradation package to get started."

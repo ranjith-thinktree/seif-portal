@@ -50,6 +50,10 @@ const RefurbishmentResponseModal = ({
   const [upgradationPhotoFiles, setUpgradationPhotoFiles] = useState([]);
   const [upgradationSelections, setUpgradationSelections] = useState({}); // packageId -> boolean
 
+  // Document upload state – shown in the final preview step
+  const [refurbishmentDoc, setRefurbishmentDoc] = useState(null); // File | null
+  const [upgradationDoc, setUpgradationDoc] = useState(null); // File | null
+
   const currentCourse = details.courses[currentCourseIndex];
   const totalCourses = details.courses.length;
 
@@ -131,6 +135,29 @@ const RefurbishmentResponseModal = ({
       }
       return updated;
     });
+  };
+
+  // Document upload handlers — shown in the final preview step
+  const handleRefurbishmentDocUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Document must be under 20MB");
+      return;
+    }
+    setRefurbishmentDoc(file);
+    toast.success(`${file.name} attached as refurbishment document`);
+  };
+
+  const handleUpgradationDocUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Document must be under 20MB");
+      return;
+    }
+    setUpgradationDoc(file);
+    toast.success(`${file.name} attached as upgradation document`);
   };
 
   // Navigate to next course, then show refurbishment-only preview first
@@ -259,6 +286,23 @@ const RefurbishmentResponseModal = ({
         `/notifications/${notificationId}/refurbishment-response`,
         {
           selected_packages: submissionData,
+          // Document attachments (placeholder URLs for now — real S3 upload to be implemented)
+          refurbishment_document: refurbishmentDoc
+            ? {
+                name: refurbishmentDoc.name,
+                size: refurbishmentDoc.size,
+                type: refurbishmentDoc.type,
+                url: `https://seif-portal-uploads.s3.amazonaws.com/refurbishment/docs/${Date.now()}-${refurbishmentDoc.name}`,
+              }
+            : null,
+          upgradation_document: upgradationDoc
+            ? {
+                name: upgradationDoc.name,
+                size: upgradationDoc.size,
+                type: upgradationDoc.type,
+                url: `https://seif-portal-uploads.s3.amazonaws.com/refurbishment/docs/${Date.now()}-${upgradationDoc.name}`,
+              }
+            : null,
           upgradation: upgradationRequested
             ? {
                 length_feet: parseFloat(upgradationDetails.length_feet) || 0,
@@ -1371,6 +1415,92 @@ const RefurbishmentResponseModal = ({
                 </>
               )}
             </div>
+
+            {/* Document Upload Section — only shown on final preview before submit */}
+            {isFinalPreview && (
+              <div className="px-8 py-3 border-t border-gray-100 bg-gray-50/50">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+                  Attach Supporting Documents
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Refurbishment Document */}
+                  <div>
+                    <label className="block text-xs text-gray-600 font-medium mb-1">
+                      Refurbishment Document{" "}
+                      <span className="text-gray-400 font-normal">
+                        (PDF, Excel, Image…)
+                      </span>
+                    </label>
+                    {refurbishmentDoc ? (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                        <span className="text-xs text-green-700 font-medium truncate flex-1">
+                          {refurbishmentDoc.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setRefurbishmentDoc(null)}
+                          className="text-red-400 hover:text-red-600 text-xs flex-shrink-0"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-400 hover:bg-green-50/30 transition-colors">
+                        <ArrowUpTrayIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-xs text-gray-500">
+                          Click to upload
+                        </span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                          onChange={handleRefurbishmentDocUpload}
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Upgradation Document — only shown if partner chose upgradation */}
+                  {upgradationRequested && (
+                    <div>
+                      <label className="block text-xs text-gray-600 font-medium mb-1">
+                        Upgradation Document{" "}
+                        <span className="text-gray-400 font-normal">
+                          (PDF, Excel, Image…)
+                        </span>
+                      </label>
+                      {upgradationDoc ? (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                          <span className="text-xs text-purple-700 font-medium truncate flex-1">
+                            {upgradationDoc.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setUpgradationDoc(null)}
+                            className="text-red-400 hover:text-red-600 text-xs flex-shrink-0"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-purple-200 rounded-lg cursor-pointer hover:border-purple-400 hover:bg-purple-50/30 transition-colors">
+                          <ArrowUpTrayIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-xs text-gray-500">
+                            Click to upload
+                          </span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                            onChange={handleUpgradationDocUpload}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Footer */}
             <div className="px-8 py-4 border-t border-gray-100 bg-white">

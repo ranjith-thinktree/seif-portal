@@ -267,76 +267,155 @@ class RefurbishmentService {
    */
   static async getPartnerRequestDetails(requestId, partnerId) {
     try {
-      // Execute 7-table JOIN query with security check
-      const query = `
-        SELECT 
-          rr.id as refurbishment_request_id,
-          rr.request_id,
-          rr.center_id,
-          rr.is_upgradation_requested,
-          c.center_name,
-          c.address,
-          c.partner_id,
-          r.remarks as admin_remarks,
-          r.status,
-          cc.course_id,
-          co.course_name,
-          rasp.package_id,
-          rp.package_name,
-          rp.description
-        FROM refurbishment_requests rr
-        JOIN requests r ON r.id = rr.request_id
-        JOIN centers c ON c.id = rr.center_id
-        JOIN center_courses cc ON cc.center_id = c.id
-        JOIN courses co ON co.id = cc.course_id
-        JOIN refurbishment_admin_selected_packages rasp 
-          ON rasp.request_id = rr.request_id
-          AND rasp.course_id = cc.course_id
-        JOIN refurbishment_packages rp ON rp.id = rasp.package_id
-        WHERE rr.request_id = ?
-        ORDER BY co.course_name, rp.package_name
-      `;
+      // ── 1. Get core request + security check ──
+      const [reqRows] = await db.query(
+        `SELECT
+           rr.id AS refurbishment_request_id,
+           rr.request_id,
+           rr.center_id,
+           rr.status,
+           rr.is_upgradation_requested,
+           rr.justification,
+           rr.admin_remarks,
+           rr.rejection_reason,
+           rr.approved_at,
+           rr.created_at,
+           rr.updated_at,
+           c.center_name,
+           c.partner_id,
+           p.name  AS partner_name,
+           r.request_number
+         FROM refurbishment_requests rr
+         JOIN centers c ON c.id = rr.center_id
+         JOIN partners p ON p.id = c.partner_id
+         LEFT JOIN requests r ON r.id = rr.request_id
+         WHERE rr.id = ?`,
+        [requestId]
+      );
 
-      const [rows] = await db.query(query, [requestId]);
+      if (!reqRows || reqRows.length === 0) return null;
 
-      // Security check: Verify partner owns this request
-      if (rows.length === 0) {
-        return null; // Request not found
+      const req = reqRows[0];
+
+      // Security check
+      if (req.partner_id !== partnerId) return null;
+
+      // ── 2. Partner-selected packages grouped by course ──
+      const [pkgRows] = await db.query(
+        `SELECT
+           rrcp.course_id,
+           rrcp.package_id,
+           rrcp.justification AS partner_justification,
+           co.course_name,
+           rp.package_name,
+           rp.description,
+           rp.images
+         FROM refurbishment_request_course_packages rrcp
+         JOIN courses co ON co.id = rrcp.course_id
+         JOIN refurbishment_packages rp ON rp.id = rrcp.package_id
+         WHERE rrcp.refurbishment_request_id = ?
+         ORDER BY co.course_name, rp.package_name`,
+        [requestId]
+      );
+
+      // ── 3. Partner-uploaded attachments ──
+      const [attachRows] = await db.query(
+        `SELECT course_id, file_url, file_name, file_size_bytes, file_mime_type
+         FROM refurbishment_request_course_attachments
+         WHERE refurbishment_request_id = ?
+         ORDER BY created_at`,
+        [requestId]
+      );
+
+      // Build attachment map by course_id
+      const attachByCourse = {};
+      for (const att of attachRows) {
+        if (!attachByCourse[att.course_id]) attachByCourse[att.course_id] = [];
+        attachByCourse[att.course_id].push({
+          url: att.file_url,
+          name: att.file_name,
+          size: att.file_size_bytes,
+          type: att.file_mime_type,
+        });
       }
 
-      const firstRow = rows[0];
-      if (firstRow.partner_id !== partnerId) {
-        return null; // Access denied (not partner's request)
-      }
-
-      // Transform data: Group packages by course
+      // Group packages by course
       const courseMap = new Map();
-
-      for (const row of rows) {
+      for (const row of pkgRows) {
         if (!courseMap.has(row.course_id)) {
           courseMap.set(row.course_id, {
             course_id: row.course_id,
             course_name: row.course_name,
             packages: [],
+            uploaded_images: attachByCourse[row.course_id] || [],
           });
         }
-
         courseMap.get(row.course_id).packages.push({
           package_id: row.package_id,
           package_name: row.package_name,
           description: row.description,
+          images: row.images || '[]',
+          justification: row.partner_justification || '',
         });
       }
 
-      // Build response object
+      // ── 4. Upgradation details (if requested) ──
+      let upgradation = null;
+      if (req.is_upgradation_requested) {
+        const [roomRows] = await db.query(
+          `SELECT id, length_feet, breadth_feet, height_feet, justification
+           FROM refurbishment_upgradation_rooms
+           WHERE refurbishment_request_id = ?
+           ORDER BY created_at`,
+          [requestId]
+        );
+
+        let photos = [];
+        if (roomRows.length > 0) {
+          const roomIds = roomRows.map((r) => r.id);
+          const [photoRows] = await db.query(
+            `SELECT upgradation_room_id, file_url, file_name
+             FROM refurbishment_upgradation_photos
+             WHERE upgradation_room_id IN (?)`,
+            [roomIds]
+          );
+          photos = photoRows;
+        }
+
+        const [upgradPkgRows] = await db.query(
+          `SELECT urap.package_id, rp.package_name, rp.description, rp.images
+           FROM refurbishment_upgradation_request_packages urap
+           JOIN refurbishment_packages rp ON rp.id = urap.package_id
+           WHERE urap.refurbishment_request_id = ?`,
+          [requestId]
+        );
+
+        upgradation = {
+          rooms: roomRows.map((r) => ({
+            ...r,
+            photos: photos.filter((p) => p.upgradation_room_id === r.id),
+          })),
+          selected_packages: upgradPkgRows,
+        };
+      }
+
       return {
-        request_id: firstRow.request_id,
-        center_id: firstRow.center_id,
-        center_name: firstRow.center_name,
-        address: firstRow.address,
-        admin_remarks: firstRow.admin_remarks,
-        status: firstRow.status,
+        request: {
+          id: req.refurbishment_request_id,
+          status: req.status,
+          center_name: req.center_name,
+          partner_name: req.partner_name,
+          justification: req.justification,
+          admin_remarks: req.admin_remarks,
+          rejection_reason: req.rejection_reason,
+          approved_at: req.approved_at,
+          created_at: req.created_at,
+          updated_at: req.updated_at,
+          request_number: req.request_number,
+        },
         courses: Array.from(courseMap.values()),
+        upgradation_requested: !!req.is_upgradation_requested,
+        upgradation,
       };
     } catch (error) {
       console.error('Error getting partner request details:', error);
@@ -1917,7 +1996,13 @@ class RefurbishmentService {
    * @param {string} adminRemarks - Optional remarks from admin
    * @returns {Promise<Object>} Success message
    */
-  static async approveRefurbishmentRequest(requestId, adminUserId, adminRemarks = null) {
+  static async approveRefurbishmentRequest(
+    requestId,
+    adminUserId,
+    adminRemarks = null,
+    removedPackageIds = [],
+    adminAddedPackages = []
+  ) {
     const connection = await db.getConnection();
 
     try {
@@ -1962,6 +2047,32 @@ class RefurbishmentService {
       }
 
       const requestData = request[0];
+
+      // ── Apply package modifications BEFORE approval ──────────────────
+      // 1. Remove partner-selected packages that admin has rejected
+      if (removedPackageIds && removedPackageIds.length > 0) {
+        const removeIds = removedPackageIds.map((r) => (typeof r === 'object' ? r.packageId : r));
+        if (removeIds.length > 0) {
+          await connection.query(
+            `DELETE FROM refurbishment_request_course_packages
+             WHERE refurbishment_request_id = ? AND package_id IN (?)`,
+            [requestId, removeIds]
+          );
+        }
+      }
+
+      // 2. Persist admin-added packages to the dedicated table
+      if (adminAddedPackages && adminAddedPackages.length > 0) {
+        for (const pkg of adminAddedPackages) {
+          const pkgId = uuidv4();
+          await connection.query(
+            `INSERT IGNORE INTO refurbishment_admin_added_packages
+               (id, refurbishment_request_id, course_id, package_id, quantity, added_by, created_at)
+             VALUES (?, ?, ?, ?, 1, ?, NOW())`,
+            [pkgId, requestId, pkg.courseId, pkg.packageId, adminUserId]
+          );
+        }
+      }
 
       // Update request status to approved
       await connection.query(

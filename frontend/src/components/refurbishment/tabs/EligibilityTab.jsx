@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "../../ui/button";
 import { BellIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import EnhancedDataTable from "../../common/EnhancedDataTable";
@@ -18,6 +18,8 @@ const EligibilityTab = ({
   // Export handler
   onExport,
 }) => {
+  const [tableInstance, setTableInstance] = useState(null);
+
   // Use pre-processed data from parent's useTableSearch hook
   const paginatedData = table.data;
 
@@ -163,6 +165,8 @@ const EligibilityTab = ({
         sortOrder={table.sortOrder}
         onSortChange={table.handleSort}
         actions={actions}
+        table={tableInstance}
+        storageKey="refurbishment-eligibility"
       />
       <EnhancedDataTable
         columns={columns}
@@ -173,6 +177,7 @@ const EligibilityTab = ({
         emptyMessage="No eligible centers found"
         showSerialNumber={true}
         storageKey="refurbishment-eligibility"
+        onTableReady={(t) => setTableInstance(t)}
       />
     </div>
   );

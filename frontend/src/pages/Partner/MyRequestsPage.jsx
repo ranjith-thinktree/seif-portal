@@ -193,7 +193,7 @@ const MyRequestsPage = () => {
         setLoading(false);
       }
     },
-    [activeTab, statusFilter]
+    [activeTab, statusFilter],
   );
 
   useEffect(() => {

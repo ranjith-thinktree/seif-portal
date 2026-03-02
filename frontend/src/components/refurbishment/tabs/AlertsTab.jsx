@@ -2,6 +2,23 @@ import React, { useState, useCallback } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import AdminRefurbishmentReviewModal from "../modals/AdminRefurbishmentReviewModal";
 import refurbishmentService from "../../../services/refurbishment.service";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../ui/dropdown-menu";
+import { Checkbox } from "../../ui/checkbox";
+
+// Columns that can be shown/hidden (Action is always visible)
+const ALERT_COLUMNS = [
+  { id: "date",   label: "Date" },
+  { id: "type",   label: "Type" },
+  { id: "title",  label: "Title" },
+  { id: "remark", label: "Remark" },
+  { id: "status", label: "Status" },
+];
 
 /**
  * AlertsTab
@@ -26,6 +43,26 @@ const AlertsTab = ({
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(table.searchTerm || "");
   const [statusFilter, setStatusFilter] = useState("All");
+
+  // Column visibility (persisted in localStorage)
+  const [visibleCols, setVisibleCols] = useState(() => {
+    try {
+      const saved = localStorage.getItem("columnVisibility_refurbishment-alerts");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { date: true, type: true, title: true, remark: true, status: true };
+  });
+
+  const toggleCol = (id) => {
+    setVisibleCols((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      localStorage.setItem("columnVisibility_refurbishment-alerts", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const hiddenColCount = ALERT_COLUMNS.filter((c) => !visibleCols[c.id]).length;
+  const visibleColSpan = ALERT_COLUMNS.filter((c) => visibleCols[c.id]).length + 1; // +1 for Action
 
   const paginatedData = table.data || [];
 
@@ -177,6 +214,51 @@ const AlertsTab = ({
               />
             </svg>
           </button>
+
+          {/* Column visibility toggle */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition-colors whitespace-nowrap">
+                <svg className="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h8m-8 6h16" />
+                </svg>
+                Columns
+                {hiddenColCount > 0 && (
+                  <span className="ml-0.5 rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-medium">
+                    {hiddenColCount} hidden
+                  </span>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {ALERT_COLUMNS.map((col) => (
+                <DropdownMenuItem
+                  key={col.id}
+                  className="flex items-center gap-2 px-3 py-2 cursor-pointer"
+                  onSelect={(e) => { e.preventDefault(); toggleCol(col.id); }}
+                >
+                  <Checkbox
+                    checked={visibleCols[col.id]}
+                    onCheckedChange={() => toggleCol(col.id)}
+                    className="pointer-events-none"
+                  />
+                  <span className="text-sm">{col.label}</span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-xs text-center text-gray-500 cursor-pointer px-3 py-2"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  const all = Object.fromEntries(ALERT_COLUMNS.map((c) => [c.id, true]));
+                  setVisibleCols(all);
+                  localStorage.setItem("columnVisibility_refurbishment-alerts", JSON.stringify(all));
+                }}
+              >
+                Reset to default
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Table */}
@@ -184,22 +266,23 @@ const AlertsTab = ({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Date", "Type", "Title", "Remark", "Status", "Action"].map(
-                  (h) => (
-                    <th
-                      key={h}
-                      className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3"
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
+                {ALERT_COLUMNS.filter((c) => visibleCols[c.id]).map((c) => (
+                  <th
+                    key={c.id}
+                    className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3"
+                  >
+                    {c.label}
+                  </th>
+                ))}
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="text-center py-12">
+                  <td colSpan={visibleColSpan} className="text-center py-12">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-500" />
                   </td>
                 </tr>
@@ -208,7 +291,7 @@ const AlertsTab = ({
               {!loading && visibleRows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={visibleColSpan}
                     className="text-center py-12 text-sm text-gray-400"
                   >
                     No alerts found
@@ -230,67 +313,77 @@ const AlertsTab = ({
                         isActive ? "bg-green-50" : "hover:bg-gray-50"
                       }`}
                     >
-                      <td className="px-4 py-4 text-xs text-gray-500 whitespace-nowrap">
-                        {fmtShortDate(row.created_at)}
-                      </td>
-                      <td className="px-4 py-4 text-xs text-gray-700">
-                        {isRefurb
-                          ? row.center_name || "Refurbishment"
-                          : row.alert_type || row.type || "General"}
-                      </td>
-                      <td className="px-4 py-4 font-medium text-gray-900 text-sm">
-                        {row.title || row.message || "—"}
-                      </td>
-                      <td className="px-4 py-4 text-xs text-gray-500 max-w-[180px]">
-                        <span className="line-clamp-2">
-                          {row.message ? `"${row.message}"` : row.remark || "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        {(() => {
-                          const s = row.request_status;
-                          if (s === "completed")
+                      {visibleCols.date && (
+                        <td className="px-4 py-4 text-xs text-gray-500 whitespace-nowrap">
+                          {fmtShortDate(row.created_at)}
+                        </td>
+                      )}
+                      {visibleCols.type && (
+                        <td className="px-4 py-4 text-xs text-gray-700">
+                          {isRefurb
+                            ? row.center_name || "Refurbishment"
+                            : row.alert_type || row.type || "General"}
+                        </td>
+                      )}
+                      {visibleCols.title && (
+                        <td className="px-4 py-4 font-medium text-gray-900 text-sm">
+                          {row.title || row.message || "—"}
+                        </td>
+                      )}
+                      {visibleCols.remark && (
+                        <td className="px-4 py-4 text-xs text-gray-500 max-w-[180px]">
+                          <span className="line-clamp-2">
+                            {row.message ? `"${row.message}"` : row.remark || "—"}
+                          </span>
+                        </td>
+                      )}
+                      {visibleCols.status && (
+                        <td className="px-4 py-4">
+                          {(() => {
+                            const s = row.request_status;
+                            if (s === "completed")
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                                  Completed
+                                </span>
+                              );
+                            if (
+                              s === "approved" ||
+                              s === "material_procurement" ||
+                              s === "installation_in_progress" ||
+                              s === "refurbishment_started"
+                            )
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                                  {s === "approved"
+                                    ? "Approved"
+                                    : s === "refurbishment_started"
+                                      ? "In Progress"
+                                      : s === "material_procurement"
+                                        ? "Procurement"
+                                        : "Installation"}
+                                </span>
+                              );
+                            if (s === "rejected")
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
+                                  Rejected
+                                </span>
+                              );
+                            if (isNew)
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-red-500 text-white">
+                                  New
+                                </span>
+                              );
                             return (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                                Completed
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                                Read
                               </span>
                             );
-                          if (
-                            s === "approved" ||
-                            s === "material_procurement" ||
-                            s === "installation_in_progress" ||
-                            s === "refurbishment_started"
-                          )
-                            return (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                                {s === "approved"
-                                  ? "Approved"
-                                  : s === "refurbishment_started"
-                                    ? "In Progress"
-                                    : s === "material_procurement"
-                                      ? "Procurement"
-                                      : "Installation"}
-                              </span>
-                            );
-                          if (s === "rejected")
-                            return (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
-                                Rejected
-                              </span>
-                            );
-                          if (isNew)
-                            return (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-red-500 text-white">
-                                New
-                              </span>
-                            );
-                          return (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
-                              Read
-                            </span>
-                          );
-                        })()}
-                      </td>
+                          })()}
+                        </td>
+                      )}
                       <td className="px-4 py-4">
                         <button
                           onClick={(e) => {

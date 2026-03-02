@@ -46,25 +46,31 @@ const UPLOAD_STATUS_CONFIG = {
   },
 };
 
-const StatCard = ({ title, value, icon: Icon, color, loading }) => (
-  <div className="bg-card border border-border rounded-xl p-5 flex items-start gap-4">
-    <div className={`p-3 rounded-lg ${color}`}>
-      <Icon className="h-5 w-5 text-white" />
+const StatCard = ({ title, value, icon, color, loading }) => {
+  const Icon = icon;
+  return (
+    <div className="bg-card border border-border rounded-xl p-5 flex items-start gap-4">
+      <div className={`p-3 rounded-lg ${color}`}>
+        <Icon className="h-5 w-5 text-white" />
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+          {title}
+        </p>
+        {loading ? (
+          <div className="h-7 w-16 bg-muted rounded animate-pulse mt-1" />
+        ) : (
+          <p className="text-2xl font-bold text-foreground mt-0.5">
+            {value ?? "—"}
+          </p>
+        )}
+      </div>
     </div>
-    <div>
-      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-        {title}
-      </p>
-      {loading ? (
-        <div className="h-7 w-16 bg-muted rounded animate-pulse mt-1" />
-      ) : (
-        <p className="text-2xl font-bold text-foreground mt-0.5">{value ?? "—"}</p>
-      )}
-    </div>
-  </div>
-);
+  );
+};
 
-const QuickLinkCard = ({ title, description, path, icon: Icon, color }) => {
+const QuickLinkCard = ({ title, description, path, icon, color }) => {
+  const Icon = icon;
   const navigate = useNavigate();
   return (
     <button
@@ -264,9 +270,7 @@ const MyDataPage = () => {
             ) : recentUploads.length === 0 ? (
               <div className="bg-card border border-border rounded-xl p-6 text-center">
                 <DocumentTextIcon className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  No uploads yet.
-                </p>
+                <p className="text-sm text-muted-foreground">No uploads yet.</p>
                 <Link
                   to={ROUTES.UPLOAD_DATA}
                   className="text-xs text-primary hover:underline mt-1 inline-block"

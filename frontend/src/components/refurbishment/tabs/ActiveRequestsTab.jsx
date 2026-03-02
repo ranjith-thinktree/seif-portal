@@ -1,4 +1,4 @@
-﻿import React, { useMemo } from "react";
+﻿import React, { useMemo, useState } from "react";
 import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import { BellIcon, PlusIcon } from "@heroicons/react/24/outline";
@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "../../ui/select";
 import EnhancedDataTable from "../../common/EnhancedDataTable";
+import ColumnVisibilityToggle from "../../common/ColumnVisibilityToggle";
 
 const YEAR_OPTIONS = [
   { value: "2026", label: "2026" },
@@ -55,7 +56,7 @@ const formatLastAlert = (row) => {
   const yyyy = d.getFullYear();
   const hh = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
-  return `Last alert sent on ${dd}/${mm}/${yyyy} ${hh}:${min}`;
+  return `Sent on ${dd}/${mm}/${yyyy} ${hh}:${min}`;
 };
 
 /**
@@ -71,15 +72,12 @@ const ActiveRequestsTab = ({
   onCreateManualRequest,
   selectedYear,
   onYearChange,
-  // kept for API compatibility
-  formatDate,
-  filterOptions = {},
-  onExport,
-  onEditScheduled,
-  onCancelScheduled,
-  onViewHistory,
+  // formatDate, filterOptions, onExport, onEditScheduled, onCancelScheduled, onViewHistory
+  // are accepted by the parent but not used in this implementation
 }) => {
   const paginatedData = table.data;
+
+  const [tableInstance, setTableInstance] = useState(null);
 
   const paginationInfo = {
     page: table.currentPage,
@@ -207,7 +205,7 @@ const ActiveRequestsTab = ({
 
   return (
     <div className="space-y-4">
-      {/* Header: Create button (left) + Year dropdown (right) */}
+      {/* Header: Create button (left) + Columns toggle + Year dropdown (right) */}
       <div className="flex items-center justify-between">
         <Button
           variant="outline"
@@ -219,21 +217,29 @@ const ActiveRequestsTab = ({
           Create new request
         </Button>
 
-        <Select
-          value={currentYear}
-          onValueChange={(val) => onYearChange && onYearChange(Number(val))}
-        >
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {YEAR_OPTIONS.map((y) => (
-              <SelectItem key={y.value} value={y.value}>
-                {y.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-3">
+          {tableInstance && (
+            <ColumnVisibilityToggle
+              table={tableInstance}
+              storageKey="refurbishment-active-requests"
+            />
+          )}
+          <Select
+            value={currentYear}
+            onValueChange={(val) => onYearChange && onYearChange(Number(val))}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {YEAR_OPTIONS.map((y) => (
+                <SelectItem key={y.value} value={y.value}>
+                  {y.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Data Table */}
@@ -245,6 +251,8 @@ const ActiveRequestsTab = ({
         onPageSizeChange={table.setPageSize}
         loading={loading}
         emptyMessage="No active refurbishment requests found"
+        storageKey="refurbishment-active-requests"
+        onTableReady={(t) => setTableInstance(t)}
       />
     </div>
   );

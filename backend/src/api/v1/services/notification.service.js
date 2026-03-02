@@ -508,6 +508,8 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
 
     // Refurbishment-specific notifications query (all alert_type LIKE 'refurbishment%')
     // Covers: eligibility alerts, new request, approved, rejected, completed, response
+    // For 'refurbishment' exact-match (action-required) notifications, we join
+    // refurbishment_requests to detect whether the partner already submitted.
     const refurbishmentQuery = `
       SELECT 
         n.id,
@@ -521,8 +523,17 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
         n.remark,
         n.is_read,
         n.payload,
-        'refurbishment' as notification_type
+        'refurbishment' as notification_type,
+        CASE
+          WHEN n.alert_type = 'refurbishment'
+               AND rr.id IS NOT NULL
+          THEN 1
+          ELSE 0
+        END AS partner_responded
       FROM notifications n
+      LEFT JOIN refurbishment_requests rr
+        ON rr.center_id = n.related_entity_id
+        AND n.alert_type = 'refurbishment'
       ${whereClause}
         AND n.alert_type LIKE 'refurbishment%'
       ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
@@ -648,6 +659,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
         related_entity_type: notif.related_entity_type,
         related_entity_id: notif.related_entity_id,
         notification_type: 'refurbishment',
+        partner_responded: Boolean(notif.partner_responded),
         payload,
       };
     });

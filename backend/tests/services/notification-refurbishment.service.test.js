@@ -75,7 +75,10 @@ describe('NotificationService - Refurbishment Features', () => {
       await db.query('DELETE FROM users WHERE email = ?', ['partner@test.com']);
     } catch (_) {}
     try {
-      await db.query('DELETE FROM centers WHERE center_id IN (?, ?)', ['JEST-NREF-001', 'JEST-NREF-SEQ']);
+      await db.query('DELETE FROM centers WHERE center_id IN (?, ?)', [
+        'JEST-NREF-001',
+        'JEST-NREF-SEQ',
+      ]);
     } catch (_) {}
     await db.query(
       'DELETE FROM centers WHERE partner_id IN (SELECT id FROM partners WHERE name = ?)',
@@ -461,14 +464,29 @@ describe('NotificationService - Refurbishment Features', () => {
       await db.query(
         `INSERT IGNORE INTO partners (id, name, contact_person, contact_email, contact_phone, status)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [testPartnerId, 'Test Partner Ltd', 'John Doe', 'john@testpartner.com', '9876543210', 'active']
+        [
+          testPartnerId,
+          'Test Partner Ltd',
+          'John Doe',
+          'john@testpartner.com',
+          '9876543210',
+          'active',
+        ]
       );
 
       // Ensure user still exists
       await db.query(
         `INSERT IGNORE INTO users (id, partner_id, full_name, email, password_hash, role, status)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [testUserId, testPartnerId, 'Partner User', 'partner@test.com', 'hashed_password', 'PARTNER', 'active']
+        [
+          testUserId,
+          testPartnerId,
+          'Partner User',
+          'partner@test.com',
+          'hashed_password',
+          'PARTNER',
+          'active',
+        ]
       );
 
       // Create a brand-new center unique to this test (avoids JOIN ambiguity)
@@ -477,8 +495,19 @@ describe('NotificationService - Refurbishment Features', () => {
           id, center_id, partner_id, center_name, city, state, region, status,
           year_of_establishment, center_type, refurbishment_frequency_months
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [seqCenterId, 'JEST-NREF-SEQ', testPartnerId, 'Test Center Sequential',
-          'Mumbai', 'Maharashtra', 'W', 'active', 2021, 'Short term', 24]
+        [
+          seqCenterId,
+          'JEST-NREF-SEQ',
+          testPartnerId,
+          'Test Center Sequential',
+          'Mumbai',
+          'Maharashtra',
+          'W',
+          'active',
+          2021,
+          'Short term',
+          24,
+        ]
       );
 
       try {
@@ -520,9 +549,17 @@ describe('NotificationService - Refurbishment Features', () => {
         expect(result.request_number).toBe('RQ-000002');
       } finally {
         // Always clean up, even if the assertion above fails
-        try { await db.query('DELETE FROM notifications WHERE id = ?', [newNotificationId]); } catch (_) {}
-        try { await db.query('DELETE FROM scheduled_refurbishment_notifications WHERE id = ?', [newScheduledId]); } catch (_) {}
-        try { await db.query('DELETE FROM centers WHERE id = ?', [seqCenterId]); } catch (_) {}
+        try {
+          await db.query('DELETE FROM notifications WHERE id = ?', [newNotificationId]);
+        } catch (_) {}
+        try {
+          await db.query('DELETE FROM scheduled_refurbishment_notifications WHERE id = ?', [
+            newScheduledId,
+          ]);
+        } catch (_) {}
+        try {
+          await db.query('DELETE FROM centers WHERE id = ?', [seqCenterId]);
+        } catch (_) {}
       }
     });
   });

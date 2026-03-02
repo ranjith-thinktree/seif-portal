@@ -713,14 +713,21 @@ const refurbishmentService = {
    * Admin approves refurbishment request
    * @param {string} requestId - Refurbishment request UUID
    * @param {string} adminRemarks - Optional remarks
+   * @param {Object} modifications - Optional package modifications { adminAddedPackages, removedPackageIds }
    * @returns {Promise<Object>} - Success response
    */
-  approveRefurbishmentRequest: async (requestId, adminRemarks = null) => {
+  approveRefurbishmentRequest: async (
+    requestId,
+    adminRemarks = null,
+    modifications = {},
+  ) => {
     try {
       const response = await api.put(
         `/admin/refurbishment/requests/${requestId}/approve`,
         {
           adminRemarks,
+          adminAddedPackages: modifications.adminAddedPackages || [],
+          removedPackageIds: modifications.removedPackageIds || [],
         },
       );
       return response.data;
@@ -860,6 +867,23 @@ const refurbishmentService = {
       return response.data;
     } catch (error) {
       console.error("Error submitting partner completion:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get full details of a partner's submitted refurbishment request
+   * Returns partner-selected packages, justifications, uploaded images and upgradation details
+   * @param {string} requestId - refurbishment_requests.id (UUID)
+   */
+  getPartnerRequestDetails: async (requestId) => {
+    try {
+      const response = await api.get(
+        `/partner/refurbishment/requests/${requestId}/details`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching partner request details:", error);
       throw error;
     }
   },

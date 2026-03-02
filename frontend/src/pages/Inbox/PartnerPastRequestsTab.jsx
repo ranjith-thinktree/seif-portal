@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import refurbishmentService from "../../services/refurbishment.service";
-import PartnerRefurbishmentViewModal from "../../components/refurbishment/modals/PartnerRefurbishmentViewModal";
+import PartnerPastRequestDetailModal from "../../components/refurbishment/modals/PartnerPastRequestDetailModal";
 import PartnerCompletionModal from "../../components/refurbishment/modals/PartnerCompletionModal";
 
 // ── Status badge config ─────────────────────────────────────────────────────
@@ -217,13 +217,9 @@ export default function PartnerPastRequestsTab() {
 
       {/* View Modal */}
       {viewRequest && (
-        <PartnerRefurbishmentViewModal
+        <PartnerPastRequestDetailModal
           request={viewRequest}
           onClose={() => setViewRequest(null)}
-          onSubmitCompletion={(req) => {
-            setViewRequest(null);
-            setCompletionRequest(req);
-          }}
         />
       )}
 

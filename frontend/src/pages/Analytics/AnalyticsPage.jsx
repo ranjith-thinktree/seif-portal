@@ -38,25 +38,28 @@ const COLORS = {
   pie: ["#6366f1", "#ec4899", "#94a3b8"],
 };
 
-const StatCard = ({ title, value, icon: Icon, color, loading }) => (
-  <div className="bg-card border border-border rounded-xl p-5">
-    <div className="flex items-center justify-between mb-3">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        {title}
-      </p>
-      <div className={`p-2 rounded-lg ${color}`}>
-        <Icon className="h-4 w-4 text-white" />
+const StatCard = ({ title, value, icon, color, loading }) => {
+  const Icon = icon;
+  return (
+    <div className="bg-card border border-border rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {title}
+        </p>
+        <div className={`p-2 rounded-lg ${color}`}>
+          <Icon className="h-4 w-4 text-white" />
+        </div>
       </div>
+      {loading ? (
+        <div className="h-8 w-24 bg-muted rounded animate-pulse" />
+      ) : (
+        <p className="text-3xl font-bold text-foreground">
+          {value != null ? Number(value).toLocaleString("en-IN") : "—"}
+        </p>
+      )}
     </div>
-    {loading ? (
-      <div className="h-8 w-24 bg-muted rounded animate-pulse" />
-    ) : (
-      <p className="text-3xl font-bold text-foreground">
-        {value != null ? Number(value).toLocaleString("en-IN") : "—"}
-      </p>
-    )}
-  </div>
-);
+  );
+};
 
 const ChartCard = ({ title, children, className = "" }) => (
   <div className={`bg-card border border-border rounded-xl p-5 ${className}`}>
@@ -173,7 +176,7 @@ const AnalyticsPage = () => {
       ? filterOptions.centers
       : filterOptions.centers.filter((c) => {
           const matched = filterOptions.partners.find(
-            (p) => p.id === filters.partnerId
+            (p) => p.id === filters.partnerId,
           );
           return matched ? c.partner_name === matched.name : true;
         });
@@ -262,9 +265,7 @@ const AnalyticsPage = () => {
               </label>
               <select
                 value={filters.centerId}
-                onChange={(e) =>
-                  handleFilterChange("centerId", e.target.value)
-                }
+                onChange={(e) => handleFilterChange("centerId", e.target.value)}
                 disabled={filteredCenters.length === 0}
                 className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground disabled:opacity-50"
               >

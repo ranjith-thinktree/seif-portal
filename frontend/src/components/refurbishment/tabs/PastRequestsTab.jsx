@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -26,6 +26,8 @@ const PastRequestsTab = ({
   filterOptions = {},
   onExport,
 }) => {
+  const [tableInstance, setTableInstance] = useState(null);
+
   // Use pre-processed data from parent's useTableSearch hook
   const paginatedData = table.data;
 
@@ -306,6 +308,8 @@ const PastRequestsTab = ({
         sortOrder={table.sortOrder}
         onSortChange={table.handleSort}
         actions={actions}
+        table={tableInstance}
+        storageKey="refurbishment-past-requests"
       />
 
       {/* Data table */}
@@ -318,6 +322,7 @@ const PastRequestsTab = ({
         emptyMessage="No past requests found"
         showSerialNumber={true}
         storageKey="refurbishment-past-requests"
+        onTableReady={(t) => setTableInstance(t)}
       />
     </div>
   );

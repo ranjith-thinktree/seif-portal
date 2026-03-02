@@ -233,9 +233,7 @@ const EmploymentManagementPage = () => {
             alignItems: "center",
           }}
         >
-          <label style={{ fontWeight: 600, fontSize: "14px" }}>
-            Status:
-          </label>
+          <label style={{ fontWeight: 600, fontSize: "14px" }}>Status:</label>
           <select
             value={statusFilter}
             onChange={(e) => {
@@ -256,7 +254,9 @@ const EmploymentManagementPage = () => {
             <option value="pending">Pending</option>
           </select>
 
-          <span style={{ color: "#6c757d", fontSize: "14px", marginLeft: "auto" }}>
+          <span
+            style={{ color: "#6c757d", fontSize: "14px", marginLeft: "auto" }}
+          >
             {pagination.total} upload{pagination.total !== 1 ? "s" : ""} found
           </span>
         </div>

@@ -38,6 +38,9 @@ const AdminRefurbishmentReviewModal = ({
   // Admin-added packages: { [courseId]: Set<packageId> }
   const [adminAdded, setAdminAdded] = useState({});
 
+  // Partner packages removed by admin: { [courseId]: Set<packageId> }
+  const [partnerRemoved, setPartnerRemoved] = useState({});
+
   // Upgradation packages management
   const [upgradationPackages, setUpgradationPackages] = useState([]);
   const [adminUpgradationSelected, setAdminUpgradationSelected] = useState(
@@ -112,6 +115,7 @@ const AdminRefurbishmentReviewModal = ({
       setActiveCourseIdx(0);
       setActiveReviewTab("courses");
       setAdminAdded({});
+      setPartnerRemoved({});
       setShowAddPanel(false);
       setRejectOpen(false);
       setRejectReason("");
@@ -169,7 +173,26 @@ const AdminRefurbishmentReviewModal = ({
   const handleApprove = async () => {
     setLoading(true);
     try {
-      await refurbishmentService.approveRefurbishmentRequest(requestId, "");
+      // Collect admin-added packages across ALL courses
+      const adminAddedPackages = [];
+      Object.entries(adminAdded).forEach(([courseId, pkgSet]) => {
+        pkgSet.forEach((pkgId) =>
+          adminAddedPackages.push({ packageId: pkgId, courseId }),
+        );
+      });
+
+      // Collect partner-removed packages across ALL courses
+      const removedPackageIds = [];
+      Object.entries(partnerRemoved).forEach(([courseId, pkgSet]) => {
+        pkgSet.forEach((pkgId) =>
+          removedPackageIds.push({ packageId: pkgId, courseId }),
+        );
+      });
+
+      await refurbishmentService.approveRefurbishmentRequest(requestId, "", {
+        adminAddedPackages,
+        removedPackageIds,
+      });
       // Show in-dialog success screen; callback fires when user closes
       setApproveSuccess(true);
     } catch (err) {
@@ -220,6 +243,16 @@ const AdminRefurbishmentReviewModal = ({
     }
   };
 
+  // ── Partner package removal toggle (admin can remove partner-selected packages) ────
+  const togglePartnerPackageRemoval = (courseId, packageId) => {
+    setPartnerRemoved((prev) => {
+      const current = new Set(prev[courseId] || []);
+      if (current.has(packageId)) current.delete(packageId);
+      else current.add(packageId);
+      return { ...prev, [courseId]: new Set(current) };
+    });
+  };
+
   // ── Admin package toggle ─────────────────────────────────────────────────
   const toggleAdminPackage = (courseId, packageId) => {
     setAdminAdded((prev) => {
@@ -260,7 +293,7 @@ const AdminRefurbishmentReviewModal = ({
   if (loading && !requestDetails) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-5xl">
+        <DialogContent className="max-w-5xl" aria-describedby={undefined}>
           <div className="flex items-center justify-center py-16">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
           </div>
@@ -305,6 +338,9 @@ const AdminRefurbishmentReviewModal = ({
   // Admin-added Set for active course
   const adminAddedSet = adminAdded[activeCourseId] || new Set();
 
+  // Partner packages removed by admin for active course
+  const partnerRemovedSet = partnerRemoved[activeCourseId] || new Set();
+
   // All packages for the active course.
   // Prefer packages explicitly linked to this course via courseIds; if the
   // package_courses table is empty or has no entries for this course, fall
@@ -324,13 +360,18 @@ const AdminRefurbishmentReviewModal = ({
   const adminAddedObjs = allPackages.filter((p) => adminAddedSet.has(p.id));
 
   const totalCount =
-    (activeCourse?.packages?.length || 0) + adminAddedObjs.length;
+    (activeCourse?.packages?.length || 0) -
+    partnerRemovedSet.size +
+    adminAddedObjs.length;
 
   return (
     <>
       {/* ── Main Review Modal ─────────────────────────────────────────────── */}
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-5xl w-full p-0 overflow-hidden rounded-2xl bg-white flex flex-col max-h-[92vh]">
+        <DialogContent
+          className="max-w-5xl w-full p-0 overflow-hidden rounded-2xl bg-white flex flex-col max-h-[92vh]"
+          aria-describedby={undefined}
+        >
           <DialogTitle className="sr-only">Refurbishment Review</DialogTitle>
 
           {/* ── Approve Success Screen ───────────────────────────────────── */}
@@ -739,40 +780,74 @@ const AdminRefurbishmentReviewModal = ({
                     {(activeCourse?.packages || []).map((pkg, i) => {
                       const imgs = parseImages(pkg.images);
                       const imgUrl = imgs[0] || null;
-                      const code = `PKG-${String(i + 1).padStart(2, "0")}`;
+                      const code = `PKG-${String(i + 1).padStart(2, "00")}`;
+                      const isRemoved = partnerRemovedSet.has(pkg.package_id);
                       return (
                         <div
                           key={pkg.package_id || i}
-                          className="border border-gray-200 rounded-xl p-4 bg-white flex justify-between gap-3"
+                          className={`border rounded-xl p-4 flex justify-between gap-3 transition-all ${
+                            isRemoved
+                              ? "border-red-200 bg-red-50/60 opacity-70"
+                              : "border-gray-200 bg-white"
+                          }`}
                         >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <p className="text-[11px] text-gray-400">
+                              <p
+                                className={`text-[11px] text-gray-400 ${isRemoved ? "line-through" : ""}`}
+                              >
                                 PKG ID:{" "}
                                 <span className="font-semibold text-gray-700">
                                   {code}
                                 </span>
                               </p>
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
-                                Partner Selected
-                              </span>
+                              {isRemoved ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-600">
+                                  Removed by Admin
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
+                                  Partner Selected
+                                </span>
+                              )}
                             </div>
-                            <p className="text-sm font-bold text-green-600">
+                            <p
+                              className={`text-sm font-bold ${isRemoved ? "text-red-400 line-through" : "text-green-600"}`}
+                            >
                               {pkg.package_name}
                             </p>
                             <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                               {pkg.description}
                             </p>
                           </div>
-                          {imgUrl && (
-                            <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                              <img
-                                src={imgUrl}
-                                alt={pkg.package_name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          )}
+                          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                            {imgUrl && !isRemoved && (
+                              <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
+                                <img
+                                  src={imgUrl}
+                                  alt={pkg.package_name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            {isActionable && (
+                              <button
+                                onClick={() =>
+                                  togglePartnerPackageRemoval(
+                                    activeCourseId,
+                                    pkg.package_id,
+                                  )
+                                }
+                                className={`text-[10px] font-medium transition-colors ${
+                                  isRemoved
+                                    ? "text-green-600 hover:text-green-800"
+                                    : "text-red-400 hover:text-red-600"
+                                }`}
+                              >
+                                {isRemoved ? "↩ Restore" : "✕ Remove"}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -1070,7 +1145,10 @@ const AdminRefurbishmentReviewModal = ({
 
       {/* ── Reject Remark Modal ──────────────────────────────────────────── */}
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent className="max-w-sm w-full rounded-2xl bg-white p-8 flex flex-col gap-5">
+        <DialogContent
+          className="max-w-sm w-full rounded-2xl bg-white p-8 flex flex-col gap-5"
+          aria-describedby={undefined}
+        >
           <DialogTitle className="sr-only">Refurbishment Remark</DialogTitle>
           <div>
             <h2 className="text-2xl font-bold text-gray-900">

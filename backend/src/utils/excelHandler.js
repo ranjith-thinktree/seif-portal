@@ -559,7 +559,7 @@ const generateDynamicTemplate = async (
           batchEndDate: formatExcelDate(batchEnd),
           studentId: `STU-2024-${String(studentNum).padStart(3, '0')}`,
           studentName: `Sample Student ${studentNum}`,
-          dob: formatExcelDate(new Date(1990 + (studentNum % 15), (studentNum % 12), 15)),
+          dob: formatExcelDate(new Date(1990 + (studentNum % 15), studentNum % 12, 15)),
           fatherName: `Father ${studentNum}`,
           gender: i % 2 === 0 ? 'Male' : 'Female',
           mobile: `98765${String(43210 + studentNum).padStart(5, '0')}`,

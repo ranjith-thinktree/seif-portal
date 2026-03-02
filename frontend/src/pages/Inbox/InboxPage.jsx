@@ -252,7 +252,9 @@ const NotificationItem = ({
 const InboxPage = () => {
   const { user } = useSelector((state) => state.auth);
   const isPartner = user?.role === "PARTNER";
+
   const {
+    socket,
     unreadCount,
     markNotificationAsRead,
     markAllNotificationsAsRead,
@@ -260,6 +262,14 @@ const InboxPage = () => {
   } = useNotifications();
   const [activeTab, setActiveTab] = useState("alerts");
   const [notifications, setNotifications] = useState([]);
+
+  // For partners, hide refurbishment eligibility notifications that the
+  // partner has already responded to — those requests now live in Past Requests.
+  const displayedNotifications = isPartner
+    ? notifications.filter(
+        (n) => !(n.alert_type === "refurbishment" && n.partner_responded)
+      )
+    : notifications;
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNotification, setSelectedNotification] = useState(null);
@@ -415,6 +425,26 @@ const InboxPage = () => {
     }
   }, [activeTab, statusFilter, sortBy, fetchNotifications]);
 
+  /**
+   * Real-time: re-fetch the alerts list whenever a new notification
+   * arrives via WebSocket so the list stays in sync without a page refresh.
+   */
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewNotification = () => {
+      // Always refresh — even if alerts tab isn't active right now,
+      // the data will be fresh when the user switches back.
+      fetchNotifications(1);
+    };
+
+    socket.on("notification:new", handleNewNotification);
+
+    return () => {
+      socket.off("notification:new", handleNewNotification);
+    };
+  }, [socket, fetchNotifications]);
+
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto">
@@ -561,7 +591,7 @@ const InboxPage = () => {
                         Loading notifications...
                       </span>
                     </div>
-                  ) : notifications.length === 0 ? (
+                  ) : displayedNotifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12">
                       <BellIcon className="h-16 w-16 text-muted-foreground mb-4" />
                       <p className="text-muted-foreground text-base mb-2">
@@ -573,7 +603,7 @@ const InboxPage = () => {
                     </div>
                   ) : (
                     <>
-                      {notifications.map((notification) => (
+                      {displayedNotifications.map((notification) => (
                         <NotificationItem
                           key={notification.id}
                           notification={notification}
