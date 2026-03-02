@@ -13,12 +13,12 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, test, expect, vi, beforeEach } from "vitest";
-import CompletionModal from "../../../components/refurbishment/modals/CompletionModal";
-import refurbishmentService from "../../../services/refurbishment.service";
+import CompletionModal from "../../components/refurbishment/modals/CompletionModal";
+import refurbishmentService from "../../services/refurbishment.service";
 import { toast } from "react-toastify";
 
 // Mock dependencies
-vi.mock("../../../services/refurbishment.service");
+vi.mock("../../services/refurbishment.service");
 vi.mock("react-toastify", () => ({
   toast: {
     error: vi.fn(),
@@ -90,7 +90,7 @@ describe("CompletionModal Component", () => {
 
       expect(screen.getByLabelText(/Completion Date/i)).toBeInTheDocument();
       expect(
-        screen.getByPlaceholderText(/Describe the completion/i),
+        screen.getByPlaceholderText(/Describe the refurbishment/i),
       ).toBeInTheDocument();
       expect(screen.getByText(/Completion Images/i)).toBeInTheDocument();
     });
@@ -108,14 +108,11 @@ describe("CompletionModal Component", () => {
         />,
       );
 
-      const submitButton = screen.getByRole("button", { name: /Submit/i });
-      fireEvent.click(submitButton);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining("completion statement"),
-        );
+      // The button should be disabled when completion statement is empty (no statement + no images)
+      const submitButton = screen.getByRole("button", {
+        name: /Mark as Completed/i,
       });
+      expect(submitButton).toBeDisabled();
     });
 
     test("should show error when no images uploaded", async () => {
@@ -129,18 +126,17 @@ describe("CompletionModal Component", () => {
         />,
       );
 
-      // Fill completion statement
-      const textarea = screen.getByPlaceholderText(/Describe the completion/i);
+      // Fill completion statement but leave images empty
+      const textarea = screen.getByPlaceholderText(
+        /Describe the refurbishment/i,
+      );
       await userEvent.type(textarea, "Refurbishment completed successfully");
 
-      const submitButton = screen.getByRole("button", { name: /Submit/i });
-      fireEvent.click(submitButton);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining("image"),
-        );
+      // Button should still be disabled because no images are uploaded
+      const submitButton = screen.getByRole("button", {
+        name: /Mark as Completed/i,
       });
+      expect(submitButton).toBeDisabled();
     });
 
     test("should allow submission with valid data", async () => {
@@ -175,7 +171,9 @@ describe("CompletionModal Component", () => {
       );
 
       // Fill form
-      const textarea = screen.getByPlaceholderText(/Describe the completion/i);
+      const textarea = screen.getByPlaceholderText(
+        /Describe the refurbishment/i,
+      );
       await userEvent.type(textarea, "Refurbishment completed successfully");
 
       // Note: Testing file upload requires special setup with createObjectURL mock

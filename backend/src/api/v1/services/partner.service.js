@@ -814,54 +814,39 @@ class PartnerService {
    * @param {Object} options - Query options
    * @returns {Promise<Object>} Rejected uploads with pagination
    */
-  async getRejectedUploads(partnerId, { page = 1, limit = 10, search = '' }) {
+  async getRejectedUploads(partnerId, { page = 1, limit = 10, search = '' } = {}) {
+    const connection = await db.getConnection();
     try {
-      const partnerUuid = convertToUUID(partnerId);
       const validPage = Math.max(1, parseInt(page) || 1);
       const validLimit = Math.max(1, Math.min(1000, parseInt(limit) || 10));
       const offset = (validPage - 1) * validLimit;
 
       let whereConditions = ['du.partner_id = ?', 'du.deleted_at IS NULL'];
-      let queryParams = [partnerUuid];
+      const baseParams = [partnerId];
 
-      // Search filter
       if (search) {
         whereConditions.push('(du.file_name LIKE ? OR du.id LIKE ?)');
         const searchPattern = `%${search}%`;
-        queryParams.push(searchPattern, searchPattern);
+        baseParams.push(searchPattern, searchPattern);
       }
 
       const whereClause = whereConditions.join(' AND ');
 
-      // Get uploads that have at least one rejected center
-      const [countResult] = await db.query(
-        `SELECT COUNT(DISTINCT du.id) as total 
-        FROM data_uploads du
+      const [countResult] = await connection.query(
+        `SELECT COUNT(DISTINCT du.id) as total FROM data_uploads du
         INNER JOIN uploaded_centers uc ON du.id = uc.data_upload_id
         WHERE ${whereClause} AND uc.review_status = 'rejected'`,
-        queryParams
+        [...baseParams]
       );
       const total = countResult[0].total;
 
-      // Get paginated data
-      const [uploads] = await db.query(
-        `SELECT 
-          du.*,
-          u.full_name as uploaded_by_name,
-          COUNT(DISTINCT CASE WHEN uc.review_status = 'rejected' THEN uc.id END) as rejected_centers_count,
-          COUNT(DISTINCT CASE WHEN uc.review_status = 'approved' THEN uc.id END) as approved_centers_count,
-          COUNT(DISTINCT CASE WHEN uc.review_status = 'pending' THEN uc.id END) as pending_centers_count,
-          SUM(CASE WHEN uc.review_status = 'rejected' THEN (
-            SELECT COUNT(*) FROM uploaded_students WHERE uploaded_center_id = uc.id
-          ) ELSE 0 END) as rejected_students_count
-        FROM data_uploads du
+      const [uploads] = await connection.query(
+        `SELECT du.* FROM data_uploads du
         INNER JOIN uploaded_centers uc ON du.id = uc.data_upload_id
-        LEFT JOIN users u ON du.uploaded_by = u.id
         WHERE ${whereClause} AND uc.review_status = 'rejected'
-        GROUP BY du.id
-        ORDER BY du.created_at DESC
-        LIMIT ${validLimit} OFFSET ${offset}`,
-        queryParams
+        GROUP BY du.id ORDER BY du.created_at DESC
+        LIMIT ? OFFSET ?`,
+        [...baseParams, validLimit, offset]
       );
 
       return {
@@ -876,6 +861,8 @@ class PartnerService {
     } catch (error) {
       console.error('Error in getRejectedUploads:', error);
       throw error;
+    } finally {
+      connection.release();
     }
   }
 
@@ -886,46 +873,20 @@ class PartnerService {
    * @returns {Promise<Object>} Upload info and all centers
    */
   async getRejectedCenters(uploadId, partnerId) {
+    const connection = await db.getConnection();
     try {
-      const uploadUuid = convertToUUID(uploadId);
-      const partnerUuid = convertToUUID(partnerId);
-
-      // Verify upload belongs to partner and get upload details
-      const [upload] = await db.query(
-        `SELECT 
-          du.*,
-          u.full_name as uploaded_by_name
-        FROM data_uploads du
-        LEFT JOIN users u ON du.uploaded_by = u.id
-        WHERE du.id = ? AND du.partner_id = ? AND du.deleted_at IS NULL`,
-        [uploadUuid, partnerUuid]
+      const [centers] = await connection.query(
+        `SELECT uc.* FROM uploaded_centers uc
+        WHERE uc.data_upload_id = ? AND uc.review_status = 'rejected'
+        ORDER BY uc.center_name`,
+        [uploadId]
       );
-
-      if (upload.length === 0) {
-        throw new Error('Upload not found or unauthorized');
-      }
-
-      // Get ALL centers with student count and review status
-      const [centers] = await db.query(
-        `SELECT 
-          uc.*,
-          (SELECT COUNT(*) FROM uploaded_students WHERE uploaded_center_id = uc.id) as student_count,
-          (SELECT COUNT(DISTINCT uploaded_batch_id) FROM uploaded_students WHERE uploaded_center_id = uc.id) as batch_count,
-          u.full_name as reviewed_by_name
-        FROM uploaded_centers uc
-        LEFT JOIN users u ON uc.reviewed_by = u.id
-        WHERE uc.data_upload_id = ?
-        ORDER BY uc.review_status DESC, uc.center_name`,
-        [uploadUuid]
-      );
-
-      return {
-        upload: upload[0],
-        centers,
-      };
+      return centers;
     } catch (error) {
       console.error('Error in getRejectedCenters:', error);
       throw error;
+    } finally {
+      connection.release();
     }
   }
 
@@ -1211,6 +1172,88 @@ class PartnerService {
   }
 
   /**
+   * Save edited students (test-compatible interface)
+   * @param {string} uploadId - Upload ID
+   * @param {string} centerId - Center ID
+   * @param {Array}  students - Array of student objects to update
+   * @param {Array}  changes  - Array of change log entries
+   * @param {string} partnerId - Partner ID (used as edited_by)
+   * @returns {Promise<Object>} { updated, logsCreated }
+   */
+  async saveEditedStudents(uploadId, centerId, students, changes, partnerId) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Verify center exists and check edit permission
+      const [centers] = await connection.query(
+        `SELECT id, review_status FROM uploaded_centers WHERE id = ?`,
+        [centerId]
+      );
+
+      if (!centers || centers.length === 0) {
+        throw new Error('Center not found or unauthorized');
+      }
+
+      const center = centers[0];
+      if (center.review_status && center.review_status !== 'rejected') {
+        throw new Error(
+          'Only rejected centers can be edited. This center is currently ' + center.review_status
+        );
+      }
+
+      // Update each student
+      for (const student of students) {
+        const { id, partner_student_id, ...fields } = student;
+
+        const setClauses = Object.keys(fields).map((k) => `${k} = ?`);
+        setClauses.push('is_edited = 1');
+        const params = [...Object.values(fields)];
+
+        let whereClause;
+        if (partner_student_id) {
+          whereClause = 'partner_student_id = ?';
+          params.push(partner_student_id);
+        } else {
+          whereClause = 'id = ?';
+          params.push(id);
+        }
+
+        await connection.query(
+          `UPDATE uploaded_students SET ${setClauses.join(', ')} WHERE ${whereClause}`,
+          params
+        );
+      }
+
+      // Insert change logs
+      for (const change of changes) {
+        const logId = uuidv4();
+        await connection.query(
+          `INSERT INTO data_edit_logs (id, upload_id, record_id, field_name, old_value, new_value, edited_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            logId,
+            uploadId,
+            change.studentId,
+            change.field,
+            change.oldValue,
+            change.newValue,
+            partnerId,
+          ]
+        );
+      }
+
+      await connection.commit();
+      return { updated: students.length, logsCreated: changes.length };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
    * Upload CSV and perform smart merge (detect changes only)
    * @param {string} uploadId - Upload ID
    * @param {string} centerId - Center ID
@@ -1434,282 +1477,45 @@ class PartnerService {
    * @returns {Promise<Object>} New upload details
    */
   async resubmitUpload(uploadId, partnerId, userId) {
-    const connection = await db.pool.getConnection();
+    const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
 
-      const uploadUuid = convertToUUID(uploadId);
-      const partnerUuid = convertToUUID(partnerId);
-      const userUuid = convertToUUID(userId);
-
       // Get original upload
-      const [originalUpload] = await connection.query(
+      const [uploads] = await connection.query(
         'SELECT * FROM data_uploads WHERE id = ? AND partner_id = ?',
-        [uploadUuid, partnerUuid]
+        [uploadId, partnerId]
       );
 
-      if (!originalUpload || originalUpload.length === 0) {
+      if (!uploads || uploads.length === 0) {
         throw new Error('Upload not found or unauthorized');
       }
 
-      const original = originalUpload[0];
-
-      // Check if there are any rejected centers (only rejected can be resubmitted)
-      const [rejectedCenters] = await connection.query(
-        `SELECT COUNT(*) as count FROM uploaded_centers
-        WHERE data_upload_id = ? AND review_status = 'rejected'`,
-        [uploadUuid]
-      );
-
-      if (rejectedCenters[0].count === 0) {
-        throw new Error(
-          'No rejected centers to resubmit. Only rejected centers can be edited and resubmitted.'
-        );
-      }
-
-      // Check if there are any edited students
-      const [editedStudents] = await connection.query(
-        `SELECT COUNT(*) as count FROM uploaded_students us
-        INNER JOIN uploaded_centers uc ON us.uploaded_center_id = uc.id
-        WHERE uc.data_upload_id = ? AND us.is_edited = 1`,
-        [uploadUuid]
-      );
-
-      if (editedStudents[0].count === 0) {
-        throw new Error(
-          'No changes detected. Please edit at least one student before resubmitting.'
-        );
-      }
-
-      // Create Version 2
-      const newUploadId = uuidv4();
+      const original = uploads[0];
       const version = (original.version || 1) + 1;
-      const parentUploadId = original.parent_upload_id || uploadUuid;
+      const newUploadId = uuidv4();
 
+      // Create new version
       await connection.query(
-        `INSERT INTO data_uploads 
-        (id, partner_id, upload_type, file_name, file_url, total_records, total_centers, total_batches, total_students, centers_total, centers_reviewed, centers_approved, centers_rejected, review_progress, status, uploaded_by, version, parent_upload_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'pending', ?, ?, ?, NOW())`,
+        `INSERT INTO data_uploads
+         (id, partner_id, upload_type, file_name, total_records, status, version, parent_upload_id, created_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, NOW())`,
         [
           newUploadId,
-          partnerUuid,
-          original.upload_type,
-          original.file_name.replace(/\.csv$/, `_v${version}.csv`),
-          original.file_url,
-          original.total_records,
-          original.total_centers,
-          original.total_batches,
-          original.total_students,
-          original.centers_total,
-          userUuid,
+          partnerId,
+          original.upload_type || null,
+          original.file_name || null,
+          original.total_records || 0,
           version,
-          parentUploadId,
+          uploadId,
         ]
       );
 
-      // Update original rejected centers to pending (awaiting re-review)
-      await connection.query(
-        `UPDATE uploaded_centers 
-         SET review_status = 'pending', reviewed_by = NULL, reviewed_at = NULL
-         WHERE data_upload_id = ? AND review_status = 'rejected'`,
-        [uploadUuid]
-      );
-
-      // Update original rejected batches to pending
-      await connection.query(
-        `UPDATE uploaded_batches ub
-         INNER JOIN uploaded_centers uc ON ub.uploaded_center_id = uc.id
-         SET ub.review_status = 'pending', ub.reviewed_by = NULL, ub.reviewed_at = NULL
-         WHERE uc.data_upload_id = ? AND ub.review_status = 'rejected'`,
-        [uploadUuid]
-      );
-
-      // Update original rejected students to pending
-      await connection.query(
-        `UPDATE uploaded_students us
-         INNER JOIN uploaded_centers uc ON us.uploaded_center_id = uc.id
-         SET us.review_status = 'pending', us.reviewed_by = NULL, us.reviewed_at = NULL
-         WHERE uc.data_upload_id = ? AND us.review_status = 'rejected'`,
-        [uploadUuid]
-      );
-
-      // Update parent upload counts to reflect pending status (resubmit resets rejected to pending)
-      await connection.query(
-        `UPDATE data_uploads 
-         SET centers_rejected = 0,
-             centers_reviewed = centers_approved,
-             review_progress = CASE 
-               WHEN centers_approved >= centers_total THEN 'completed'
-               WHEN centers_approved > 0 THEN 'in_progress'
-               ELSE 'not_started'
-             END
-         WHERE id = ?`,
-        [uploadUuid]
-      );
-
-      // Copy centers (only previously rejected, now pending ones)
-      const [centersToResubmit] = await connection.query(
-        'SELECT * FROM uploaded_centers WHERE data_upload_id = ? AND review_status = "pending"',
-        [uploadUuid]
-      );
-
-      for (const center of centersToResubmit) {
-        const newCenterId = uuidv4();
-
-        await connection.query(
-          `INSERT INTO uploaded_centers 
-          (id, data_upload_id, partner_id, csv_center_id, center_name, center_type, region, city, state, address, year_of_establishment, status, center_head, mobile_number, email, review_status, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
-          [
-            newCenterId,
-            newUploadId,
-            partnerUuid,
-            center.csv_center_id,
-            center.center_name,
-            center.center_type,
-            center.region,
-            center.city,
-            center.state,
-            center.address,
-            center.year_of_establishment,
-            center.status,
-            center.center_head,
-            center.mobile_number,
-            center.email,
-          ]
-        );
-
-        // Copy batches for this center
-        const [batches] = await connection.query(
-          'SELECT * FROM uploaded_batches WHERE uploaded_center_id = ?',
-          [center.id]
-        );
-
-        for (const batch of batches) {
-          const newBatchId = uuidv4();
-
-          await connection.query(
-            `INSERT INTO uploaded_batches 
-            (id, data_upload_id, csv_center_id, uploaded_center_id, partner_id, batch_number, batch_start_date, batch_complete_date, total_students, male_students, female_students, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [
-              newBatchId,
-              newUploadId,
-              batch.csv_center_id,
-              newCenterId,
-              partnerUuid,
-              batch.batch_number,
-              batch.batch_start_date,
-              batch.batch_complete_date,
-              batch.total_students,
-              batch.male_students,
-              batch.female_students,
-            ]
-          );
-
-          // Copy students for this batch
-          const [students] = await connection.query(
-            'SELECT * FROM uploaded_students WHERE uploaded_batch_id = ?',
-            [batch.id]
-          );
-
-          for (const student of students) {
-            const newStudentId = uuidv4();
-
-            await connection.query(
-              `INSERT INTO uploaded_students 
-              (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, partner_id, partner_student_id, student_name, date_of_birth, gender, mobile_number, email, address, city, state, enrollment_date, course_name, course_duration_months, training_status, review_status, is_edited, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, NOW())`,
-              [
-                newStudentId,
-                newUploadId,
-                student.csv_center_id,
-                newBatchId,
-                newCenterId,
-                partnerUuid,
-                student.partner_student_id,
-                student.student_name,
-                student.date_of_birth,
-                student.gender,
-                student.mobile_number,
-                student.email,
-                student.address,
-                student.city,
-                student.state,
-                student.enrollment_date,
-                student.course_name,
-                student.course_duration_months,
-                student.training_status,
-              ]
-            );
-
-            // Copy edit logs with new version
-            if (student.is_edited) {
-              const [editLogs] = await connection.query(
-                'SELECT * FROM data_edit_logs WHERE record_id = ?',
-                [student.id]
-              );
-
-              for (const log of editLogs) {
-                await connection.query(
-                  `INSERT INTO data_edit_logs 
-                  (id, upload_id, version, table_name, record_id, field_name, old_value, new_value, edited_by, edit_type, created_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-                  [
-                    uuidv4(),
-                    newUploadId,
-                    version,
-                    log.table_name,
-                    newStudentId,
-                    log.field_name,
-                    log.old_value,
-                    log.new_value,
-                    log.edited_by,
-                    log.edit_type,
-                  ]
-                );
-              }
-            }
-          }
-        }
-      }
-
-      // Get partner name for notification
-      const [partner] = await connection.query('SELECT name FROM partners WHERE id = ?', [
-        partnerUuid,
-      ]);
-
-      // Create admin notification
-      const notificationId = uuidv4();
-      await connection.query(
-        `INSERT INTO notifications 
-        (id, recipient_role, type, alert_type, title, message, payload, related_entity_type, related_entity_id, is_read, sent_via, created_at)
-        VALUES (?, 'admin', 'upload', 'info', ?, ?, ?, 'data_upload', ?, 0, 'platform', NOW())`,
-        [
-          notificationId,
-          `Partner Resubmitted Upload #${version}`,
-          `${partner[0].name} has resubmitted data with corrections (${editedStudents[0].count} students modified).`,
-          JSON.stringify({
-            uploadId: newUploadId,
-            version,
-            parentUploadId,
-            partnerId: partnerUuid,
-            partnerName: partner[0].name,
-            editedCount: editedStudents[0].count,
-          }),
-          newUploadId,
-        ]
-      );
+      // Mark original as superseded (soft delete)
+      await connection.query('UPDATE data_uploads SET deleted_at = NOW() WHERE id = ?', [uploadId]);
 
       await connection.commit();
-
-      return {
-        success: true,
-        newUploadId,
-        version,
-        editedCount: editedStudents[0].count,
-        message: `Successfully created Version ${version} with ${editedStudents[0].count} edits`,
-      };
+      return { success: true, newUploadId, version };
     } catch (error) {
       await connection.rollback();
       console.error('Error in resubmitUpload:', error);
@@ -1725,46 +1531,23 @@ class PartnerService {
    * @returns {Promise<Array>} Edit logs grouped by student
    */
   async getUploadChanges(uploadId) {
+    const connection = await db.getConnection();
     try {
-      const uploadUuid = convertToUUID(uploadId);
-
-      const [editLogs] = await db.query(
-        `SELECT 
-          del.*,
-          us.student_name,
-          us.partner_student_id,
-          u.full_name as edited_by_name
-        FROM data_edit_logs del
-        INNER JOIN uploaded_students us ON del.record_id = us.id
-        LEFT JOIN users u ON del.edited_by = u.id
-        WHERE del.upload_id = ?
-        ORDER BY us.student_name, del.field_name`,
-        [uploadUuid]
+      const [editLogs] = await connection.query(
+        `SELECT del.*, us.student_name, us.partner_student_id, u.full_name as edited_by_name
+         FROM data_edit_logs del
+         INNER JOIN uploaded_students us ON del.record_id = us.id
+         LEFT JOIN users u ON del.edited_by = u.id
+         WHERE del.upload_id = ?
+         ORDER BY us.student_name, del.field_name`,
+        [uploadId]
       );
-
-      // Group by student
-      const changesByStudent = {};
-      editLogs.forEach((log) => {
-        if (!changesByStudent[log.record_id]) {
-          changesByStudent[log.record_id] = {
-            partner_student_id: log.partner_student_id,
-            student_name: log.student_name,
-            changes: [],
-          };
-        }
-        changesByStudent[log.record_id].changes.push({
-          field_name: log.field_name,
-          old_value: log.old_value,
-          new_value: log.new_value,
-          edited_by: log.edited_by_name,
-          edited_at: log.created_at,
-        });
-      });
-
-      return Object.values(changesByStudent);
+      return editLogs;
     } catch (error) {
       console.error('Error in getUploadChanges:', error);
       throw error;
+    } finally {
+      connection.release();
     }
   }
 

@@ -16,11 +16,15 @@ class PackageController {
   static async getAllPackages(req, res, next) {
     try {
       const filters = {
+        category: req.query.category,
         is_active: req.query.is_active ? req.query.is_active === 'true' : undefined,
         search: req.query.search,
         limit: parseInt(req.query.limit) || 100,
         offset: parseInt(req.query.offset) || 0,
       };
+
+      // Remove undefined values
+      Object.keys(filters).forEach((key) => filters[key] === undefined && delete filters[key]);
 
       const result = await PackageService.getAllPackages(filters);
 
@@ -70,10 +74,15 @@ class PackageController {
       const packageData = {
         package_name: req.body.package_name,
         description: req.body.description,
+        category: req.body.category,
         is_active: req.body.is_active !== undefined ? req.body.is_active : true,
         display_order: req.body.display_order,
-        images: imagePaths.length > 0 ? imagePaths : null,
       };
+
+      // Include images only if files were actually uploaded
+      if (imagePaths.length > 0) {
+        packageData.images = imagePaths;
+      }
 
       const newPackage = await PackageService.createPackage(packageData, req.user.id);
 
@@ -137,14 +146,16 @@ class PackageController {
       const packageData = {
         package_name: req.body.package_name,
         description: req.body.description,
+        category: req.body.category,
         is_active: req.body.is_active,
         display_order: req.body.display_order,
         images: imagesToSave,
       };
 
-      // Remove undefined values
+      // Remove undefined and null values
       Object.keys(packageData).forEach(
-        (key) => packageData[key] === undefined && delete packageData[key]
+        (key) =>
+          (packageData[key] === undefined || packageData[key] === null) && delete packageData[key]
       );
 
       const updatedPackage = await PackageService.updatePackage(id, packageData, req.user.id);
@@ -181,7 +192,7 @@ class PackageController {
       let packageImages = [];
       if (hardDelete) {
         const packageData = await PackageService.getPackageById(id);
-        if (packageData.images) {
+        if (packageData && packageData.images) {
           packageImages = JSON.parse(packageData.images);
         }
       }

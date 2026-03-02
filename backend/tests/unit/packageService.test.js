@@ -27,7 +27,7 @@ describe('PackageService', () => {
         },
       ];
 
-      RefurbishmentPackageModel.findAll.mockResolvedValue(mockPackages);
+      RefurbishmentPackageModel.findAllWithCourses.mockResolvedValue(mockPackages);
       RefurbishmentPackageModel.count.mockResolvedValue(2);
 
       const result = await PackageService.getAllPackages({ limit: 10, offset: 0 });
@@ -35,14 +35,14 @@ describe('PackageService', () => {
       expect(result.packages).toEqual(mockPackages);
       expect(result.pagination.total).toBe(2);
       expect(result.pagination.hasMore).toBe(false);
-      expect(RefurbishmentPackageModel.findAll).toHaveBeenCalledWith({
+      expect(RefurbishmentPackageModel.findAllWithCourses).toHaveBeenCalledWith({
         limit: 10,
         offset: 0,
       });
     });
 
     it('should apply filters correctly', async () => {
-      RefurbishmentPackageModel.findAll.mockResolvedValue([]);
+      RefurbishmentPackageModel.findAllWithCourses.mockResolvedValue([]);
       RefurbishmentPackageModel.count.mockResolvedValue(0);
 
       await PackageService.getAllPackages({
@@ -51,7 +51,7 @@ describe('PackageService', () => {
         search: 'multimeter',
       });
 
-      expect(RefurbishmentPackageModel.findAll).toHaveBeenCalledWith({
+      expect(RefurbishmentPackageModel.findAllWithCourses).toHaveBeenCalledWith({
         category: 'electrical',
         is_active: true,
         search: 'multimeter',

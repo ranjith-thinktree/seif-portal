@@ -140,8 +140,16 @@ const uploadMultipleImagesToS3 = async (files, requestId, imageType, courseId = 
     console.log(`📤 Uploading ${files.length} images to S3...`);
 
     // Upload all images in parallel
+    // Supports both Multer file format ({originalname, mimetype, buffer}) and explicit format ({fileName, mimeType, buffer})
     const uploadPromises = files.map((file) =>
-      uploadImageToS3(file.buffer, file.fileName, file.mimeType, requestId, imageType, courseId)
+      uploadImageToS3(
+        file.buffer,
+        file.fileName || file.originalname,
+        file.mimeType || file.mimetype,
+        requestId,
+        imageType,
+        courseId
+      )
     );
 
     const uploadedUrls = await Promise.all(uploadPromises);
@@ -280,4 +288,8 @@ module.exports = {
   deleteMultipleImagesFromS3,
   generatePresignedUrl,
   checkS3Configuration,
+  // Test helper: resets the cached S3 client so it reinitializes on next call
+  _resetS3Client: () => {
+    s3Client = null;
+  },
 };

@@ -55,6 +55,24 @@ export const SIDEBAR_MENU = [
     roles: [ROLES.PARTNER],
   },
   {
+    name: "Employment Upload",
+    path: ROUTES.EMPLOYMENT_UPLOAD,
+    icon: AcademicCapIcon,
+    roles: [ROLES.PARTNER],
+  },
+  {
+    name: "My Data",
+    path: ROUTES.MY_DATA,
+    icon: FolderIcon,
+    roles: [ROLES.PARTNER],
+  },
+  {
+    name: "My Requests",
+    path: ROUTES.MY_REQUESTS,
+    icon: WrenchScrewdriverIcon,
+    roles: [ROLES.PARTNER],
+  },
+  {
     name: "User Management",
     path: ROUTES.USER_MANAGEMENT,
     icon: UsersIcon,
@@ -82,6 +100,18 @@ export const SIDEBAR_MENU = [
     name: "Refurbishment",
     path: ROUTES.REFURBISHMENT,
     icon: WrenchScrewdriverIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+  },
+  {
+    name: "Employment",
+    path: ROUTES.EMPLOYMENT_MANAGEMENT,
+    icon: AcademicCapIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+  },
+  {
+    name: "Analytics",
+    path: ROUTES.ANALYTICS,
+    icon: ChartBarIcon,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {

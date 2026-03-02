@@ -1,14 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
 import DashboardPage from "../DashboardPage";
 import * as dataService from "../../../services/data.service";
 
 // Mock the data service
 vi.mock("../../../services/data.service");
 
+// Mock useNotifications to avoid requiring NotificationProvider (used by Header inside DashboardPage)
+vi.mock("../../../hooks/useNotifications", () => ({
+  useNotifications: () => ({
+    notifications: [],
+    unreadCount: 0,
+    updateUnreadCount: vi.fn(),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    deleteNotification: vi.fn(),
+    loading: false,
+  }),
+}));
+
+// Mock IndiaTrainingCard — heavy SVG map component requiring state data; irrelevant to DashboardPage unit tests
+vi.mock("../../../components/dashboard/IndiaTrainingCard", () => ({
+  default: () => <div data-testid="india-training-card" />,
+}));
+
 // Mock recharts to avoid rendering issues in tests
 vi.mock("recharts", () => ({
+  AreaChart: ({ children }) => <div>{children}</div>,
+  Area: () => <div />,
   ResponsiveContainer: ({ children }) => <div>{children}</div>,
   LineChart: ({ children }) => <div>{children}</div>,
   Line: () => <div />,
@@ -18,6 +40,32 @@ vi.mock("recharts", () => ({
   Tooltip: () => <div />,
   Legend: () => <div />,
 }));
+
+// Create a minimal Redux store with auth state for DashboardPage (uses useAuth → useSelector)
+const createTestStore = () =>
+  configureStore({
+    reducer: {
+      auth: () => ({
+        user: {
+          id: "user-1",
+          full_name: "Admin User",
+          email: "admin@seif.org",
+          role: "ADMIN",
+        },
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      }),
+    },
+  });
+
+// Helper to render with both Redux Provider and BrowserRouter
+const renderWithStore = (ui) =>
+  render(
+    <Provider store={createTestStore()}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </Provider>,
+  );
 
 describe("DashboardPage - Data Fetching & Display", () => {
   beforeEach(() => {
@@ -56,12 +104,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(wrappedResponse);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Check if Partners count is displayed (not "0")
@@ -81,12 +124,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(flatResponse);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         expect(screen.getByText("50")).toBeInTheDocument();
@@ -103,12 +141,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(wrappedResponse);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Should display "42", not "0"
@@ -130,12 +163,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Check if Centers Growth section is rendered
@@ -155,12 +183,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         expect(screen.getByText("Students Trend")).toBeInTheDocument();
@@ -181,12 +204,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         expect(screen.getByText("Centers Growth")).toBeInTheDocument();
@@ -208,12 +226,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Verify Total Centers card is rendered (which has the tooltip)
@@ -231,12 +244,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         expect(screen.getByText("Total Centers")).toBeInTheDocument();
@@ -249,12 +257,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       dataService.getConsolidatedAnalytics.mockRejectedValue(
         new Error("Network error"),
       );
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Should show error state or fallback to dashboardData.json
@@ -266,12 +269,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       dataService.getConsolidatedAnalytics.mockRejectedValue(
         new Error("Failed to fetch analytics"),
       );
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Component should render even with error (using fallback data)
@@ -295,12 +293,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // All stat cards should display API values
@@ -320,12 +313,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Should show 0 for missing Partners (fallback)
@@ -347,12 +335,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Verify API was called with correct parameters
@@ -366,16 +349,10 @@ describe("DashboardPage - Data Fetching & Display", () => {
       dataService.getConsolidatedAnalytics.mockImplementation(
         () => new Promise(() => {}), // Never resolves
       );
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       // Should show loading indicator
-      // Note: You may need to adjust based on actual loading UI
-      expect(screen.getByText("Dashboard")).toBeInTheDocument();
+      expect(screen.getByText("Loading dashboard...")).toBeInTheDocument();
     });
 
     it("should hide loading state after data loads", async () => {
@@ -386,12 +363,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       };
 
       dataService.getConsolidatedAnalytics.mockResolvedValue(response);
-
-      render(
-        <BrowserRouter>
-          <DashboardPage />
-        </BrowserRouter>,
-      );
+      renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
         // Loading should be complete, data displayed

@@ -11,7 +11,7 @@ class RefurbishmentPackageModel {
    * Find all packages with optional filters
    */
   static async findAll(filters = {}) {
-    const { is_active, search, limit = 100, offset = 0 } = filters;
+    const { is_active, search, category, limit = 100, offset = 0 } = filters;
 
     let query = 'SELECT * FROM refurbishment_packages WHERE 1=1';
     const params = [];
@@ -21,13 +21,19 @@ class RefurbishmentPackageModel {
       params.push(is_active ? 1 : 0);
     }
 
+    if (category) {
+      query += ' AND category = ?';
+      params.push(category);
+    }
+
     if (search) {
       query += ' AND (package_name LIKE ? OR description LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
     }
 
     query += ' ORDER BY display_order ASC, package_name ASC';
-    query += ` LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
+    query += ' LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
 
     const [rows] = await db.query(query, params);
     return rows;
@@ -81,7 +87,7 @@ class RefurbishmentPackageModel {
    * Count total packages with filters
    */
   static async count(filters = {}) {
-    const { is_active, search } = filters;
+    const { is_active, search, category } = filters;
 
     let query = 'SELECT COUNT(*) as total FROM refurbishment_packages WHERE 1=1';
     const params = [];
@@ -89,6 +95,11 @@ class RefurbishmentPackageModel {
     if (is_active !== undefined) {
       query += ' AND is_active = ?';
       params.push(is_active ? 1 : 0);
+    }
+
+    if (category) {
+      query += ' AND category = ?';
+      params.push(category);
     }
 
     if (search) {

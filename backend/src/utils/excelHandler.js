@@ -550,7 +550,7 @@ const generateDynamicTemplate = async (
         batchStart.setMonth(batchStart.getMonth() - 2);
         const batchEnd = new Date(today);
         batchEnd.setMonth(batchEnd.getMonth() + 4);
-        const dob = new Date(2000 + studentNum, 0, 15);
+        // DOB cycles through realistic birth years (1990-2004) regardless of row count
 
         const row = worksheet.addRow({
           centerId: center.center_id,
@@ -559,7 +559,7 @@ const generateDynamicTemplate = async (
           batchEndDate: formatExcelDate(batchEnd),
           studentId: `STU-2024-${String(studentNum).padStart(3, '0')}`,
           studentName: `Sample Student ${studentNum}`,
-          dob: formatExcelDate(dob),
+          dob: formatExcelDate(new Date(1990 + (studentNum % 15), (studentNum % 12), 15)),
           fatherName: `Father ${studentNum}`,
           gender: i % 2 === 0 ? 'Male' : 'Female',
           mobile: `98765${String(43210 + studentNum).padStart(5, '0')}`,

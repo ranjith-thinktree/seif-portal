@@ -201,15 +201,14 @@ class ReviewService {
     try {
       await connection.beginTransaction();
 
-      const uploadUuid = convertToUUID(uploadId);
-      const centerUuid = convertToUUID(centerId);
-      const adminUuid = convertToUUID(adminUserId);
+      // Use IDs as-is (no UUID conversion) so invalid/non-UUID IDs simply return
+      // no rows rather than throwing before queries run.
 
       // Verify center exists and belongs to upload
       const [centers] = await connection.query(
         `SELECT id FROM uploaded_centers 
          WHERE id = ? AND data_upload_id = ?`,
-        [centerUuid, uploadUuid]
+        [centerId, uploadId]
       );
 
       if (centers.length === 0) {
@@ -221,7 +220,9 @@ class ReviewService {
 
       // Update each edited student in uploaded_students
       for (const student of students) {
-        const studentUuid = convertToUUID(student.id);
+        // Use partner_student_id for WHERE when available, otherwise fall back to id
+        const whereField = student.partner_student_id ? 'partner_student_id' : 'id';
+        const whereValue = student.partner_student_id || student.id;
 
         // Update the student record
         const [updateResult] = await connection.query(
@@ -241,7 +242,7 @@ class ReviewService {
             training_status = ?,
             is_edited = 1,
             updated_at = NOW()
-          WHERE id = ? AND uploaded_center_id = ?`,
+          WHERE ${whereField} = ? AND uploaded_center_id = ?`,
           [
             student.partner_student_id,
             student.student_name,
@@ -256,8 +257,8 @@ class ReviewService {
             student.course_name,
             student.batch_number,
             student.training_status,
-            studentUuid,
-            centerUuid,
+            whereValue,
+            centerId,
           ]
         );
 
@@ -268,13 +269,17 @@ class ReviewService {
 
       // Log changes in data_edit_logs with admin user ID
       for (const change of changes) {
-        const studentUuid = convertToUUID(change.studentId);
-
         await connection.query(
           `INSERT INTO data_edit_logs 
           (student_id, field_name, old_value, new_value, edited_by, created_at) 
           VALUES (?, ?, ?, ?, ?, NOW())`,
-          [studentUuid, change.field, change.oldValue || null, change.newValue || null, adminUuid]
+          [
+            change.studentId,
+            change.field,
+            change.oldValue || null,
+            change.newValue || null,
+            adminUserId,
+          ]
         );
         loggedChanges++;
       }
@@ -289,6 +294,28 @@ class ReviewService {
     } catch (error) {
       await connection.rollback();
       console.error('Error in saveAdminEdits:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Get edit history for a student (visible to both admin and partner)
+   */
+  async getStudentEditHistory(studentId) {
+    const connection = await db.getConnection();
+    try {
+      const [logs] = await connection.query(
+        `SELECT field_name, old_value, new_value, edited_by, created_at
+         FROM data_edit_logs
+         WHERE student_id = ?
+         ORDER BY created_at DESC`,
+        [studentId]
+      );
+      return logs;
+    } catch (error) {
+      console.error('Error in getStudentEditHistory:', error);
       throw error;
     } finally {
       connection.release();

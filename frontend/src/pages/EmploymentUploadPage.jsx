@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
 import axios from "axios";
+import { MainLayout } from "../components/layout";
 
 /**
  * EmploymentUploadPage - Two-tab interface for employment data management
@@ -197,6 +198,7 @@ const EmploymentUploadPage = () => {
   };
 
   return (
+    <MainLayout>
     <div style={{ padding: "24px" }}>
       <div style={{ marginBottom: "24px" }}>
         <h2>Employment Data Upload</h2>
@@ -664,6 +666,7 @@ const EmploymentUploadPage = () => {
         </div>
       )}
     </div>
+    </MainLayout>
   );
 };
 

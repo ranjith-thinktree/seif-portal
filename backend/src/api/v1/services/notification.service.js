@@ -1051,7 +1051,7 @@ const getRefurbishmentDetails = async (notificationId, userId, partnerId) => {
     );
 
     if (!result || result.length === 0) {
-      return null;
+      throw new Error('Refurbishment notification not found');
     }
 
     const notification = result[0];

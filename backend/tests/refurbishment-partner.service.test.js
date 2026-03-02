@@ -386,8 +386,8 @@ describe('RefurbishmentService - Partner Methods', () => {
       ];
 
       db.query
-        .mockResolvedValueOnce([mockRequests]) // Requests query
-        .mockResolvedValueOnce([[{ total: 15 }]]); // Count query
+        .mockResolvedValueOnce([[{ total: 15 }]]) // Count query (runs first in service)
+        .mockResolvedValueOnce([mockRequests]); // Requests query
 
       const result = await RefurbishmentService.getPartnerRefurbishmentRequests({
         partnerId,
@@ -410,9 +410,9 @@ describe('RefurbishmentService - Partner Methods', () => {
         },
       ];
 
-      const mockTotal = [{ total: 5 }];
-
-      db.query.mockResolvedValueOnce([mockRequests]).mockResolvedValueOnce([mockTotal]);
+      db.query
+        .mockResolvedValueOnce([[{ total: 5 }]]) // Count query (runs first in service)
+        .mockResolvedValueOnce([mockRequests]); // Requests query
 
       const result = await RefurbishmentService.getPartnerRefurbishmentRequests({
         partnerId,
@@ -424,9 +424,9 @@ describe('RefurbishmentService - Partner Methods', () => {
       expect(result.requests).toHaveLength(1);
       expect(result.requests[0].status).toBe('pending');
 
-      // Verify status filter was applied in query
+      // Verify status filter was applied in query (count query runs first)
       const firstQueryCall = db.query.mock.calls[0];
-      expect(firstQueryCall[0]).toContain('AND r.status = ?');
+      expect(firstQueryCall[0]).toContain('AND rr.status = ?');
     });
 
     it('should calculate pagination metadata correctly', async () => {
@@ -437,7 +437,9 @@ describe('RefurbishmentService - Partner Methods', () => {
           status: 'pending',
         }));
 
-      db.query.mockResolvedValueOnce([mockRequests]).mockResolvedValueOnce([[{ total: 25 }]]);
+      db.query
+        .mockResolvedValueOnce([[{ total: 25 }]]) // Count query (runs first in service)
+        .mockResolvedValueOnce([mockRequests]); // Requests query
 
       const result = await RefurbishmentService.getPartnerRefurbishmentRequests({
         partnerId,
@@ -451,7 +453,9 @@ describe('RefurbishmentService - Partner Methods', () => {
     });
 
     it('should return empty array if no requests', async () => {
-      db.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+      db.query
+        .mockResolvedValueOnce([[{ total: 0 }]]) // Count query (runs first in service)
+        .mockResolvedValueOnce([[]]); // Requests query
 
       const result = await RefurbishmentService.getPartnerRefurbishmentRequests({
         partnerId,
@@ -497,7 +501,9 @@ describe('RefurbishmentService - Partner Methods', () => {
     });
 
     it('should use default limit and offset if not provided', async () => {
-      db.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+      db.query
+        .mockResolvedValueOnce([[{ total: 0 }]]) // Count query (runs first in service)
+        .mockResolvedValueOnce([[]]); // Requests query
 
       const result = await RefurbishmentService.getPartnerRefurbishmentRequests({
         partnerId,

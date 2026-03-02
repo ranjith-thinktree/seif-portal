@@ -1,4 +1,5 @@
 const pool = require('../../../database/connection').pool;
+const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
 
 /**
@@ -333,12 +334,13 @@ const createNotificationForAdmin = async (dataUploadId, partnerId, partnerName, 
  * Get all uploads for partner
  */
 const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
+  const connection = await db.getConnection();
   try {
     const offset = (page - 1) * limit;
     const validLimit = parseInt(limit);
     const validOffset = parseInt(offset);
 
-    const [uploads] = await pool.query(
+    const [uploads] = await connection.query(
       `SELECT 
         du.id, du.file_name, du.file_url, du.total_records, 
         du.status, du.rejection_reason, du.remarks,
@@ -349,27 +351,17 @@ const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
       LEFT JOIN users u ON du.uploaded_by = u.id
       LEFT JOIN users r ON du.reviewed_by = r.id
       WHERE du.partner_id = ?
+        AND du.deleted_at IS NULL
       ORDER BY du.created_at DESC
       LIMIT ${validLimit} OFFSET ${validOffset}`,
       [partnerId]
     );
 
-    const [countResult] = await pool.query(
-      'SELECT COUNT(*) as total FROM data_uploads WHERE partner_id = ?',
-      [partnerId]
-    );
-
-    return {
-      uploads,
-      pagination: {
-        page,
-        limit,
-        total: countResult[0].total,
-        totalPages: Math.ceil(countResult[0].total / limit),
-      },
-    };
+    return { uploads };
   } catch (error) {
     throw new Error(`Failed to fetch uploads: ${error.message}`);
+  } finally {
+    connection.release();
   }
 };
 
@@ -1305,6 +1297,147 @@ const bulkDeleteUploads = async (uploadIds, userId, userRole) => {
   return results;
 };
 
+/**
+ * Process upload CSV data into uploaded_centers, uploaded_batches, uploaded_students tables.
+ * @param {string} partnerId
+ * @param {string} uploadId
+ * @param {Array} csvData  - pre-parsed array of row objects from CSV
+ */
+const processUpload = async (partnerId, uploadId, csvData) => {
+  if (!csvData || csvData.length === 0) return { processed: 0 };
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Group rows by center_id
+    const centerMap = {};
+    for (const row of csvData) {
+      if (!row.center_id || !row.student_id) {
+        throw new Error('Missing required fields: center_id or student_id (partner_student_id)');
+      }
+      if (!centerMap[row.center_id]) {
+        centerMap[row.center_id] = { info: row, batches: {} };
+      }
+      const batchKey = row.batch_number || 'DEFAULT';
+      if (!centerMap[row.center_id].batches[batchKey]) {
+        centerMap[row.center_id].batches[batchKey] = [];
+      }
+      centerMap[row.center_id].batches[batchKey].push(row);
+    }
+
+    for (const [csvCenterId, { info, batches }] of Object.entries(centerMap)) {
+      const centerId = uuidv4();
+
+      await connection.query(
+        `INSERT INTO uploaded_centers (id, data_upload_id, csv_center_id, center_name, partner_id, review_status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+        [centerId, uploadId, csvCenterId, info.center_name, partnerId]
+      );
+
+      for (const [batchNum, students] of Object.entries(batches)) {
+        const [existingBatches] = await connection.query(
+          'SELECT id FROM uploaded_batches WHERE uploaded_center_id = ? AND batch_number = ?',
+          [centerId, batchNum]
+        );
+
+        let batchId;
+        if (existingBatches.length === 0) {
+          batchId = uuidv4();
+          await connection.query(
+            `INSERT INTO uploaded_batches (id, uploaded_center_id, data_upload_id, batch_number, review_status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())`,
+            [batchId, centerId, uploadId, batchNum]
+          );
+        } else {
+          batchId = existingBatches[0].id;
+        }
+
+        for (const student of students) {
+          await connection.query(
+            `INSERT INTO uploaded_students (id, uploaded_center_id, uploaded_batch_id, data_upload_id, partner_id,
+               partner_student_id, student_name, gender, course_name, batch_number, training_status, review_status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+            [
+              uuidv4(),
+              centerId,
+              batchId,
+              uploadId,
+              partnerId,
+              student.student_id,
+              student.student_name,
+              student.gender,
+              student.course_name,
+              student.batch_number || batchNum,
+              student.training_status || 'enrolled',
+            ]
+          );
+        }
+      }
+    }
+
+    await connection.commit();
+    return { processed: csvData.length };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Get approval status for a center (checks if all batches are approved).
+ */
+const getCenterApprovalStatus = async (centerId) => {
+  const connection = await db.getConnection();
+  try {
+    const [batches] = await connection.query(
+      'SELECT id, review_status FROM uploaded_batches WHERE uploaded_center_id = ?',
+      [centerId]
+    );
+    const allApproved = batches.length > 0 && batches.every((b) => b.review_status === 'approved');
+    return allApproved
+      ? { canApprove: true }
+      : { canApprove: false, reason: 'not all batches are approved' };
+  } catch (error) {
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Create a V2 resubmission from an existing upload (soft-deletes V1).
+ */
+const createResubmission = async (parentUploadId, partnerId) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const newUploadId = uuidv4();
+
+    await connection.query(
+      `INSERT INTO data_uploads (id, partner_id, parent_upload_id, version, status, created_at, updated_at)
+       SELECT ?, partner_id, ?, COALESCE(version, 1) + 1, 'pending', NOW(), NOW()
+       FROM data_uploads WHERE id = ?`,
+      [newUploadId, parentUploadId, parentUploadId]
+    );
+
+    await connection.query(`UPDATE data_uploads SET deleted_at = NOW() WHERE id = ?`, [
+      parentUploadId,
+    ]);
+
+    await connection.commit();
+    return { id: newUploadId };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 module.exports = {
   getAllCourses,
   getPartnerById,
@@ -1324,4 +1457,7 @@ module.exports = {
   resubmitWithEdits,
   deleteUpload,
   bulkDeleteUploads,
+  processUpload,
+  getCenterApprovalStatus,
+  createResubmission,
 };

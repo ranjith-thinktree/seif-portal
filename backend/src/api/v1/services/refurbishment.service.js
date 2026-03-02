@@ -2531,7 +2531,15 @@ class RefurbishmentService {
             `INSERT INTO refurbishment_request_course_attachments
                (id, refurbishment_request_id, file_url, file_name, file_size_bytes, file_mime_type, uploaded_by, attachment_type, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, 'partner_completion', NOW())`,
-            [uuidv4(), requestId, file.url, file.name || 'completion_file', file.size || null, file.type || null, data.userId || null]
+            [
+              uuidv4(),
+              requestId,
+              file.url,
+              file.name || 'completion_file',
+              file.size || null,
+              file.type || null,
+              data.userId || null,
+            ]
           );
         }
       }

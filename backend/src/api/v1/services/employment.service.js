@@ -1,158 +1,137 @@
 const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
 const { convertToUUID } = require('../../../utils/uuid.util');
-const {
-  parseExcelFile,
-  validateHeaders,
-  EXPECTED_EMPLOYMENT_COLUMNS,
-} = require('../../../utils/excelHandler');
 
 class EmploymentService {
   /**
-   * Process employment CSV upload
+   * Process employment upload from pre-parsed CSV data
    * @param {string} partnerId - Partner ID
-   * @param {Object} fileData - Uploaded file information
-   * @param {string} uploadedBy - User ID
-   * @returns {Promise<Object>} Upload result with statistics
+   * @param {string} uploadId - Pre-created upload record ID
+   * @param {Array}  csvData  - Array of row objects from parsed CSV/Excel file
+   * @param {string} fileName - Original file name (for logging)
+   * @returns {Promise<{total, processed, failed, error_log}>}
    */
-  async processEmploymentUpload(partnerId, fileData, uploadedBy) {
-    const connection = await db.pool.getConnection();
+  async processEmploymentUpload(partnerId, uploadId, csvData, fileName) {
+    const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
 
-      const partnerUuid = convertToUUID(partnerId);
-      const userUuid = convertToUUID(uploadedBy);
+      let processed = 0;
+      let failed = 0;
+      const error_log = [];
 
-      // Parse the CSV file
-      const { data: employmentRecords, headers } = await parseExcelFile(
-        fileData.path,
-        'employment'
-      );
+      for (let i = 0; i < csvData.length; i++) {
+        const record = csvData[i];
+        const row = i + 2; // row 1 = header, row 2 = first data row
 
-      // Validate headers
-      const headerValidation = validateHeaders(headers, EXPECTED_EMPLOYMENT_COLUMNS, 'employment');
-      if (!headerValidation.isValid) {
-        throw new Error(`Invalid CSV format: ${headerValidation.errors.join(', ')}`);
-      }
+        // Find student by partner_id + partner_student_id
+        const [students] = await connection.query(
+          `SELECT id FROM students WHERE partner_id = ? AND partner_student_id = ? AND deleted_at IS NULL`,
+          [partnerId, String(record.student_id).trim()]
+        );
 
-      // Create employment_uploads record
-      const uploadId = uuidv4();
-      await connection.query(
-        `INSERT INTO employment_uploads 
-        (id, partner_id, file_name, file_url, total_records, records_processed, records_failed, status, uploaded_by, created_at)
-        VALUES (?, ?, ?, ?, ?, 0, 0, 'processing', ?, NOW())`,
-        [
-          uploadId,
-          partnerUuid,
-          fileData.filename,
-          fileData.path,
-          employmentRecords.length,
-          userUuid,
-        ]
-      );
-
-      let processedCount = 0;
-      let failedCount = 0;
-      const errorLog = [];
-
-      // Process each employment record
-      for (let index = 0; index < employmentRecords.length; index++) {
-        const record = employmentRecords[index];
-        const rowNumber = index + 2; // +2 for header row and 1-indexed
-
-        try {
-          // Validate required fields
-          if (!record.student_id || !record.employment_status) {
-            throw new Error(`Missing required fields (Student ID or Employment Status)`);
-          }
-
-          // Find student by partner_student_id
-          const [students] = await connection.query(
-            `SELECT id, student_name FROM students 
-            WHERE partner_id = ? AND partner_student_id = ? AND deleted_at IS NULL`,
-            [partnerUuid, record.student_id.toString().trim()]
-          );
-
-          if (students.length === 0) {
-            throw new Error(`Student not found with ID: ${record.student_id}`);
-          }
-
-          const student = students[0];
-          const employmentId = uuidv4();
-
-          // Insert employment record
-          await connection.query(
-            `INSERT INTO employment 
-            (id, student_id, partner_id, partner_student_id, employment_upload_id,
-             employment_status, company_name, location, date_of_joining, designation, 
-             salary_per_month, offer_letter_url, payslip_url, 
-             is_verified, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
-            [
-              employmentId,
-              student.id,
-              partnerUuid,
-              record.student_id.toString().trim(),
-              uploadId,
-              record.employment_status,
-              record.company_name || null,
-              record.location || null,
-              record.date_of_joining || null,
-              record.designation || null,
-              record.salary_per_month || null,
-              record.offer_letter_url || null,
-              record.payslip_url || null,
-            ]
-          );
-
-          // Update student's employment_status
-          await connection.query(
-            `UPDATE students 
-            SET employment_status = ?, updated_at = NOW()
-            WHERE id = ?`,
-            [record.employment_status, student.id]
-          );
-
-          processedCount++;
-        } catch (error) {
-          failedCount++;
-          errorLog.push({
-            row: rowNumber,
+        if (students.length === 0) {
+          failed++;
+          error_log.push({
+            row,
             student_id: record.student_id || 'N/A',
-            error: error.message,
+            error: `Student not found with ID: ${record.student_id}`,
           });
+          continue;
         }
-      }
 
-      // Update employment_uploads with final statistics
-      const finalStatus = failedCount === employmentRecords.length ? 'failed' : 'completed';
-      await connection.query(
-        `UPDATE employment_uploads 
-        SET records_processed = ?, records_failed = ?, status = ?, error_log = ?, processed_at = NOW()
-        WHERE id = ?`,
-        [processedCount, failedCount, finalStatus, JSON.stringify(errorLog), uploadId]
-      );
+        const student = students[0];
+
+        // Validate required fields (graceful per-row failure — after student lookup)
+        if (!record.company_name) {
+          failed++;
+          error_log.push({
+            row,
+            student_id: record.student_id || 'N/A',
+            error: 'company_name is required',
+          });
+          continue;
+        }
+
+        // Validate date format if provided (graceful per-row failure)
+        if (record.employment_date && isNaN(new Date(record.employment_date).getTime())) {
+          failed++;
+          error_log.push({
+            row,
+            student_id: record.student_id || 'N/A',
+            error: 'Invalid employment_date format',
+          });
+          continue;
+        }
+
+        const employmentId = uuidv4();
+
+        // Insert employment record — DB errors propagate up to outer catch → rollback
+        await connection.query(
+          `INSERT INTO employment (
+             id, student_id, partner_id, partner_student_id, employment_upload_id,
+             company_name, designation, date_of_joining, salary_per_month, is_verified, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+          [
+            employmentId,
+            student.id,
+            partnerId,
+            String(record.student_id).trim(),
+            uploadId,
+            record.company_name,
+            record.designation || null,
+            record.employment_date || null,
+            record.salary || null,
+          ]
+        );
+
+        // Update student employment_status to 'employed'
+        await connection.query(
+          `UPDATE students SET employment_status = 'employed', updated_at = NOW() WHERE id = ?`,
+          [student.id]
+        );
+
+        processed++;
+      }
 
       await connection.commit();
 
-      return {
-        success: true,
-        uploadId,
-        totalRecords: employmentRecords.length,
-        processedCount,
-        failedCount,
-        errorLog: failedCount > 0 ? errorLog : null,
-        message: `Successfully processed ${processedCount} employment records. ${
-          failedCount > 0 ? `${failedCount} records failed.` : ''
-        }`,
-      };
+      return { total: csvData.length, processed, failed, error_log };
     } catch (error) {
       await connection.rollback();
-      console.error('Error in processEmploymentUpload:', error);
       throw error;
     } finally {
       connection.release();
     }
+  }
+
+  /**
+   * Generate an Excel template for employment uploads
+   * @returns {Promise<Buffer>} Excel file buffer
+   */
+  async generateTemplate() {
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Employment Data');
+
+    worksheet.columns = [
+      { header: 'Student ID', key: 'student_id', width: 20 },
+      { header: 'Company Name', key: 'company_name', width: 30 },
+      { header: 'Designation', key: 'designation', width: 25 },
+      { header: 'Employment Date (YYYY-MM-DD)', key: 'employment_date', width: 25 },
+      { header: 'Salary (Monthly)', key: 'salary', width: 20 },
+    ];
+
+    worksheet.addRow({
+      student_id: 'EXAMPLE_001',
+      company_name: 'Example Corporation',
+      designation: 'Software Developer',
+      employment_date: '2024-01-15',
+      salary: 50000,
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer;
   }
 
   /**

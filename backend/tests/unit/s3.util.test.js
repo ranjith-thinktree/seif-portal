@@ -45,11 +45,20 @@ describe('S3 Upload Utility', () => {
   let mockS3;
 
   beforeEach(() => {
-    // Reset mocks
-    jest.clearAllMocks();
+    // With resetMocks:true in jest.config.js, the AWS.S3 factory is cleared between tests.
+    // Re-create a fresh mock S3 instance and register it as the constructor return value.
+    mockS3 = {
+      upload: jest.fn(),
+      deleteObject: jest.fn(),
+      listBuckets: jest.fn(),
+      getSignedUrl: jest.fn(),
+      getSignedUrlPromise: jest.fn(),
+    };
+    AWS.S3.mockReturnValue(mockS3);
 
-    // Get mock S3 instance
-    mockS3 = new AWS.S3();
+    // Reset the cached s3Client singleton so s3.util.js calls new AWS.S3() again
+    // and picks up our fresh mock instance above.
+    s3Util._resetS3Client();
   });
 
   describe('uploadImageToS3', () => {
@@ -63,7 +72,7 @@ describe('S3 Upload Utility', () => {
 
       // Mock successful S3 upload
       mockS3.upload.mockReturnValue({
-        promise: jest.fn().resolveValue({
+        promise: jest.fn().mockResolvedValue({
           Location:
             'https://s3.amazonaws.com/test-bucket/refurbishment/req-123/admin-completion/image.jpg',
           Key: 'refurbishment/req-123/admin-completion/image.jpg',
@@ -107,7 +116,7 @@ describe('S3 Upload Utility', () => {
       const courseId = 'course-789';
 
       mockS3.upload.mockReturnValue({
-        promise: jest.fn().resolveValue({
+        promise: jest.fn().mockResolvedValue({
           Location:
             'https://s3.amazonaws.com/test-bucket/refurbishment/req-456/partner-before/course-789/image.jpg',
           Key: 'refurbishment/req-456/partner-before/course-789/image.jpg',
@@ -162,7 +171,7 @@ describe('S3 Upload Utility', () => {
       const mockBuffer = Buffer.from('test data');
 
       mockS3.upload.mockReturnValue({
-        promise: jest.fn().rejectValue(new Error('S3 upload failed')),
+        promise: jest.fn().mockRejectedValue(new Error('S3 upload failed')),
       });
 
       await expect(
@@ -196,7 +205,7 @@ describe('S3 Upload Utility', () => {
       ];
 
       mockS3.upload.mockReturnValue({
-        promise: jest.fn().resolveValue({
+        promise: jest.fn().mockResolvedValue({
           Location: 'https://s3.amazonaws.com/test-bucket/image.jpg',
           Key: 'refurbishment/req-123/admin-completion/image.jpg',
         }),
@@ -233,12 +242,12 @@ describe('S3 Upload Utility', () => {
       // First upload succeeds, second fails
       mockS3.upload
         .mockReturnValueOnce({
-          promise: jest.fn().resolveValue({
+          promise: jest.fn().mockResolvedValue({
             Location: 'https://s3.amazonaws.com/test-bucket/image1.jpg',
           }),
         })
         .mockReturnValueOnce({
-          promise: jest.fn().rejectValue(new Error('Upload failed')),
+          promise: jest.fn().mockRejectedValue(new Error('Upload failed')),
         });
 
       await expect(
@@ -253,7 +262,7 @@ describe('S3 Upload Utility', () => {
         'https://test-bucket.s3.amazonaws.com/refurbishment/req-123/admin-completion/image.jpg';
 
       mockS3.deleteObject.mockReturnValue({
-        promise: jest.fn().resolveValue({}),
+        promise: jest.fn().mockResolvedValue({}),
       });
 
       const result = await s3Util.deleteImageFromS3(s3Url);
@@ -270,7 +279,7 @@ describe('S3 Upload Utility', () => {
       const s3Url = 'https://test-bucket.s3.amazonaws.com/image.jpg';
 
       mockS3.deleteObject.mockReturnValue({
-        promise: jest.fn().rejectValue(new Error('Delete failed')),
+        promise: jest.fn().mockRejectedValue(new Error('Delete failed')),
       });
 
       const result = await s3Util.deleteImageFromS3(s3Url);
@@ -288,13 +297,13 @@ describe('S3 Upload Utility', () => {
       ];
 
       mockS3.deleteObject.mockReturnValue({
-        promise: jest.fn().resolveValue({}),
+        promise: jest.fn().mockResolvedValue({}),
       });
 
       const results = await s3Util.deleteMultipleImagesFromS3(s3Urls);
 
       expect(mockS3.deleteObject).toHaveBeenCalledTimes(2);
-      expect(results).toEqual([true, true]);
+      expect(results).toBe(2); // deleteMultipleImagesFromS3 returns successCount
     });
   });
 
@@ -303,11 +312,11 @@ describe('S3 Upload Utility', () => {
       const s3Key = 'refurbishment/req-123/image.jpg';
       const mockUrl = 'https://presigned-url.com/image.jpg';
 
-      mockS3.getSignedUrl.mockReturnValue(mockUrl);
+      mockS3.getSignedUrlPromise.mockResolvedValue(mockUrl);
 
       const result = await s3Util.generatePresignedUrl(s3Key);
 
-      expect(mockS3.getSignedUrl).toHaveBeenCalledWith('getObject', {
+      expect(mockS3.getSignedUrlPromise).toHaveBeenCalledWith('getObject', {
         Bucket: 'test-bucket',
         Key: s3Key,
         Expires: 3600, // 1 hour default
@@ -321,11 +330,11 @@ describe('S3 Upload Utility', () => {
       const customExpiration = 7200; // 2 hours
       const mockUrl = 'https://presigned-url.com/image.jpg';
 
-      mockS3.getSignedUrl.mockReturnValue(mockUrl);
+      mockS3.getSignedUrlPromise.mockResolvedValue(mockUrl);
 
       await s3Util.generatePresignedUrl(s3Key, customExpiration);
 
-      expect(mockS3.getSignedUrl).toHaveBeenCalledWith('getObject', {
+      expect(mockS3.getSignedUrlPromise).toHaveBeenCalledWith('getObject', {
         Bucket: 'test-bucket',
         Key: s3Key,
         Expires: customExpiration,
@@ -336,7 +345,7 @@ describe('S3 Upload Utility', () => {
   describe('checkS3Configuration', () => {
     test('should validate S3 configuration successfully', async () => {
       mockS3.listBuckets.mockReturnValue({
-        promise: jest.fn().resolveValue({
+        promise: jest.fn().mockResolvedValue({
           Buckets: [{ Name: 'test-bucket' }],
         }),
       });
@@ -349,7 +358,7 @@ describe('S3 Upload Utility', () => {
 
     test('should handle invalid configuration', async () => {
       mockS3.listBuckets.mockReturnValue({
-        promise: jest.fn().rejectValue(new Error('Access Denied')),
+        promise: jest.fn().mockRejectedValue(new Error('Access Denied')),
       });
 
       const result = await s3Util.checkS3Configuration();
@@ -370,7 +379,7 @@ describe('S3 Upload Utility', () => {
       };
 
       mockS3.upload.mockReturnValue({
-        promise: jest.fn().resolveValue({
+        promise: jest.fn().mockResolvedValue({
           Location: 'https://s3.amazonaws.com/test-bucket/image.jpg',
           Key: 'refurbishment/req-123/admin-completion/image.jpg',
         }),

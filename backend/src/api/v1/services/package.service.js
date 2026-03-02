@@ -61,6 +61,25 @@ class PackageService {
       throw new ValidationError('Package name is required');
     }
 
+    // Validate category if provided
+    const VALID_CATEGORIES = [
+      'electrical',
+      'electronics',
+      'it',
+      'mechanical',
+      'civil',
+      'mechatronics',
+      'general',
+    ];
+    if (
+      packageData.category !== undefined &&
+      !VALID_CATEGORIES.includes(packageData.category.toLowerCase())
+    ) {
+      throw new ValidationError(
+        `Invalid category: "${packageData.category}". Must be one of: ${VALID_CATEGORIES.join(', ')}`
+      );
+    }
+
     // Check if package name already exists
     const existingPackage = await RefurbishmentPackageModel.findByName(packageData.package_name);
 

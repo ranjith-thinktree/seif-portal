@@ -1,6 +1,12 @@
 const employmentService = require('../services/employment.service');
-const { generateEmploymentTemplate } = require('../../../utils/excelHandler');
+const {
+  generateEmploymentTemplate,
+  parseExcelFile,
+  validateHeaders,
+  EXPECTED_EMPLOYMENT_COLUMNS,
+} = require('../../../utils/excelHandler');
 const db = require('../../../database/connection');
+const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 
@@ -20,23 +26,58 @@ exports.uploadEmployment = async (req, res) => {
       });
     }
 
+    // Parse the uploaded file
+    const { data: csvData, headers } = await parseExcelFile(req.file.path, 'employment');
+
+    // Validate headers
+    const headerValidation = validateHeaders(headers, 'employment');
+    if (!headerValidation.isValid) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        /* ignore */
+      }
+      return res.status(400).json({
+        success: false,
+        message: `Invalid file format: ${headerValidation.errors.join(', ')}`,
+      });
+    }
+
+    // Create employment_uploads record
+    const uploadId = uuidv4();
+    await db.query(
+      `INSERT INTO employment_uploads
+         (id, partner_id, file_name, total_records, status, uploaded_by, created_at)
+       VALUES (?, ?, ?, ?, 'processing', ?, NOW())`,
+      [uploadId, partnerId, req.file.originalname, csvData.length, uploadedBy]
+    );
+
+    // Process pre-parsed data through service
     const result = await employmentService.processEmploymentUpload(
       partnerId,
-      {
-        path: req.file.path,
-        filename: req.file.originalname,
-      },
-      uploadedBy
+      uploadId,
+      csvData,
+      req.file.originalname
+    );
+
+    // Update upload record with final stats
+    const finalStatus = result.failed === csvData.length ? 'failed' : 'completed';
+    await db.query(
+      `UPDATE employment_uploads
+         SET records_processed = ?, records_failed = ?, status = ?,
+             error_log = ?, processed_at = NOW()
+       WHERE id = ?`,
+      [result.processed, result.failed, finalStatus, JSON.stringify(result.error_log), uploadId]
     );
 
     // Clean up uploaded file
     try {
       fs.unlinkSync(req.file.path);
     } catch (err) {
-      console.error('Error deleting temp file:', err);
+      /* ignore */
     }
 
-    res.json(result);
+    res.json({ success: true, uploadId, ...result });
   } catch (error) {
     console.error('Error in uploadEmployment:', error);
 
@@ -45,7 +86,7 @@ exports.uploadEmployment = async (req, res) => {
       try {
         fs.unlinkSync(req.file.path);
       } catch (err) {
-        console.error('Error deleting temp file:', err);
+        /* ignore */
       }
     }
 

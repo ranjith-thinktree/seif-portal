@@ -39,6 +39,7 @@ export const ROUTES = {
   UPLOAD_DATA: "/upload",
   UPLOAD_HISTORY: "/upload/history",
   EMPLOYMENT_UPLOAD: "/employment/upload",
+  EMPLOYMENT_MANAGEMENT: "/admin/employment",
   PARTNER_REVIEW_EDIT: "/my-data/review/:uploadId",
   PARTNER_REJECTED_UPLOADS: "/partner/rejected-uploads",
   PARTNER_REJECTED_CENTERS: "/partner/uploads/:uploadId/centers",

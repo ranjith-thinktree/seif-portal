@@ -234,7 +234,9 @@ describe('Review Service - Admin Editing Tests', () => {
         .mockResolvedValueOnce([{ insertId: 2 }]) // insert student 2
         .mockResolvedValueOnce([{ affectedRows: 1 }]) // update uploaded_students 2
         .mockResolvedValueOnce([{ affectedRows: 1 }]) // update uploaded_centers
-        .mockResolvedValueOnce([[{ version: 1 }]]); // check version
+        .mockResolvedValueOnce([[{ version: 1 }]]) // check version
+        .mockResolvedValueOnce([{ affectedRows: 1 }]) // update data_uploads progress
+        .mockResolvedValueOnce([[{ centers_reviewed: 1, centers_total: 1 }]]); // check all reviewed
 
       await reviewService.approveCenter(mockUploadId, mockCenterId, mockAdminId);
 
@@ -310,7 +312,9 @@ describe('Review Service - Admin Editing Tests', () => {
         .mockResolvedValueOnce([{ insertId: 1 }])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([[{ version: 1 }]]);
+        .mockResolvedValueOnce([[{ version: 1 }]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]) // update data_uploads progress
+        .mockResolvedValueOnce([[{ centers_reviewed: 1, centers_total: 1 }]]); // check all reviewed
 
       await reviewService.approveCenter(mockUploadId, mockCenterId, mockAdminId);
 
@@ -457,6 +461,9 @@ describe('Review Service - Admin Editing Tests', () => {
       const mockAdminId = uuidv4();
 
       mockConnection.query.mockResolvedValueOnce([[{ id: mockCenterId }]]);
+
+      // Call saveAdminEdits so the SELECT query is actually executed
+      await reviewService.saveAdminEdits(mockUploadId, mockCenterId, [], [], mockAdminId);
 
       // Verify query checks both center ID and upload ID
       const verifyCall = mockConnection.query.mock.calls.find((call) =>

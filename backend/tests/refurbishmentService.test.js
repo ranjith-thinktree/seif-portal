@@ -24,6 +24,25 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
   };
 
   beforeAll(async () => {
+    // Clean up any stale data from previous failed test runs to avoid duplicate-key errors
+    // (The DB may auto-generate center_id values like 'TES-001' based on partner name,
+    //  so we must remove any left-over rows with this partner name before inserting fresh ones.)
+    try {
+      await db.query(
+        `DELETE FROM refurbishment_requests
+         WHERE center_id IN (SELECT id FROM centers WHERE center_id LIKE ?)`,
+        ['JEST-%']
+      );
+    } catch (_) {
+      /* ignore if table doesn't exist or no rows */
+    }
+    await db.query('DELETE FROM centers WHERE center_id LIKE ?', ['JEST-%']);
+    await db.query(
+      'DELETE FROM centers WHERE partner_id IN (SELECT id FROM partners WHERE name = ?)',
+      [testPartnerName]
+    );
+    await db.query('DELETE FROM partners WHERE name = ?', [testPartnerName]);
+
     // Create test partner
     await db.query(
       'INSERT INTO partners (id, name, contact_person, contact_email, contact_phone) VALUES (?, ?, ?, ?, ?)',
@@ -44,6 +63,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
     const centers = [
       {
         id: centerIds.eligibleWithRefurb,
+        center_id: 'JEST-REF-001',
         center_name: 'Eligible Center (Last Refurbished 3 Years Ago)',
         partner_id: testPartnerId,
         year_of_establishment: 2020,
@@ -57,6 +77,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
       },
       {
         id: centerIds.eligibleNewCenter,
+        center_id: 'JEST-REF-002',
         center_name: 'Eligible New Center (Never Refurbished, 4 Years Old)',
         partner_id: testPartnerId,
         year_of_establishment: fourYearsAgoYear,
@@ -70,6 +91,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
       },
       {
         id: centerIds.ineligibleRecent,
+        center_id: 'JEST-REF-003',
         center_name: 'Ineligible Center (Recently Refurbished 1 Year Ago)',
         partner_id: testPartnerId,
         year_of_establishment: 2019,
@@ -83,6 +105,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
       },
       {
         id: centerIds.ineligibleNew,
+        center_id: 'JEST-REF-004',
         center_name: 'Ineligible New Center (Only 1 Year Old)',
         partner_id: testPartnerId,
         year_of_establishment: oneYearAgoYear,
@@ -96,6 +119,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
       },
       {
         id: centerIds.inactive,
+        center_id: 'JEST-REF-005',
         center_name: 'Inactive Center (Should Not Appear)',
         partner_id: testPartnerId,
         year_of_establishment: 2018,
@@ -113,12 +137,13 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
     for (const center of centers) {
       await db.query(
         `INSERT INTO centers (
-          id, center_name, partner_id, year_of_establishment, 
+          id, center_id, center_name, partner_id, year_of_establishment, 
           last_refurbishment_date, refurbishment_frequency_months, 
           city, state, region, center_type, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           center.id,
+          center.center_id,
           center.center_name,
           center.partner_id,
           center.year_of_establishment,
@@ -136,13 +161,22 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
 
   afterAll(async () => {
     // Clean up test data
+    try {
+      await db.query(
+        'DELETE FROM refurbishment_requests WHERE center_id IN (SELECT id FROM centers WHERE center_id LIKE ?)',
+        ['JEST-%']
+      );
+    } catch (_) {
+      /* ignore */
+    }
+    await db.query('DELETE FROM centers WHERE center_id LIKE ?', ['JEST-%']);
     await db.query('DELETE FROM centers WHERE partner_id = ?', [testPartnerId]);
     await db.query('DELETE FROM partners WHERE id = ?', [testPartnerId]);
   });
 
   describe('getEligibleCenters()', () => {
     it('should return only eligible centers (excluding inactive)', async () => {
-      const result = await RefurbishmentService.getEligibleCenters();
+      const result = await RefurbishmentService.getEligibleCenters(1000);
 
       expect(result).toHaveProperty('centers');
       expect(result).toHaveProperty('totalCount');
@@ -164,7 +198,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
     });
 
     it('should return centers with correct eligibility flag', async () => {
-      const result = await RefurbishmentService.getEligibleCenters();
+      const result = await RefurbishmentService.getEligibleCenters(1000);
 
       const testCenters = result.centers.filter((c) => c.partner_id === testPartnerId);
 
@@ -174,7 +208,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
     });
 
     it('should calculate months_since_last_refurbishment correctly for existing refurbishment', async () => {
-      const result = await RefurbishmentService.getEligibleCenters();
+      const result = await RefurbishmentService.getEligibleCenters(1000);
 
       const centerWithRefurb = result.centers.find((c) => c.id === centerIds.eligibleWithRefurb);
       expect(centerWithRefurb).toBeDefined();
@@ -185,7 +219,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
     });
 
     it('should calculate months_since_last_refurbishment correctly for new centers', async () => {
-      const result = await RefurbishmentService.getEligibleCenters();
+      const result = await RefurbishmentService.getEligibleCenters(1000);
 
       const newCenter = result.centers.find((c) => c.id === centerIds.eligibleNewCenter);
       expect(newCenter).toBeDefined();
@@ -196,7 +230,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
     });
 
     it('should return centers sorted by months_since_last_refurbishment DESC', async () => {
-      const result = await RefurbishmentService.getEligibleCenters();
+      const result = await RefurbishmentService.getEligibleCenters(1000);
 
       const testCenters = result.centers.filter((c) => c.partner_id === testPartnerId);
 
@@ -210,7 +244,7 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
     });
 
     it('should include partner_name from partners table', async () => {
-      const result = await RefurbishmentService.getEligibleCenters();
+      const result = await RefurbishmentService.getEligibleCenters(1000);
 
       const testCenters = result.centers.filter((c) => c.partner_id === testPartnerId);
 
@@ -352,12 +386,13 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
 
       await db.query(
         `INSERT INTO centers (
-          id, center_name, partner_id, year_of_establishment, 
+          id, center_id, center_name, partner_id, year_of_establishment, 
           last_refurbishment_date, refurbishment_frequency_months, 
           city, state, region, center_type, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           testCenterId,
+          'JEST-EDGE-001',
           'Center with null frequency',
           testPartnerId,
           2020,
@@ -387,12 +422,13 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
 
       await db.query(
         `INSERT INTO centers (
-          id, center_name, partner_id, year_of_establishment, 
+          id, center_id, center_name, partner_id, year_of_establishment, 
           last_refurbishment_date, refurbishment_frequency_months, 
           city, state, region, center_type, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           testCenterId,
+          'JEST-EDGE-002',
           'Brand New Center',
           testPartnerId,
           currentYear,
@@ -411,7 +447,10 @@ describe('RefurbishmentService - Eligibility Calculation', () => {
 
         expect(result).toBeDefined();
         expect(result.id).toBe(testCenterId);
-        expect(result.months_since_last_refurbishment).toBe(0);
+        // months_since_last_refurbishment is calculated from Jan 1 of the year,
+        // so it may be 0-11 depending on when the test runs
+        expect(result.months_since_last_refurbishment).toBeGreaterThanOrEqual(0);
+        expect(result.months_since_last_refurbishment).toBeLessThan(12);
         expect(result.is_eligible).toBe(0);
       } finally {
         await db.query('DELETE FROM centers WHERE id = ?', [testCenterId]);

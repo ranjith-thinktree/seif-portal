@@ -93,13 +93,11 @@ describe('Partner Service - Unit Tests', () => {
     it('should filter deleted uploads with WHERE deleted_at IS NULL', async () => {
       const mockPartnerId = uuidv4();
 
-      mockConnection.query.mockResolvedValueOnce([
-        [
-          { id: 'upload-v2', version: 2, deleted_at: null }, // Active
-          // V1 filtered out by WHERE clause
-        ],
-        [{ total: 1 }],
-      ]);
+      mockConnection.query
+        .mockResolvedValueOnce([[{ total: 1 }]]) // count query (runs first)
+        .mockResolvedValueOnce([
+          [{ id: 'upload-v2', version: 2, deleted_at: null }], // data query
+        ]);
 
       await partnerService.getRejectedUploads(mockPartnerId, { page: 1, limit: 10 });
 

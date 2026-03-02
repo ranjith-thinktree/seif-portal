@@ -35,6 +35,11 @@ import RefurbishmentDashboard from "../pages/Admin/RefurbishmentDashboard";
 import ForcedPasswordChangeGuard from "./ForcedPasswordChangeGuard";
 import UserManagementPage from "../pages/UserManagement/UserManagementPage";
 import OrganizationManagementPage from "../pages/OrganizationManagementPage";
+import EmploymentUploadPage from "../pages/EmploymentUploadPage";
+import EmploymentManagementPage from "../pages/Admin/EmploymentManagementPage";
+import MyDataPage from "../pages/Partner/MyDataPage";
+import MyRequestsPage from "../pages/Partner/MyRequestsPage";
+import AnalyticsPage from "../pages/Analytics/AnalyticsPage";
 
 /**
  * Placeholder page wrapper with MainLayout
@@ -227,7 +232,7 @@ const AppRoutes = () => {
             path={ROUTES.MY_DATA}
             element={
               <ProtectedRoute>
-                <PlaceholderPage title="My Data" />
+                <MyDataPage />
               </ProtectedRoute>
             }
           />
@@ -236,7 +241,7 @@ const AppRoutes = () => {
             path={ROUTES.MY_REQUESTS}
             element={
               <ProtectedRoute>
-                <PlaceholderPage title="My Requests" />
+                <MyRequestsPage />
               </ProtectedRoute>
             }
           />
@@ -255,6 +260,24 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute>
                 <UploadHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.EMPLOYMENT_UPLOAD}
+            element={
+              <ProtectedRoute>
+                <EmploymentUploadPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.EMPLOYMENT_MANAGEMENT}
+            element={
+              <ProtectedRoute>
+                <EmploymentManagementPage />
               </ProtectedRoute>
             }
           />
@@ -362,7 +385,7 @@ const AppRoutes = () => {
             path={ROUTES.ANALYTICS}
             element={
               <ProtectedRoute>
-                <PlaceholderPage title="Analytics" />
+                <AnalyticsPage />
               </ProtectedRoute>
             }
           />

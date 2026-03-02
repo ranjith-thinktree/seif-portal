@@ -237,17 +237,18 @@ const getRefurbishmentDetails = async (req, res, next) => {
     // Admins don't have a partnerId — pass null so service handles it correctly
     const effectivePartnerId = role === 'ADMIN' || role === 'SUPER_ADMIN' ? null : partnerId;
 
-    const result = await notificationService.getRefurbishmentDetails(
-      notificationId,
-      userId,
-      effectivePartnerId
-    );
-
-    if (!result) {
-      return res.status(404).json({
-        success: false,
-        message: 'Refurbishment notification not found or access denied',
-      });
+    let result;
+    try {
+      result = await notificationService.getRefurbishmentDetails(
+        notificationId,
+        userId,
+        effectivePartnerId
+      );
+    } catch (err) {
+      if (err.message && err.message.includes('not found')) {
+        return res.status(404).json({ success: false, message: err.message });
+      }
+      throw err;
     }
 
     res.status(200).json({
