@@ -1,6 +1,7 @@
 const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
-const { emitToUser } = require('../../../websocket/socket');
+const { emitToUser, emitToRole } = require('../../../websocket/socket');
+const emailService = require('../../../utils/email.util');
 
 /**
  * Refurbishment Service
@@ -55,6 +56,7 @@ class RefurbishmentService {
           c.region,
           c.center_type,
           c.status,
+          sn.last_notified_at,
           CASE
             WHEN c.last_refurbishment_date IS NOT NULL THEN
               TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE())
@@ -69,6 +71,12 @@ class RefurbishmentService {
           END as is_eligible
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
+        LEFT JOIN (
+          SELECT center_id, MAX(last_sent_at) as last_notified_at
+          FROM scheduled_refurbishment_notifications
+          WHERE last_sent_at IS NOT NULL
+          GROUP BY center_id
+        ) sn ON sn.center_id = c.id
         WHERE c.status = 'active'
           AND c.year_of_establishment IS NOT NULL
         HAVING is_eligible = 1
@@ -281,6 +289,8 @@ class RefurbishmentService {
            rr.approved_at,
            rr.created_at,
            rr.updated_at,
+           rr.completion_notified_at,
+           rr.partner_completed_at,
            c.center_name,
            c.partner_id,
            p.name  AS partner_name,
@@ -359,6 +369,47 @@ class RefurbishmentService {
         });
       }
 
+      // ── 3b. Admin-added packages (merged into courseMap with added_by_admin flag) ──
+      const [adminPkgRows] = await db.query(
+        `SELECT
+           aap.course_id,
+           aap.package_id,
+           rp.package_name,
+           rp.description,
+           rp.images,
+           co.course_name
+         FROM refurbishment_admin_added_packages aap
+         JOIN refurbishment_packages rp ON rp.id = aap.package_id
+         JOIN courses co ON co.id = aap.course_id
+         WHERE aap.refurbishment_request_id = ?
+         ORDER BY co.course_name, rp.package_name`,
+        [requestId]
+      );
+
+      for (const row of adminPkgRows) {
+        if (!courseMap.has(row.course_id)) {
+          courseMap.set(row.course_id, {
+            course_id: row.course_id,
+            course_name: row.course_name,
+            packages: [],
+            uploaded_images: attachByCourse[row.course_id] || [],
+          });
+        }
+        const alreadyPresent = courseMap.get(row.course_id).packages.some((p) => p.package_id === row.package_id);
+        if (!alreadyPresent) {
+          courseMap.get(row.course_id).packages.push({
+            package_id: row.package_id,
+            package_name: row.package_name,
+            description: row.description,
+            images: row.images || '[]',
+            justification: '',
+            added_by_admin: true,
+          });
+        }
+      }
+
+      const hasAdminModifications = adminPkgRows.length > 0;
+
       // ── 4. Upgradation details (if requested) ──
       let upgradation = null;
       if (req.is_upgradation_requested) {
@@ -412,6 +463,9 @@ class RefurbishmentService {
           created_at: req.created_at,
           updated_at: req.updated_at,
           request_number: req.request_number,
+          completion_notified_at: req.completion_notified_at || null,
+          partner_completed_at: req.partner_completed_at || null,
+          has_admin_modifications: hasAdminModifications,
         },
         courses: Array.from(courseMap.values()),
         upgradation_requested: !!req.is_upgradation_requested,
@@ -596,7 +650,24 @@ class RefurbishmentService {
       // 8. Commit transaction
       await connection.commit();
 
-      // 9. Return updated request
+      // 9. Emit real-time WebSocket notification to all ADMIN users
+      try {
+        emitToRole('ADMIN', 'notification:new', {
+          id: notificationUuid,
+          type: 'alert',
+          alert_type: 'refurbishment',
+          title: 'Partner Submitted Refurbishment Request',
+          message: 'Partner has submitted their selections for refurbishment request',
+          related_entity_type: 'request',
+          related_entity_id: requestId,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+      } catch (socketError) {
+        console.error('[RefurbishmentService] Failed to emit socket notification to admins:', socketError.message);
+      }
+
+      // 10. Return updated request
       const [updatedRows] = await connection.query(
         `SELECT r.id, r.status, r.updated_at
          FROM requests r
@@ -670,6 +741,7 @@ class RefurbishmentService {
           rr.completion_statement,
           rr.partner_completion_description,
           rr.partner_completed_at,
+          rr.completion_notified_at,
           c.center_name,
           c.address                                                                     AS center_address
         FROM refurbishment_requests rr
@@ -1031,7 +1103,10 @@ class RefurbishmentService {
 
       // Find the active partner user first
       const [partnerUserRows] = await db.query(
-        `SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER' AND status = 'active' LIMIT 1`,
+        `SELECT u.id, u.email, u.full_name, p.name as partner_name
+         FROM users u
+         LEFT JOIN partners p ON u.partner_id = p.id
+         WHERE u.partner_id = ? AND u.role = 'PARTNER' AND u.status = 'active' LIMIT 1`,
         [partnerId]
       );
 
@@ -1043,6 +1118,12 @@ class RefurbishmentService {
       }
 
       const recipientId = partnerUserRows[0].id;
+      const partnerEmail = partnerUserRows[0].email;
+      const partnerName = partnerUserRows[0].partner_name || partnerUserRows[0].full_name || 'Partner';
+
+      // Fetch center name for email
+      const [centerRows] = await db.query(`SELECT center_name FROM centers WHERE id = ? LIMIT 1`, [centerId]);
+      const centerName = centerRows[0]?.center_name || 'Your Center';
 
       await db.query(
         `INSERT INTO notifications (
@@ -1068,6 +1149,18 @@ class RefurbishmentService {
 
       // Note: Notification tracking is now handled by scheduled_notification_executions table
       // No need to update centers table anymore
+
+      // Send email notification to partner
+      if (partnerEmail) {
+        emailService.sendRefurbishmentNotificationEmail({
+          email: partnerEmail,
+          partnerName,
+          centerName,
+          message: defaultMessage,
+        }).catch((emailErr) => {
+          console.error('[RefurbishmentService] Failed to send refurbishment email:', emailErr.message);
+        });
+      }
 
       console.log(
         `[RefurbishmentService] Notification sent to partner ${partnerId} for center ${centerId}`

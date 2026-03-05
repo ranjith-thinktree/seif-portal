@@ -79,6 +79,23 @@ const EligibilityTab = ({
         enableResizing: true,
       },
       {
+        id: "last_notified_at",
+        accessorKey: "last_notified_at",
+        header: "Last Notified",
+        cell: ({ row }) => {
+          const d = row.original.last_notified_at;
+          if (!d) return <span className="text-gray-400 text-xs">Never</span>;
+          return (
+            <span className="text-xs text-blue-600 font-medium">
+              {formatDate(d)}
+            </span>
+          );
+        },
+        size: 150,
+        enableHiding: true,
+        enableResizing: true,
+      },
+      {
         id: "actions",
         header: "Notify",
         cell: ({ row }) => (
@@ -137,6 +154,7 @@ const EligibilityTab = ({
     { label: "Region", value: "region" },
     { label: "City", value: "city" },
     { label: "Last Refurbished", value: "last_refurbishment_date" },
+    { label: "Last Notified", value: "last_notified_at" },
   ];
 
   // Actions for AdvancedSearchBar

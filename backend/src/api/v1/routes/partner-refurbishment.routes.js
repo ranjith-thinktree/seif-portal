@@ -61,4 +61,11 @@ router.post(
   PartnerRefurbishmentController.submitPartnerCompletion
 );
 
+/**
+ * POST /api/v1/partner/refurbishment/upload-url
+ * Generate a short-lived S3 presigned PUT URL for direct browser upload
+ * Body: { fileName, fileType, folder? }
+ */
+router.post('/upload-url', PartnerRefurbishmentController.generateUploadUrl);
+
 module.exports = router;

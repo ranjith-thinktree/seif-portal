@@ -260,6 +260,38 @@ const generatePresignedUrl = async (s3Key, expiresIn = 3600) => {
 };
 
 /**
+ * Generate presigned URL for direct browser PUT upload to S3
+ * @param {string} key - S3 key (full path including folder structure)
+ * @param {string} contentType - MIME type of the file being uploaded
+ * @param {number} expiresIn - URL expiration time in seconds (default: 5 minutes)
+ * @returns {Promise<{ uploadUrl: string, fileUrl: string }>}
+ */
+const generatePutPresignedUrl = async (key, contentType, expiresIn = 300) => {
+  try {
+    const s3 = initializeS3Client();
+
+    if (!s3) {
+      throw new Error('S3 client not initialized. Please configure AWS credentials in .env file');
+    }
+
+    const params = {
+      Bucket: config.aws.s3BucketName,
+      Key: key,
+      Expires: expiresIn,
+      ContentType: contentType,
+    };
+
+    const uploadUrl = await s3.getSignedUrlPromise('putObject', params);
+    const fileUrl = `https://${config.aws.s3BucketName}.s3.${config.aws.region}.amazonaws.com/${key}`;
+
+    return { uploadUrl, fileUrl };
+  } catch (error) {
+    console.error('❌ Failed to generate PUT presigned URL:', error);
+    throw new Error(`Failed to generate upload URL: ${error.message}`);
+  }
+};
+
+/**
  * Check if S3 is configured and accessible
  * @returns {Promise<boolean>} True if S3 is configured and accessible
  */
@@ -287,6 +319,7 @@ module.exports = {
   deleteImageFromS3,
   deleteMultipleImagesFromS3,
   generatePresignedUrl,
+  generatePutPresignedUrl,
   checkS3Configuration,
   // Test helper: resets the cached S3 client so it reinitializes on next call
   _resetS3Client: () => {

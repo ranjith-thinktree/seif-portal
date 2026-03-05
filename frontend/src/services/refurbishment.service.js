@@ -904,6 +904,25 @@ const refurbishmentService = {
       throw error;
     }
   },
+
+  /**
+   * Get a presigned PUT URL for direct S3 upload from the browser.
+   * @param {{ fileName: string, fileType: string, folder?: string }} params
+   * @returns {{ uploadUrl: string, fileUrl: string, key: string }}
+   */
+  generateUploadUrl: async ({ fileName, fileType, folder }) => {
+    try {
+      const response = await api.post("/partner/refurbishment/upload-url", {
+        fileName,
+        fileType,
+        folder,
+      });
+      return response.data?.data ?? response.data;
+    } catch (error) {
+      console.error("Error generating upload URL:", error);
+      throw error;
+    }
+  },
 };
 
 export default refurbishmentService;

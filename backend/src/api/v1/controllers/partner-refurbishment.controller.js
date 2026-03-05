@@ -1,6 +1,8 @@
 const RefurbishmentService = require('../services/refurbishment.service');
 const { ApiError } = require('../../../utils/error.util');
 const ApiResponse = require('../../../utils/response.util');
+const { generatePutPresignedUrl } = require('../../../utils/s3.util');
+const { v4: uuidv4 } = require('uuid');
 
 /**
  * Partner Refurbishment Controller
@@ -159,10 +161,50 @@ const submitPartnerCompletion = async (req, res, next) => {
   }
 };
 
+/**
+ * Generate a presigned PUT URL so the browser can upload a file directly to S3.
+ * @route POST /api/v1/partner/refurbishment/upload-url
+ * Body: { fileName: string, fileType: string, folder?: string }
+ * Returns: { uploadUrl, fileUrl, key }
+ */
+const generateUploadUrl = async (req, res, next) => {
+  try {
+    const { fileName, fileType, folder } = req.body;
+
+    if (!fileName || !fileType) {
+      return ApiResponse.error(res, 'fileName and fileType are required', 400);
+    }
+
+    // Validate allowed types
+    const allowedTypes = [
+      'image/jpeg', 'image/jpg', 'image/png',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (!allowedTypes.includes(fileType)) {
+      return ApiResponse.error(res, `File type not allowed`, 400);
+    }
+
+    // Build a safe S3 key
+    const ext = fileName.split('.').pop().toLowerCase();
+    const safeFolder = (folder || 'refurbishment/uploads').replace(/[^a-zA-Z0-9/_-]/g, '');
+    const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext}`;
+
+    const { uploadUrl, fileUrl } = await generatePutPresignedUrl(key, fileType, 300);
+
+    return ApiResponse.success(res, { uploadUrl, fileUrl, key }, 'Upload URL generated');
+  } catch (error) {
+    console.error('Error generating upload URL:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   getRequestDetails,
   submitRefurbishmentRequest,
   getMyRequests,
   getPartnerPastRequests,
   submitPartnerCompletion,
+  generateUploadUrl,
 };

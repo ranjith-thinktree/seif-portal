@@ -394,6 +394,96 @@ This is an automated email. Please do not reply to this message.
       throw error;
     }
   }
+
+  /**
+   * Send refurbishment eligibility notification email to partner
+   * @param {Object} data - Notification data
+   * @param {string} data.email - Partner email address
+   * @param {string} data.partnerName - Partner organisation name
+   * @param {string} data.centerName - Center name
+   * @param {string} data.message - Custom message (optional)
+   * @returns {Promise<Object>} Email result
+   */
+  async sendRefurbishmentNotificationEmail({ email, partnerName, centerName, message }) {
+    const subject = `Refurbishment Notification – ${centerName}`;
+    const customMsg = message || 'Your center is eligible for refurbishment. Please log in to the portal to review and submit your requirements.';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #009530; color: white; padding: 24px 30px; border-radius: 8px 8px 0 0; }
+          .header h1 { margin: 0; font-size: 22px; }
+          .content { background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; }
+          .info-box { background-color: white; padding: 20px; border-left: 4px solid #009530; margin: 20px 0; border-radius: 0 8px 8px 0; }
+          .badge { display: inline-block; background-color: #dcfce7; color: #166534; font-size: 12px; font-weight: bold; padding: 4px 12px; border-radius: 20px; margin-bottom: 12px; }
+          .button { display: inline-block; background-color: #009530; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; margin: 20px 0; }
+          .footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 24px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🏗️ Refurbishment Notification</h1>
+          </div>
+          <div class="content">
+            <p>Dear <strong>${partnerName}</strong>,</p>
+            <div class="info-box">
+              <div class="badge">Action Required</div>
+              <p style="margin:0; font-size:15px;">${customMsg}</p>
+            </div>
+            <table style="width:100%; border-collapse:collapse; margin: 16px 0;">
+              <tr>
+                <td style="padding:8px 0; color:#6b7280; font-size:13px; width:40%;">Center</td>
+                <td style="padding:8px 0; font-weight:600; font-size:13px;">${centerName}</td>
+              </tr>
+            </table>
+            <p style="font-size:14px; color:#4b5563;">Please log in to the SEIF Portal to view the details and submit your response.</p>
+            <div style="text-align:center;">
+              <a href="${this.portalUrl}" class="button">Open SEIF Portal</a>
+            </div>
+            <p style="font-size:12px; color:#9ca3af; margin-top:20px;">If you have any questions, please contact your administrator.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message from SEIF Portal. Please do not reply.</p>
+            <p>&copy; ${new Date().getFullYear()} SEIF. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Dear ${partnerName},
+
+${customMsg}
+
+Center: ${centerName}
+
+Please log in to the SEIF Portal to view the details and submit your response:
+${this.portalUrl}
+
+This is an automated message from SEIF Portal. Please do not reply.
+    `;
+
+    try {
+      const info = await this.transporter.sendMail({
+        from: `"${this.fromName}" <${this.fromEmail}>`,
+        to: email,
+        subject,
+        text,
+        html,
+      });
+      console.log(`[EmailService] Refurbishment notification email sent to ${email}:`, info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('[EmailService] Error sending refurbishment notification email:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new EmailService();

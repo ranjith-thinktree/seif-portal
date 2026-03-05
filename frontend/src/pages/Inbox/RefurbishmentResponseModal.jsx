@@ -8,6 +8,7 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import apiClient from "../../api/client";
+import refurbishmentService from "../../services/refurbishment.service";
 import { toast } from "react-toastify";
 
 /**
@@ -232,21 +233,26 @@ const RefurbishmentResponseModal = ({
     return selected;
   };
 
-  // Upload images to S3 (placeholder - you need to implement S3 upload logic)
-  const uploadImagesToS3 = async (files) => {
-    // TODO: Implement S3 upload via presigned URLs
-    // For now, return mock URLs
-    const uploadedUrls = files.map((file) => ({
-      url: `https://seif-portal-uploads.s3.amazonaws.com/refurbishment/${Date.now()}-${file.name}`,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    }));
+  // Upload a single file directly to S3 via presigned PUT URL
+  const uploadFileToS3 = async (file, folder = "refurbishment/uploads") => {
+    const { uploadUrl, fileUrl } = await refurbishmentService.generateUploadUrl({
+      fileName: file.name,
+      fileType: file.type,
+      folder,
+    });
+    const res = await fetch(uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type },
+    });
+    if (!res.ok) throw new Error(`S3 upload failed: ${res.status} ${res.statusText}`);
+    return { url: fileUrl, name: file.name, size: file.size, type: file.type };
+  };
 
-    // Simulate upload delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    return uploadedUrls;
+  // Upload an array of File objects to S3 and return [{url, name, size, type}]
+  const uploadImagesToS3 = async (files, folder = "refurbishment/images") => {
+    if (!files || files.length === 0) return [];
+    return Promise.all(files.map((f) => uploadFileToS3(f, folder)));
   };
 
   // Validate and submit response
@@ -286,22 +292,12 @@ const RefurbishmentResponseModal = ({
         `/notifications/${notificationId}/refurbishment-response`,
         {
           selected_packages: submissionData,
-          // Document attachments (placeholder URLs for now — real S3 upload to be implemented)
+          // Document attachments — upload to S3 via presigned URL
           refurbishment_document: refurbishmentDoc
-            ? {
-                name: refurbishmentDoc.name,
-                size: refurbishmentDoc.size,
-                type: refurbishmentDoc.type,
-                url: `https://seif-portal-uploads.s3.amazonaws.com/refurbishment/docs/${Date.now()}-${refurbishmentDoc.name}`,
-              }
+            ? await uploadFileToS3(refurbishmentDoc, "refurbishment/documents")
             : null,
           upgradation_document: upgradationDoc
-            ? {
-                name: upgradationDoc.name,
-                size: upgradationDoc.size,
-                type: upgradationDoc.type,
-                url: `https://seif-portal-uploads.s3.amazonaws.com/refurbishment/docs/${Date.now()}-${upgradationDoc.name}`,
-              }
+            ? await uploadFileToS3(upgradationDoc, "refurbishment/documents")
             : null,
           upgradation: upgradationRequested
             ? {
@@ -1653,7 +1649,7 @@ const RefurbishmentResponseModal = ({
                     key={pkg.package_id}
                     onClick={() => {
                       setActivePackageId(pkg.package_id);
-                      if (!isSelected) togglePackageSelection(pkg.package_id);
+                      togglePackageSelection(pkg.package_id);
                     }}
                     className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all bg-white ${
                       isActive

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowPathIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import EnhancedDataTable from "@/components/common/EnhancedDataTable";
@@ -18,6 +18,9 @@ const LastRefurbishedCard = ({
 }) => {
   // Use pre-processed data from parent's useTableSearch hook
   const paginatedData = table.data;
+
+  // tableInstance for column visibility toggle
+  const [tableInstance, setTableInstance] = useState(null);
 
   // Pagination info from table object
   const paginationInfo = {
@@ -161,6 +164,8 @@ const LastRefurbishedCard = ({
         sortOrder={table.sortOrder}
         onSortChange={table.handleSort}
         actions={actions}
+        table={tableInstance}
+        storageKey="refurbishment-last-refurbished-overview"
       />
 
       <EnhancedDataTable
@@ -172,6 +177,7 @@ const LastRefurbishedCard = ({
         emptyMessage="No recently refurbished centers found"
         showSerialNumber={true}
         storageKey="refurbishment-last-refurbished-overview"
+        onTableReady={(t) => setTableInstance(t)}
       />
     </div>
   );

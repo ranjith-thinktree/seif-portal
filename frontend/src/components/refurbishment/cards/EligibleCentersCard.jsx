@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BellIcon,
@@ -23,6 +23,9 @@ const EligibleCentersCard = ({
 }) => {
   // Use pre-processed data from parent's useTableSearch hook
   const paginatedData = table.data;
+
+  // tableInstance for column visibility toggle
+  const [tableInstance, setTableInstance] = useState(null);
 
   // Pagination info from table object
   const paginationInfo = {
@@ -69,6 +72,7 @@ const EligibleCentersCard = ({
     { label: "Region", value: "region" },
     { label: "City", value: "city" },
     { label: "Last Refurbished", value: "last_refurbishment_date" },
+    { label: "Last Notified", value: "last_notified_at" },
   ];
 
   // Actions for AdvancedSearchBar
@@ -143,6 +147,19 @@ const EligibleCentersCard = ({
         enableResizing: true,
       },
       {
+        id: "last_notified_at",
+        accessorKey: "last_notified_at",
+        header: "Last Notified",
+        cell: ({ row }) => {
+          const d = row.original.last_notified_at;
+          if (!d) return <span className="text-gray-400 text-xs">Never</span>;
+          return <span className="text-xs text-blue-600 font-medium">{formatDate(d)}</span>;
+        },
+        size: 150,
+        enableHiding: true,
+        enableResizing: true,
+      },
+      {
         id: "actions",
         header: "Action",
         cell: ({ row }) => (
@@ -177,6 +194,8 @@ const EligibleCentersCard = ({
         sortOrder={table.sortOrder}
         onSortChange={table.handleSort}
         actions={actions}
+        table={tableInstance}
+        storageKey="refurbishment-eligible-centers-overview"
       />
 
       <EnhancedDataTable
@@ -188,6 +207,7 @@ const EligibleCentersCard = ({
         emptyMessage="No eligible centers found"
         showSerialNumber={true}
         storageKey="refurbishment-eligible-centers-overview"
+        onTableReady={(t) => setTableInstance(t)}
       />
     </div>
   );

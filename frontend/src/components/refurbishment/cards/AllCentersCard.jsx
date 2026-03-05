@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BellIcon,
@@ -22,6 +22,9 @@ const AllCentersCard = ({
 }) => {
   // Use pre-processed data from parent's useTableSearch hook
   const paginatedData = table.data;
+
+  // tableInstance for column visibility toggle
+  const [tableInstance, setTableInstance] = useState(null);
 
   // Pagination info from table object
   const paginationInfo = {
@@ -182,6 +185,8 @@ const AllCentersCard = ({
         sortOrder={table.sortOrder}
         onSortChange={table.handleSort}
         actions={actions}
+        table={tableInstance}
+        storageKey="refurbishment-all-centers-overview"
       />
 
       <EnhancedDataTable
@@ -193,6 +198,7 @@ const AllCentersCard = ({
         emptyMessage="No centers found"
         showSerialNumber={true}
         storageKey="refurbishment-all-centers-overview"
+        onTableReady={(t) => setTableInstance(t)}
       />
     </div>
   );
