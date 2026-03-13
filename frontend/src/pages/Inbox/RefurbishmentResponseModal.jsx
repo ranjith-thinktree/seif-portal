@@ -235,17 +235,20 @@ const RefurbishmentResponseModal = ({
 
   // Upload a single file directly to S3 via presigned PUT URL
   const uploadFileToS3 = async (file, folder = "refurbishment/uploads") => {
-    const { uploadUrl, fileUrl } = await refurbishmentService.generateUploadUrl({
-      fileName: file.name,
-      fileType: file.type,
-      folder,
-    });
+    const { uploadUrl, fileUrl } = await refurbishmentService.generateUploadUrl(
+      {
+        fileName: file.name,
+        fileType: file.type,
+        folder,
+      },
+    );
     const res = await fetch(uploadUrl, {
       method: "PUT",
       body: file,
       headers: { "Content-Type": file.type },
     });
-    if (!res.ok) throw new Error(`S3 upload failed: ${res.status} ${res.statusText}`);
+    if (!res.ok)
+      throw new Error(`S3 upload failed: ${res.status} ${res.statusText}`);
     return { url: fileUrl, name: file.name, size: file.size, type: file.type };
   };
 
@@ -264,6 +267,16 @@ const RefurbishmentResponseModal = ({
 
     if (selectedPackages.length === 0) {
       toast.error("Please select at least one package");
+      return;
+    }
+
+    if (!refurbishmentDoc) {
+      toast.error("Please upload the refurbishment report before submitting");
+      return;
+    }
+
+    if (upgradationRequested && !upgradationDoc) {
+      toast.error("Please upload the upgradation report before submitting");
       return;
     }
 
@@ -301,11 +314,6 @@ const RefurbishmentResponseModal = ({
             : null,
           upgradation: upgradationRequested
             ? {
-                length_feet: parseFloat(upgradationDetails.length_feet) || 0,
-                breadth_feet: parseFloat(upgradationDetails.breadth_feet) || 0,
-                height_feet: parseFloat(upgradationDetails.height_feet) || 0,
-                justification: upgradationDetails.justification || null,
-                photos: await uploadImagesToS3(upgradationPhotoFiles),
                 package_ids: Object.keys(upgradationSelections).filter(
                   (id) => upgradationSelections[id],
                 ),
@@ -505,7 +513,7 @@ const RefurbishmentResponseModal = ({
                 <button
                   onClick={() => {
                     setUpgradationRequested(true);
-                    setUpgradationStep("room");
+                    setUpgradationStep("packages");
                   }}
                   className="flex-1 px-10 py-3.5 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-bold transition-colors"
                 >
@@ -529,270 +537,6 @@ const RefurbishmentResponseModal = ({
                 >
                   Back
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Dialog>
-    );
-  }
-
-  // ============================================================
-  // Upgradation Room Step — room dimensions + photos
-  // ============================================================
-  if (upgradationStep === "room") {
-    return (
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <div className="fixed inset-0 bg-black/50 z-50" onClick={onClose}></div>
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-          <div
-            className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={onClose}
-              className="absolute top-5 right-5 z-10 text-gray-400 hover:text-gray-600"
-            >
-              <XMarkIcon className="h-6 w-6" />
-            </button>
-
-            {/* Stepper */}
-            <div className="px-8 pt-6 pb-4 border-b border-gray-100">
-              <div className="flex items-center">
-                {details.courses.map((course, index) => (
-                  <React.Fragment key={course.course_id}>
-                    <div className="flex items-center">
-                      <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-green-100 text-green-600 border-green-500">
-                        {index + 1}
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-green-600">
-                        {course.course_name}
-                      </span>
-                    </div>
-                    <div className="flex-1 mx-3 max-w-[60px]">
-                      <div className="border-t-2 border-dotted border-green-400"></div>
-                    </div>
-                  </React.Fragment>
-                ))}
-                <div className="flex items-center">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-purple-600 text-white border-purple-600">
-                    {totalCourses + 1}
-                  </div>
-                  <span className="ml-2 text-sm font-semibold text-gray-900">
-                    Upgradation
-                  </span>
-                </div>
-                <div className="flex-1 mx-3 max-w-[60px]">
-                  <div className="border-t-2 border-dotted border-gray-300"></div>
-                </div>
-                <div className="flex items-center">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 border-gray-300 font-semibold text-sm text-gray-400 bg-white">
-                    {totalCourses + 2}
-                  </div>
-                  <span className="ml-2 text-sm font-medium text-gray-400">
-                    Package preview
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Form content — 2-column Figma layout */}
-            <div className="flex-1 overflow-y-auto px-8 py-6">
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6">
-                <div className="grid grid-cols-2 gap-8">
-                  {/* LEFT column: dimensions + upload */}
-                  <div className="space-y-5">
-                    {/* Dimensions */}
-                    <div>
-                      <p className="text-xs font-semibold tracking-widest text-gray-600 uppercase mb-3">
-                        ROOM DIMENSION (IN FEET)
-                      </p>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={upgradationDetails.length_feet}
-                            onChange={(e) =>
-                              setUpgradationDetails((prev) => ({
-                                ...prev,
-                                length_feet: e.target.value,
-                              }))
-                            }
-                            placeholder="LENGHT"
-                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300"
-                          />
-                        </div>
-                        <div>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={upgradationDetails.breadth_feet}
-                            onChange={(e) =>
-                              setUpgradationDetails((prev) => ({
-                                ...prev,
-                                breadth_feet: e.target.value,
-                              }))
-                            }
-                            placeholder="BREADTH"
-                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300"
-                          />
-                        </div>
-                        <div>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={upgradationDetails.height_feet}
-                            onChange={(e) =>
-                              setUpgradationDetails((prev) => ({
-                                ...prev,
-                                height_feet: e.target.value,
-                              }))
-                            }
-                            placeholder="HEIGHT"
-                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Upload room pictures */}
-                    <div>
-                      <p className="text-xs font-semibold tracking-widest text-gray-600 uppercase mb-3">
-                        UPLOAD ROOM PICTURES
-                      </p>
-                      <label className="flex flex-col items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-gray-300 rounded-xl bg-white text-sm text-gray-500 cursor-pointer hover:border-gray-400 transition-colors">
-                        <ArrowUpTrayIcon className="h-5 w-5" />
-                        <span className="font-medium">Attach file</span>
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/jpeg,image/jpg,image/png"
-                          className="hidden"
-                          onChange={(e) => {
-                            const files = Array.from(e.target.files);
-                            if (
-                              upgradationPhotoFiles.length + files.length >
-                              5
-                            ) {
-                              toast.error("Maximum 5 photos allowed");
-                              return;
-                            }
-                            for (const file of files) {
-                              if (
-                                ![
-                                  "image/jpeg",
-                                  "image/jpg",
-                                  "image/png",
-                                ].includes(file.type)
-                              ) {
-                                toast.error(
-                                  "Only JPG and PNG images are allowed",
-                                );
-                                return;
-                              }
-                              if (file.size > 5 * 1024 * 1024) {
-                                toast.error(`${file.name} exceeds 5MB limit`);
-                                return;
-                              }
-                            }
-                            setUpgradationPhotoFiles((prev) => [
-                              ...prev,
-                              ...files,
-                            ]);
-                          }}
-                        />
-                      </label>
-                      {upgradationPhotoFiles.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {upgradationPhotoFiles.map((file, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 bg-white"
-                            >
-                              <img
-                                src={URL.createObjectURL(file)}
-                                alt={file.name}
-                                className="w-10 h-10 object-cover rounded"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs text-gray-700 truncate">
-                                  {file.name}
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                              <button
-                                onClick={() =>
-                                  setUpgradationPhotoFiles((prev) =>
-                                    prev.filter((_, i) => i !== idx),
-                                  )
-                                }
-                                className="text-red-400 hover:text-red-600"
-                              >
-                                <XCircleIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* RIGHT column: justification */}
-                  <div>
-                    <p className="text-xs font-semibold tracking-widest text-gray-600 uppercase mb-3">
-                      JUSTIFICATION
-                    </p>
-                    <Textarea
-                      value={upgradationDetails.justification}
-                      onChange={(e) =>
-                        setUpgradationDetails((prev) => ({
-                          ...prev,
-                          justification: e.target.value,
-                        }))
-                      }
-                      placeholder="WRITE HERE"
-                      rows={8}
-                      className="resize-none bg-white border border-gray-300 rounded-xl text-sm w-full h-full min-h-[180px]"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-8 py-4 border-t border-gray-100 bg-white">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-400"></span>
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => setUpgradationStep("prompt")}
-                    className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (
-                        !upgradationDetails.length_feet ||
-                        !upgradationDetails.breadth_feet ||
-                        !upgradationDetails.height_feet
-                      ) {
-                        toast.error("Please fill in all room dimensions");
-                        return;
-                      }
-                      setUpgradationStep("packages");
-                    }}
-                    className="px-8 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-full transition-colors"
-                  >
-                    Continue
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -992,7 +736,7 @@ const RefurbishmentResponseModal = ({
                 </p>
                 <div className="flex items-center gap-4">
                   <button
-                    onClick={() => setUpgradationStep("room")}
+                    onClick={() => setUpgradationStep("prompt")}
                     className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
                   >
                     Back
@@ -1195,52 +939,6 @@ const RefurbishmentResponseModal = ({
               {isUpgradationTab ? (
                 /* ── Upgradation Preview ── */
                 <div className="w-full overflow-y-auto scrollbar-subtle space-y-5">
-                  {/* Room Details */}
-                  <div className="border border-purple-200 rounded-xl p-5 bg-purple-50/30">
-                    <h3 className="text-sm font-semibold text-purple-700 mb-3">
-                      Room Information
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">
-                          Dimensions (ft)
-                        </p>
-                        <p className="text-sm font-medium text-gray-800">
-                          {upgradationDetails.length_feet || "—"} ×{" "}
-                          {upgradationDetails.breadth_feet || "—"} ×{" "}
-                          {upgradationDetails.height_feet || "—"}
-                        </p>
-                      </div>
-                      {upgradationDetails.justification && (
-                        <div className="col-span-2">
-                          <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">
-                            Justification
-                          </p>
-                          <p className="text-sm text-gray-700 italic">
-                            "{upgradationDetails.justification}"
-                          </p>
-                        </div>
-                      )}
-                      {upgradationPhotoFiles.length > 0 && (
-                        <div className="col-span-2">
-                          <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">
-                            Photos
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {upgradationPhotoFiles.map((file, idx) => (
-                              <img
-                                key={idx}
-                                src={URL.createObjectURL(file)}
-                                alt={file.name}
-                                className="w-16 h-16 object-cover rounded-lg border border-purple-200"
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Selected Upgradation Packages */}
                   {selectedUpgradationPkgs.length > 0 && (
                     <div>

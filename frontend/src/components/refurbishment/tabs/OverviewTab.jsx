@@ -41,6 +41,8 @@ const OverviewTab = ({
   allCentersFilterOptions,
   onNotifyAllCenters,
   onExportAllCenters,
+  // History modal callback
+  onShowHistory,
 }) => {
   return (
     <div className="space-y-6">
@@ -79,6 +81,7 @@ const OverviewTab = ({
           formatDate={formatDate}
           filterOptions={eligibleFilterOptions}
           onExport={onExportEligible}
+          onShowHistory={onShowHistory}
         />
       )}
       {selectedCard === "lastRefurbished" && (

@@ -20,6 +20,7 @@ const EligibleCentersCard = ({
   formatDate,
   filterOptions = {},
   onExport,
+  onShowHistory,
 }) => {
   // Use pre-processed data from parent's useTableSearch hook
   const paginatedData = table.data;
@@ -153,7 +154,18 @@ const EligibleCentersCard = ({
         cell: ({ row }) => {
           const d = row.original.last_notified_at;
           if (!d) return <span className="text-gray-400 text-xs">Never</span>;
-          return <span className="text-xs text-blue-600 font-medium">{formatDate(d)}</span>;
+          const count = row.original.total_send_count ?? 1;
+          return (
+            <button
+              onClick={() => onShowHistory && onShowHistory(row.original)}
+              className="text-xs text-blue-600 font-medium underline underline-offset-2 hover:text-blue-800 transition-colors text-left"
+            >
+              <span className="block">{formatDate(d)}</span>
+              <span className="block text-[10px] text-blue-400 no-underline">
+                Sent {count}×
+              </span>
+            </button>
+          );
         },
         size: 150,
         enableHiding: true,

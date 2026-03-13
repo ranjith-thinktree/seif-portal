@@ -1,0 +1,4 @@
+Center Name,Center Code,Course Name,Package Name,Current Equipment Condition (Good / Fair / Poor),Year of Last Refurbishment,Approximate Number of Students Using Equipment,Reason for Refurbishment Request,Priority (High / Medium / Low),Additional Remarks
+Example Center,CTR-001,IT Lab,Desktop Computers,Poor,2018,45,Equipment is outdated and frequently breaking down,High,Requires urgent replacement before next academic session
+Example Center,CTR-001,IT Lab,Network Switch,Fair,2020,45,Slow network affecting productivity,Medium,Replacement preferred but not urgent
+Example Center,CTR-001,Welding Lab,Welding Machines,Poor,2017,30,Old machines are unsafe and causing delays in training,High,Safety concern — please prioritise

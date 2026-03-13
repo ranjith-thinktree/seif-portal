@@ -406,7 +406,9 @@ This is an automated email. Please do not reply to this message.
    */
   async sendRefurbishmentNotificationEmail({ email, partnerName, centerName, message }) {
     const subject = `Refurbishment Notification – ${centerName}`;
-    const customMsg = message || 'Your center is eligible for refurbishment. Please log in to the portal to review and submit your requirements.';
+    const customMsg =
+      message ||
+      'Your center is eligible for refurbishment. Please log in to the portal to review and submit your requirements.';
 
     const html = `
       <!DOCTYPE html>
@@ -477,7 +479,10 @@ This is an automated message from SEIF Portal. Please do not reply.
         text,
         html,
       });
-      console.log(`[EmailService] Refurbishment notification email sent to ${email}:`, info.messageId);
+      console.log(
+        `[EmailService] Refurbishment notification email sent to ${email}:`,
+        info.messageId
+      );
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error('[EmailService] Error sending refurbishment notification email:', error);

@@ -135,7 +135,9 @@ const ReviewPage = () => {
       fetchPendingCenters();
     } catch (err) {
       console.error("Failed to approve center:", err);
-      showToast.error(err.response?.data?.message || "Failed to approve center");
+      showToast.error(
+        err.response?.data?.message || "Failed to approve center",
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -238,11 +240,13 @@ const ReviewPage = () => {
             <BuildingOffice2Icon className="h-4 w-4" />
             Pending Centers
             {centersPagination.total > 0 && (
-              <span className={`ml-1 px-2 py-0.5 text-xs rounded-full font-semibold ${
-                activeTab === "centers"
-                  ? "bg-primary-500 text-white"
-                  : "bg-gray-100 text-gray-600"
-              }`}>
+              <span
+                className={`ml-1 px-2 py-0.5 text-xs rounded-full font-semibold ${
+                  activeTab === "centers"
+                    ? "bg-primary-500 text-white"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
                 {centersPagination.total}
               </span>
             )}
@@ -258,11 +262,13 @@ const ReviewPage = () => {
             <ClipboardDocumentListIcon className="h-4 w-4" />
             Pending Data Uploads
             {uploadsPagination.total > 0 && (
-              <span className={`ml-1 px-2 py-0.5 text-xs rounded-full font-semibold ${
-                activeTab === "uploads"
-                  ? "bg-primary-500 text-white"
-                  : "bg-gray-100 text-gray-600"
-              }`}>
+              <span
+                className={`ml-1 px-2 py-0.5 text-xs rounded-full font-semibold ${
+                  activeTab === "uploads"
+                    ? "bg-primary-500 text-white"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
                 {uploadsPagination.total}
               </span>
             )}
@@ -411,11 +417,23 @@ const ReviewPage = () => {
                     <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
                       <div className="text-sm text-gray-500">
                         Showing{" "}
-                        <span className="font-medium text-gray-700">{(centersPagination.page - 1) * centersPagination.limit + 1}</span>
-                        {" "}to{" "}
-                        <span className="font-medium text-gray-700">{Math.min(centersPagination.page * centersPagination.limit, centersPagination.total)}</span>
-                        {" "}of{" "}
-                        <span className="font-medium text-gray-700">{centersPagination.total}</span> results
+                        <span className="font-medium text-gray-700">
+                          {(centersPagination.page - 1) *
+                            centersPagination.limit +
+                            1}
+                        </span>{" "}
+                        to{" "}
+                        <span className="font-medium text-gray-700">
+                          {Math.min(
+                            centersPagination.page * centersPagination.limit,
+                            centersPagination.total,
+                          )}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-medium text-gray-700">
+                          {centersPagination.total}
+                        </span>{" "}
+                        results
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -581,11 +599,23 @@ const ReviewPage = () => {
                     <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
                       <div className="text-sm text-gray-500">
                         Showing{" "}
-                        <span className="font-medium text-gray-700">{(uploadsPagination.page - 1) * uploadsPagination.limit + 1}</span>
-                        {" "}to{" "}
-                        <span className="font-medium text-gray-700">{Math.min(uploadsPagination.page * uploadsPagination.limit, uploadsPagination.total)}</span>
-                        {" "}of{" "}
-                        <span className="font-medium text-gray-700">{uploadsPagination.total}</span> results
+                        <span className="font-medium text-gray-700">
+                          {(uploadsPagination.page - 1) *
+                            uploadsPagination.limit +
+                            1}
+                        </span>{" "}
+                        to{" "}
+                        <span className="font-medium text-gray-700">
+                          {Math.min(
+                            uploadsPagination.page * uploadsPagination.limit,
+                            uploadsPagination.total,
+                          )}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-medium text-gray-700">
+                          {uploadsPagination.total}
+                        </span>{" "}
+                        results
                       </div>
                       <div className="flex gap-2">
                         <button

@@ -40,6 +40,7 @@ import ScheduleNotificationModal from "../../components/refurbishment/modals/Sch
 import NotificationTypeSelector from "../../components/refurbishment/modals/NotificationTypeSelector";
 import AdminRefurbishmentReviewModal from "../../components/refurbishment/modals/AdminRefurbishmentReviewModal";
 import AdminStatusChangeModal from "../../components/refurbishment/modals/AdminStatusChangeModal";
+import NotificationHistoryModal from "../../components/refurbishment/modals/NotificationHistoryModal";
 
 // Reusable financial years options constant
 const FY_OPTIONS = [
@@ -194,6 +195,9 @@ const RefurbishmentDashboard = () => {
     description: "",
     packages: [], // Array of package IDs (no quantity)
   });
+
+  // Notification history modal
+  const [historyCenter, setHistoryCenter] = useState(null);
 
   // Notification reminder modal
   const [showNotificationModal, setShowNotificationModal] = useState(false);
@@ -1901,6 +1905,7 @@ const RefurbishmentDashboard = () => {
             allCentersFilterOptions={allCentersFilterOptions}
             onNotifyAllCenters={handleNotifyPartner}
             onExportAllCenters={handleExportAllCentersOverview}
+            onShowHistory={setHistoryCenter}
           />
         )}
 
@@ -1912,6 +1917,7 @@ const RefurbishmentDashboard = () => {
             filterOptions={eligibilityTabFilterOptions}
             onNotifyPartner={handleNotifyPartner}
             onExport={handleExportEligible}
+            onShowHistory={setHistoryCenter}
           />
         )}
 
@@ -2037,6 +2043,13 @@ const RefurbishmentDashboard = () => {
               setStatusChangeRequest(null);
               refurbishmentRefresh.all();
             }}
+          />
+        )}
+        {/* Notification History Modal */}
+        {historyCenter && (
+          <NotificationHistoryModal
+            center={historyCenter}
+            onClose={() => setHistoryCenter(null)}
           />
         )}
       </div>

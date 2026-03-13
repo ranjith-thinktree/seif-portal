@@ -1,0 +1,4 @@
+Center Name,Center Code,Room / Area Name,Type of Upgradation Required,Specific Equipment / Furniture Required,Quantity Required,Estimated Cost (INR),Current State Description,Proposed Improvement,Priority (High / Medium / Low),Additional Notes
+Example Center,CTR-001,IT Lab,Equipment Upgrade,High-performance workstations,20,400000,Current workstations cannot run modern software,Replace with i5 12th gen systems with 8GB RAM,High,Required for new curriculum starting next year
+Example Center,CTR-001,Training Hall,Furniture Upgrade,Ergonomic chairs and desks,50,150000,Old furniture is uncomfortable and in poor condition,Replace with adjustable ergonomic set,Medium,To improve student comfort during long sessions
+Example Center,CTR-001,Server Room,Infrastructure Upgrade,UPS and rack systems,2,80000,No UPS — frequent power issues damaging equipment,Install APC UPS with automatic transfer switch,High,Needed for data protection

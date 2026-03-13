@@ -287,4 +287,13 @@ router.put('/requests/:id/complete', RefurbishmentController.completeRefurbishme
  */
 router.patch('/requests/:id/status', RefurbishmentController.updateStatus);
 
+/**
+ * GET /api/v1/admin/refurbishment/centers/:centerId/notification-history
+ * Get full notification history for a specific center
+ */
+router.get(
+  '/centers/:centerId/notification-history',
+  RefurbishmentController.getNotificationHistory
+);
+
 module.exports = router;

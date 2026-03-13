@@ -57,6 +57,7 @@ class RefurbishmentService {
           c.center_type,
           c.status,
           sn.last_notified_at,
+          sn.total_send_count,
           CASE
             WHEN c.last_refurbishment_date IS NOT NULL THEN
               TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE())
@@ -72,7 +73,8 @@ class RefurbishmentService {
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
         LEFT JOIN (
-          SELECT center_id, MAX(last_sent_at) as last_notified_at
+          SELECT center_id, MAX(last_sent_at) as last_notified_at,
+                 SUM(send_count) as total_send_count
           FROM scheduled_refurbishment_notifications
           WHERE last_sent_at IS NOT NULL
           GROUP BY center_id
@@ -395,7 +397,9 @@ class RefurbishmentService {
             uploaded_images: attachByCourse[row.course_id] || [],
           });
         }
-        const alreadyPresent = courseMap.get(row.course_id).packages.some((p) => p.package_id === row.package_id);
+        const alreadyPresent = courseMap
+          .get(row.course_id)
+          .packages.some((p) => p.package_id === row.package_id);
         if (!alreadyPresent) {
           courseMap.get(row.course_id).packages.push({
             package_id: row.package_id,
@@ -664,7 +668,10 @@ class RefurbishmentService {
           created_at: new Date().toISOString(),
         });
       } catch (socketError) {
-        console.error('[RefurbishmentService] Failed to emit socket notification to admins:', socketError.message);
+        console.error(
+          '[RefurbishmentService] Failed to emit socket notification to admins:',
+          socketError.message
+        );
       }
 
       // 10. Return updated request
@@ -1119,10 +1126,13 @@ class RefurbishmentService {
 
       const recipientId = partnerUserRows[0].id;
       const partnerEmail = partnerUserRows[0].email;
-      const partnerName = partnerUserRows[0].partner_name || partnerUserRows[0].full_name || 'Partner';
+      const partnerName =
+        partnerUserRows[0].partner_name || partnerUserRows[0].full_name || 'Partner';
 
       // Fetch center name for email
-      const [centerRows] = await db.query(`SELECT center_name FROM centers WHERE id = ? LIMIT 1`, [centerId]);
+      const [centerRows] = await db.query(`SELECT center_name FROM centers WHERE id = ? LIMIT 1`, [
+        centerId,
+      ]);
       const centerName = centerRows[0]?.center_name || 'Your Center';
 
       await db.query(
@@ -1152,14 +1162,19 @@ class RefurbishmentService {
 
       // Send email notification to partner
       if (partnerEmail) {
-        emailService.sendRefurbishmentNotificationEmail({
-          email: partnerEmail,
-          partnerName,
-          centerName,
-          message: defaultMessage,
-        }).catch((emailErr) => {
-          console.error('[RefurbishmentService] Failed to send refurbishment email:', emailErr.message);
-        });
+        emailService
+          .sendRefurbishmentNotificationEmail({
+            email: partnerEmail,
+            partnerName,
+            centerName,
+            message: defaultMessage,
+          })
+          .catch((emailErr) => {
+            console.error(
+              '[RefurbishmentService] Failed to send refurbishment email:',
+              emailErr.message
+            );
+          });
       }
 
       console.log(
@@ -2832,6 +2847,29 @@ class RefurbishmentService {
       console.error('[RefurbishmentService] Error sending completion notifications:', error);
       throw error;
     }
+  }
+
+  static async getNotificationHistoryForCenter(centerId) {
+    const [rows] = await db.query(
+      `SELECT
+         srn.id,
+         srn.request_number,
+         srn.message,
+         srn.frequency,
+         srn.last_sent_at,
+         srn.send_count,
+         srn.status,
+         srn.created_at,
+         srn.partner_responded,
+         srn.response_received_at,
+         u.full_name AS created_by_name
+       FROM scheduled_refurbishment_notifications srn
+       LEFT JOIN users u ON u.id = srn.created_by
+       WHERE srn.center_id = ?
+       ORDER BY COALESCE(srn.last_sent_at, srn.created_at) DESC`,
+      [centerId]
+    );
+    return { history: rows, total: rows.length };
   }
 }
 

@@ -803,10 +803,10 @@ class ReviewService {
       const partnerUuid = convertToUUID(partnerId);
 
       // Get upload details
-      const [uploads] = await db.query(`SELECT * FROM data_uploads WHERE id = ? AND partner_id = ?`, [
-        uploadUuid,
-        partnerUuid,
-      ]);
+      const [uploads] = await db.query(
+        `SELECT * FROM data_uploads WHERE id = ? AND partner_id = ?`,
+        [uploadUuid, partnerUuid]
+      );
 
       if (uploads.length === 0) {
         return null;

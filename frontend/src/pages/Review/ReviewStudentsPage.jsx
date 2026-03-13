@@ -100,7 +100,7 @@ const ReviewStudentsPage = () => {
         centerId,
         {
           search: searchTerm,
-        }
+        },
       );
 
       console.log("📊 API Response Structure:", {
@@ -159,7 +159,7 @@ const ReviewStudentsPage = () => {
 
       try {
         const response = await apiClient.get(
-          `/partners/uploads/${uploadId}/changes`
+          `/partners/uploads/${uploadId}/changes`,
         );
         setUploadChanges(response.data.data || []);
       } catch (error) {
@@ -264,7 +264,7 @@ const ReviewStudentsPage = () => {
 
     const updatedStudents = [...students];
     const student = updatedStudents.find(
-      (s) => s.id === contextMenu.rowNode.data.id
+      (s) => s.id === contextMenu.rowNode.data.id,
     );
     if (student && contextMenu.field) {
       student[contextMenu.field] = "";
@@ -291,7 +291,7 @@ const ReviewStudentsPage = () => {
       const text = await navigator.clipboard.readText();
       const updatedStudents = [...students];
       const student = updatedStudents.find(
-        (s) => s.id === contextMenu.rowNode.data.id
+        (s) => s.id === contextMenu.rowNode.data.id,
       );
 
       if (student && contextMenu.field) {
@@ -320,7 +320,7 @@ const ReviewStudentsPage = () => {
       (c) =>
         c.student_id === studentData.id &&
         c.field_name === contextMenu.field &&
-        c.type === "comment"
+        c.type === "comment",
     );
 
     setCurrentCommentData({
@@ -345,7 +345,7 @@ const ReviewStudentsPage = () => {
       (c) =>
         c.student_id === studentData.id &&
         c.field_name === contextMenu.field &&
-        c.type === "note"
+        c.type === "note",
     );
 
     setCurrentCommentData({
@@ -369,12 +369,12 @@ const ReviewStudentsPage = () => {
           // Update existing
           await commentService.updateComment(
             currentCommentData.existing.id,
-            content
+            content,
           );
           showToast.success(
             `${
               currentCommentData.type === "comment" ? "Comment" : "Note"
-            } updated`
+            } updated`,
           );
         } else {
           // Create new
@@ -387,7 +387,7 @@ const ReviewStudentsPage = () => {
           showToast.success(
             `${
               currentCommentData.type === "comment" ? "Comment" : "Note"
-            } added`
+            } added`,
           );
         }
 
@@ -402,7 +402,7 @@ const ReviewStudentsPage = () => {
         showToast.error("Failed to save");
       }
     },
-    [currentCommentData, centerId]
+    [currentCommentData, centerId],
   );
 
   // Delete comment/note handler
@@ -413,7 +413,7 @@ const ReviewStudentsPage = () => {
         showToast.success(
           `${
             currentCommentData?.type === "comment" ? "Comment" : "Note"
-          } deleted`
+          } deleted`,
         );
 
         // Refresh comments
@@ -427,7 +427,7 @@ const ReviewStudentsPage = () => {
         showToast.error("Failed to delete");
       }
     },
-    [currentCommentData, centerId]
+    [currentCommentData, centerId],
   );
 
   const handleInsertRowAbove = useCallback(() => {
@@ -502,7 +502,7 @@ const ReviewStudentsPage = () => {
     if (!contextMenu || !isEditMode) return;
 
     const updatedStudents = students.filter(
-      (s) => s.id !== contextMenu.rowNode.data.id
+      (s) => s.id !== contextMenu.rowNode.data.id,
     );
     setStudents(updatedStudents);
     showToast.success("Row deleted");
@@ -519,7 +519,7 @@ const ReviewStudentsPage = () => {
 
     const updatedStudents = [...students];
     const student = updatedStudents.find(
-      (s) => s.id === contextMenu.rowNode.data.id
+      (s) => s.id === contextMenu.rowNode.data.id,
     );
 
     if (student && contextMenu.field) {
@@ -542,10 +542,10 @@ const ReviewStudentsPage = () => {
   const getCellComments = useCallback(
     (studentId, fieldName) => {
       return comments.filter(
-        (c) => c.student_id === studentId && c.field_name === fieldName
+        (c) => c.student_id === studentId && c.field_name === fieldName,
       );
     },
-    [comments]
+    [comments],
   );
 
   // Cell renderer with comment/note indicators
@@ -568,7 +568,7 @@ const ReviewStudentsPage = () => {
                 (c) =>
                   `${c.type === "comment" ? "💬 Comment" : "📝 Note"}: ${
                     c.content
-                  }`
+                  }`,
               )
               .join("\n")
           : "";
@@ -615,7 +615,7 @@ const ReviewStudentsPage = () => {
         </div>
       );
     },
-    [getCellComments]
+    [getCellComments],
   );
 
   const columnDefs = useMemo(
@@ -885,7 +885,7 @@ const ReviewStudentsPage = () => {
           // Check for comments/notes
           const cellComments = getCellComments(
             params.data.id,
-            "training_status"
+            "training_status",
           );
           const hasComment = cellComments.some((c) => c.type === "comment");
           const hasNote = cellComments.some((c) => c.type === "note");
@@ -898,7 +898,7 @@ const ReviewStudentsPage = () => {
                     (c) =>
                       `${c.type === "comment" ? "💬 Comment" : "📝 Note"}: ${
                         c.content
-                      }`
+                      }`,
                   )
                   .join("\n")
               : "";
@@ -963,7 +963,7 @@ const ReviewStudentsPage = () => {
         }),
       },
     ],
-    [isEditMode, cellRendererWithIndicator, getCellComments]
+    [isEditMode, cellRendererWithIndicator, getCellComments],
   );
 
   const onCellValueChanged = useCallback(
@@ -983,7 +983,7 @@ const ReviewStudentsPage = () => {
 
       setStudents(updatedStudents);
     },
-    [students]
+    [students],
   );
 
   // ============================================
@@ -1063,7 +1063,7 @@ const ReviewStudentsPage = () => {
     } catch (error) {
       console.error("Error saving changes:", error);
       showToast.error(
-        error.response?.data?.message || "Failed to save changes"
+        error.response?.data?.message || "Failed to save changes",
       );
     } finally {
       setIsSaving(false);
@@ -1087,7 +1087,7 @@ const ReviewStudentsPage = () => {
       showToast.success(
         response?.data?.message ||
           response?.message ||
-          "Center approved successfully"
+          "Center approved successfully",
       );
 
       const allReviewed =
@@ -1106,7 +1106,7 @@ const ReviewStudentsPage = () => {
     } catch (error) {
       console.error("Error approving center:", error);
       showToast.error(
-        error.response?.data?.message || "Failed to approve center"
+        error.response?.data?.message || "Failed to approve center",
       );
     } finally {
       setIsApproving(false);
@@ -1173,7 +1173,7 @@ const ReviewStudentsPage = () => {
           s.student_name?.toLowerCase().includes(term) ||
           s.student_id?.toLowerCase().includes(term) ||
           s.email?.toLowerCase().includes(term) ||
-          s.mobile_number?.includes(term)
+          s.mobile_number?.includes(term),
       );
     }
 
@@ -1243,7 +1243,6 @@ const ReviewStudentsPage = () => {
       `}</style>
 
       <div className="space-y-5">
-
         {/* ── Breadcrumb + Back ── */}
         <div className="flex items-center justify-between">
           <Breadcrumb items={breadcrumbItems} />
@@ -1271,13 +1270,17 @@ const ReviewStudentsPage = () => {
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-500">
               {center?.partner_name && (
-                <span className="font-medium text-gray-700">{center.partner_name}</span>
+                <span className="font-medium text-gray-700">
+                  {center.partner_name}
+                </span>
               )}
               {center?.partner_name && (center?.city || center?.state) && (
                 <span className="text-gray-300">|</span>
               )}
               {(center?.city || center?.state) && (
-                <span>{[center.city, center.state].filter(Boolean).join(", ")}</span>
+                <span>
+                  {[center.city, center.state].filter(Boolean).join(", ")}
+                </span>
               )}
               {students.length > 0 && (
                 <>
@@ -1338,8 +1341,7 @@ const ReviewStudentsPage = () => {
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm flex items-start gap-2">
             <span className="text-base shrink-0">📝</span>
             <span>
-              This is a resubmission.{" "}
-              <strong>{getEditedStudentCount()}</strong>{" "}
+              This is a resubmission. <strong>{getEditedStudentCount()}</strong>{" "}
               {getEditedStudentCount() === 1 ? "student has" : "students have"}{" "}
               been edited by the partner. Edited rows are highlighted in yellow.
             </span>
@@ -1349,7 +1351,10 @@ const ReviewStudentsPage = () => {
         {hasChanges && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm flex items-center gap-2">
             <span className="text-base shrink-0">⚠️</span>
-            <span>You have unsaved changes. Click <strong>Save Changes</strong> before approving or rejecting.</span>
+            <span>
+              You have unsaved changes. Click <strong>Save Changes</strong>{" "}
+              before approving or rejecting.
+            </span>
           </div>
         )}
 
@@ -1363,7 +1368,9 @@ const ReviewStudentsPage = () => {
               <span className="text-sm font-medium text-gray-700">
                 Edit mode active
               </span>
-              <span className="text-xs text-gray-400">— double-click a cell to edit</span>
+              <span className="text-xs text-gray-400">
+                — double-click a cell to edit
+              </span>
               {hasChanges && (
                 <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
                   Unsaved changes
@@ -1427,13 +1434,17 @@ const ReviewStudentsPage = () => {
               }
               onChange={(e) => {
                 // Simple shortcut: clear all then set training_status if that field
+                e.preventDefault();
+
                 handleClearFilters();
               }}
               className="text-sm border border-gray-200 rounded-lg pl-3 pr-8 py-2.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="">All Data</option>
               {filterOptions.statuses.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>
+                  {s}
+                </option>
               ))}
             </select>
             <button
@@ -1477,11 +1488,23 @@ const ReviewStudentsPage = () => {
             onChange={() => {}}
             placeholder=""
             filterGroups={[
-              { label: "Gender", key: "gender", options: filterOptions.genders },
+              {
+                label: "Gender",
+                key: "gender",
+                options: filterOptions.genders,
+              },
               { label: "City", key: "city", options: filterOptions.cities },
               { label: "State", key: "state", options: filterOptions.states },
-              { label: "Course", key: "course_name", options: filterOptions.courses },
-              { label: "Training Status", key: "training_status", options: filterOptions.statuses },
+              {
+                label: "Course",
+                key: "course_name",
+                options: filterOptions.courses,
+              },
+              {
+                label: "Training Status",
+                key: "training_status",
+                options: filterOptions.statuses,
+              },
             ]}
             activeFilters={activeFilters}
             onFilterChange={handleFilterChange}
@@ -1718,7 +1741,7 @@ const ReviewStudentsPage = () => {
               uploadId,
               centerId,
               reason,
-              remarks
+              remarks,
             );
             showToast.success("Center rejected successfully");
             setShowRejectModal(false);
@@ -1728,7 +1751,7 @@ const ReviewStudentsPage = () => {
           } catch (error) {
             console.error("Error rejecting center:", error);
             showToast.error(
-              error.response?.data?.message || "Failed to reject center"
+              error.response?.data?.message || "Failed to reject center",
             );
           } finally {
             setIsRejecting(false);

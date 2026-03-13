@@ -13,9 +13,9 @@ import { Checkbox } from "../../ui/checkbox";
 
 // Columns that can be shown/hidden (Action is always visible)
 const ALERT_COLUMNS = [
-  { id: "date",   label: "Date" },
-  { id: "type",   label: "Type" },
-  { id: "title",  label: "Title" },
+  { id: "date", label: "Date" },
+  { id: "type", label: "Type" },
+  { id: "title", label: "Title" },
   { id: "remark", label: "Remark" },
   { id: "status", label: "Status" },
 ];
@@ -47,7 +47,9 @@ const AlertsTab = ({
   // Column visibility (persisted in localStorage)
   const [visibleCols, setVisibleCols] = useState(() => {
     try {
-      const saved = localStorage.getItem("columnVisibility_refurbishment-alerts");
+      const saved = localStorage.getItem(
+        "columnVisibility_refurbishment-alerts",
+      );
       if (saved) return JSON.parse(saved);
     } catch {}
     return { date: true, type: true, title: true, remark: true, status: true };
@@ -56,13 +58,17 @@ const AlertsTab = ({
   const toggleCol = (id) => {
     setVisibleCols((prev) => {
       const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem("columnVisibility_refurbishment-alerts", JSON.stringify(next));
+      localStorage.setItem(
+        "columnVisibility_refurbishment-alerts",
+        JSON.stringify(next),
+      );
       return next;
     });
   };
 
   const hiddenColCount = ALERT_COLUMNS.filter((c) => !visibleCols[c.id]).length;
-  const visibleColSpan = ALERT_COLUMNS.filter((c) => visibleCols[c.id]).length + 1; // +1 for Action
+  const visibleColSpan =
+    ALERT_COLUMNS.filter((c) => visibleCols[c.id]).length + 1; // +1 for Action
 
   const paginatedData = table.data || [];
 
@@ -219,8 +225,18 @@ const AlertsTab = ({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition-colors whitespace-nowrap">
-                <svg className="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h8m-8 6h16" />
+                <svg
+                  className="h-4 w-4 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h8m-8 6h16"
+                  />
                 </svg>
                 Columns
                 {hiddenColCount > 0 && (
@@ -235,7 +251,10 @@ const AlertsTab = ({
                 <DropdownMenuItem
                   key={col.id}
                   className="flex items-center gap-2 px-3 py-2 cursor-pointer"
-                  onSelect={(e) => { e.preventDefault(); toggleCol(col.id); }}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    toggleCol(col.id);
+                  }}
                 >
                   <Checkbox
                     checked={visibleCols[col.id]}
@@ -250,9 +269,14 @@ const AlertsTab = ({
                 className="text-xs text-center text-gray-500 cursor-pointer px-3 py-2"
                 onSelect={(e) => {
                   e.preventDefault();
-                  const all = Object.fromEntries(ALERT_COLUMNS.map((c) => [c.id, true]));
+                  const all = Object.fromEntries(
+                    ALERT_COLUMNS.map((c) => [c.id, true]),
+                  );
                   setVisibleCols(all);
-                  localStorage.setItem("columnVisibility_refurbishment-alerts", JSON.stringify(all));
+                  localStorage.setItem(
+                    "columnVisibility_refurbishment-alerts",
+                    JSON.stringify(all),
+                  );
                 }}
               >
                 Reset to default
@@ -333,7 +357,9 @@ const AlertsTab = ({
                       {visibleCols.remark && (
                         <td className="px-4 py-4 text-xs text-gray-500 max-w-[180px]">
                           <span className="line-clamp-2">
-                            {row.message ? `"${row.message}"` : row.remark || "—"}
+                            {row.message
+                              ? `"${row.message}"`
+                              : row.remark || "—"}
                           </span>
                         </td>
                       )}

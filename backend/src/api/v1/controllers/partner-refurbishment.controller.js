@@ -177,7 +177,9 @@ const generateUploadUrl = async (req, res, next) => {
 
     // Validate allowed types
     const allowedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

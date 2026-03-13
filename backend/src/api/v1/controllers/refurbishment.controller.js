@@ -1167,6 +1167,17 @@ class RefurbishmentController {
       return ApiResponse.error(res, error.message, 400);
     }
   }
+
+  static async getNotificationHistory(req, res) {
+    try {
+      const { centerId } = req.params;
+      const result = await RefurbishmentService.getNotificationHistoryForCenter(centerId);
+      return ApiResponse.success(res, result, 'Notification history retrieved');
+    } catch (error) {
+      console.error('[RefurbishmentController] Error fetching notification history:', error);
+      return ApiResponse.error(res, error.message, 500);
+    }
+  }
 }
 
 module.exports = RefurbishmentController;

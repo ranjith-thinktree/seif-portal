@@ -5,6 +5,7 @@ import { XMarkIcon } from "@heroicons/react/24/outline";
 import apiClient from "../../api/client";
 import { toast } from "react-toastify";
 import RefurbishmentResponseModal from "./RefurbishmentResponseModal";
+import RefurbishmentGuideModal from "../../components/refurbishment/modals/RefurbishmentGuideModal";
 
 /**
  * RefurbishmentDetailCard Component
@@ -18,6 +19,7 @@ const RefurbishmentDetailCard = ({ notification, onDismiss }) => {
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState(null);
   const [showResponseModal, setShowResponseModal] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     const fetchRefurbishmentDetails = async () => {
@@ -163,7 +165,7 @@ const RefurbishmentDetailCard = ({ notification, onDismiss }) => {
 
           {!details.partner_responded && (
             <Button
-              onClick={() => setShowResponseModal(true)}
+              onClick={() => setShowGuide(true)}
               className="px-8 py-2 bg-blue-600 hover:bg-blue-700 text-white"
             >
               Continue
@@ -188,6 +190,16 @@ const RefurbishmentDetailCard = ({ notification, onDismiss }) => {
           )}
         </div>
       </Card>
+
+      {/* Guide Modal — shown before Response Modal */}
+      <RefurbishmentGuideModal
+        isOpen={showGuide}
+        onStart={() => {
+          setShowGuide(false);
+          setShowResponseModal(true);
+        }}
+        onClose={() => setShowGuide(false)}
+      />
 
       {/* Response Modal */}
       {showResponseModal && (

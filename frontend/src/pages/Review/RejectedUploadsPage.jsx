@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { XCircleIcon, DocumentTextIcon, CalendarIcon, BuildingOffice2Icon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import {
+  XCircleIcon,
+  DocumentTextIcon,
+  CalendarIcon,
+  BuildingOffice2Icon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline";
 import reviewService from "../../services/review.service";
 import Breadcrumb from "../../components/common/Breadcrumb";
 import { showToast } from "../../utils/toast.util";
@@ -96,24 +102,42 @@ const RejectedUploadsPage = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">File Name</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                    File Name
+                  </p>
                   <div className="flex items-center gap-1.5">
                     <DocumentTextIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <p className="text-sm font-medium text-gray-900 truncate">{data.upload.file_name}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {data.upload.file_name}
+                    </p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Upload Date</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                    Upload Date
+                  </p>
                   <div className="flex items-center gap-1.5">
                     <CalendarIcon className="h-4 w-4 text-gray-400" />
-                    <p className="text-sm font-medium text-gray-900">{new Date(data.upload.uploaded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {new Date(data.upload.uploaded_at).toLocaleDateString(
+                        "en-GB",
+                        { day: "2-digit", month: "short", year: "numeric" },
+                      )}
+                    </p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Rejected Centers</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                    Rejected Centers
+                  </p>
                   <div className="flex items-center gap-1.5">
                     <BuildingOffice2Icon className="h-4 w-4 text-gray-400" />
-                    <p className="text-sm font-medium text-red-700">{data.rejected_centers.length} {data.rejected_centers.length === 1 ? "center" : "centers"}</p>
+                    <p className="text-sm font-medium text-red-700">
+                      {data.rejected_centers.length}{" "}
+                      {data.rejected_centers.length === 1
+                        ? "center"
+                        : "centers"}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -145,13 +169,21 @@ const RejectedUploadsPage = () => {
                           {center.center_name}
                         </h3>
                         <p className="text-sm text-gray-500 mt-0.5">
-                          {center.city}, {center.state} &bull; {center.student_count} students
+                          {center.city}, {center.state} &bull;{" "}
+                          {center.student_count} students
                         </p>
                       </div>
                     </div>
                     <div className="text-right text-xs text-gray-500">
-                      <div className="font-medium text-gray-600">{center.reviewed_by_name}</div>
-                      <div>{new Date(center.reviewed_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                      <div className="font-medium text-gray-600">
+                        {center.reviewed_by_name}
+                      </div>
+                      <div>
+                        {new Date(center.reviewed_at).toLocaleDateString(
+                          "en-GB",
+                          { day: "2-digit", month: "short", year: "numeric" },
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -186,7 +218,9 @@ const RejectedUploadsPage = () => {
 
                   {/* Action Required Notice */}
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-2">
-                    <span className="text-amber-600 font-bold text-sm flex-shrink-0">⚠️</span>
+                    <span className="text-amber-600 font-bold text-sm flex-shrink-0">
+                      ⚠️
+                    </span>
                     <p className="text-sm text-amber-800">
                       <span className="font-semibold">Action Required:</span>{" "}
                       Please review the rejection reason and correct the data
@@ -210,7 +244,7 @@ const RejectedUploadsPage = () => {
           <button
             onClick={() =>
               navigate(
-                ROUTES.PARTNER_REVIEW_EDIT.replace(":uploadId", uploadId)
+                ROUTES.PARTNER_REVIEW_EDIT.replace(":uploadId", uploadId),
               )
             }
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
