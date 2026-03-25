@@ -46,7 +46,7 @@ export const SIDEBAR_MENU = [
     name: "Inbox",
     path: ROUTES.INBOX,
     icon: InboxIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PARTNER],
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PARTNER, ROLES.ESSCI],
   },
   {
     name: "Upload",
@@ -54,22 +54,28 @@ export const SIDEBAR_MENU = [
     icon: ArrowUpTrayIcon,
     roles: [ROLES.PARTNER],
   },
+  // {
+  //   name: "Employment Upload",
+  //   path: ROUTES.EMPLOYMENT_UPLOAD,
+  //   icon: AcademicCapIcon,
+  //   roles: [ROLES.PARTNER],
+  // },
+  // {
+  //   name: "My Data",
+  //   path: ROUTES.MY_DATA,
+  //   icon: FolderIcon,
+  //   roles: [ROLES.PARTNER],
+  // },
+  // {
+  //   name: "My Requests",
+  //   path: ROUTES.MY_REQUESTS,
+  //   icon: WrenchScrewdriverIcon,
+  //   roles: [ROLES.PARTNER],
+  // },
   {
-    name: "Employment Upload",
-    path: ROUTES.EMPLOYMENT_UPLOAD,
+    name: "Certificates",
+    path: ROUTES.PARTNER_CERTIFICATES,
     icon: AcademicCapIcon,
-    roles: [ROLES.PARTNER],
-  },
-  {
-    name: "My Data",
-    path: ROUTES.MY_DATA,
-    icon: FolderIcon,
-    roles: [ROLES.PARTNER],
-  },
-  {
-    name: "My Requests",
-    path: ROUTES.MY_REQUESTS,
-    icon: WrenchScrewdriverIcon,
     roles: [ROLES.PARTNER],
   },
   {
@@ -95,6 +101,18 @@ export const SIDEBAR_MENU = [
       ROLES.SEIF_READONLY,
       ROLES.PARTNER,
     ],
+  },
+  {
+    name: "ESSCI Data",
+    path: ROUTES.ESSCI_DATA,
+    icon: CircleStackIcon,
+    roles: [ROLES.ESSCI],
+  },
+  {
+    name: "Upload Certificates",
+    path: ROUTES.ESSCI_UPLOAD,
+    icon: ArrowUpTrayIcon,
+    roles: [ROLES.ESSCI],
   },
   {
     name: "Refurbishment",

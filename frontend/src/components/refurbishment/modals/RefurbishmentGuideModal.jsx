@@ -1,5 +1,10 @@
 import React, { useState } from "react";
-import { Dialog, DialogContent, DialogOverlay } from "../../ui/dialog";
+import {
+  Dialog,
+  DialogPortal,
+  DialogContent,
+  DialogOverlay,
+} from "../../ui/dialog";
 import {
   ArrowDownTrayIcon,
   DocumentTextIcon,
@@ -103,183 +108,185 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogOverlay className="fixed inset-0 bg-black/50 z-50" />
-      <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-        <div
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="bg-green-600 px-8 py-6 relative flex-shrink-0">
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
-            >
-              <XMarkIcon className="h-6 w-6" />
-            </button>
-            <div className="flex items-center gap-3 mb-1">
-              <DocumentTextIcon className="h-7 w-7 text-white" />
-              <h2 className="text-xl font-bold text-white">
-                Refurbishment Request Guide
-              </h2>
+      <DialogPortal>
+        <DialogOverlay className="fixed inset-0 bg-black/50 z-50" />
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-green-600 px-8 py-6 relative flex-shrink-0">
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+              <div className="flex items-center gap-3 mb-1">
+                <DocumentTextIcon className="h-7 w-7 text-white" />
+                <h2 className="text-xl font-bold text-white">
+                  Refurbishment Request Guide
+                </h2>
+              </div>
+              <p className="text-green-100 text-sm mt-1">
+                Please read through this guide before submitting your request.
+              </p>
             </div>
-            <p className="text-green-100 text-sm mt-1">
-              Please read through this guide before submitting your request.
-            </p>
-          </div>
 
-          {/* Scrollable Body */}
-          <div className="overflow-y-auto flex-1 px-8 py-6 space-y-6">
-            {/* Steps */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-                How It Works — 4 Steps
-              </h3>
-              <div className="space-y-3">
-                {STEPS.map((step) => {
-                  const colors = COLOR_MAP[step.color];
-                  const Icon = step.icon;
-                  return (
-                    <div
-                      key={step.number}
-                      className={`flex gap-4 p-4 rounded-xl border ${colors.border} ${colors.bg}`}
-                    >
+            {/* Scrollable Body */}
+            <div className="overflow-y-auto flex-1 px-8 py-6 space-y-6">
+              {/* Steps */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                  How It Works — 4 Steps
+                </h3>
+                <div className="space-y-3">
+                  {STEPS.map((step) => {
+                    const colors = COLOR_MAP[step.color];
+                    const Icon = step.icon;
+                    return (
                       <div
-                        className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${colors.circle}`}
+                        key={step.number}
+                        className={`flex gap-4 p-4 rounded-xl border ${colors.border} ${colors.bg}`}
                       >
-                        <Icon className="h-5 w-5" />
+                        <div
+                          className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${colors.circle}`}
+                        >
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p
+                            className={`text-sm font-semibold ${colors.text} mb-0.5`}
+                          >
+                            Step {step.number}: {step.title}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {step.description}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Templates Section */}
+              <div className="border border-gray-200 rounded-xl p-5 bg-gray-50">
+                <h3 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+                  <ArrowDownTrayIcon className="h-4 w-4 text-gray-500" />
+                  Required Templates
+                </h3>
+                <p className="text-xs text-gray-500 mb-4">
+                  Download, fill in, and upload these templates with your
+                  request. The refurbishment template is{" "}
+                  <span className="font-semibold text-red-600">mandatory</span>.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Refurbishment Template */}
+                  <div className="bg-white border border-green-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <ClipboardDocumentListIcon className="h-4 w-4 text-green-700" />
                       </div>
                       <div>
-                        <p
-                          className={`text-sm font-semibold ${colors.text} mb-0.5`}
-                        >
-                          Step {step.number}: {step.title}
+                        <p className="text-sm font-semibold text-gray-800">
+                          Refurbishment Template
                         </p>
-                        <p className="text-sm text-gray-600">
-                          {step.description}
+                        <p className="text-xs text-red-600 font-medium">
+                          Mandatory
                         </p>
                       </div>
                     </div>
-                  );
-                })}
+                    <p className="text-xs text-gray-500 mb-3">
+                      List centers, courses, packages, equipment condition, and
+                      reason for refurbishment.
+                    </p>
+                    <button
+                      onClick={() =>
+                        handleDownload(
+                          "refurbishment",
+                          "SEIF_Refurbishment_Template.csv",
+                        )
+                      }
+                      disabled={downloading === "refurbishment"}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
+                    >
+                      <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                      {downloading === "refurbishment"
+                        ? "Downloading…"
+                        : "Download CSV"}
+                    </button>
+                  </div>
+
+                  {/* Upgradation Template */}
+                  <div className="bg-white border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <DocumentTextIcon className="h-4 w-4 text-blue-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          Upgradation Template
+                        </p>
+                        <p className="text-xs text-blue-600 font-medium">
+                          If applicable
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Describe rooms/areas, required equipment, quantities,
+                      costs, and proposed improvements.
+                    </p>
+                    <button
+                      onClick={() =>
+                        handleDownload(
+                          "upgradation",
+                          "SEIF_Upgradation_Template.csv",
+                        )
+                      }
+                      disabled={downloading === "upgradation"}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
+                    >
+                      <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                      {downloading === "upgradation"
+                        ? "Downloading…"
+                        : "Download CSV"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Note */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <p className="text-sm text-amber-800">
+                  <span className="font-semibold">Important: </span>
+                  Fill in the downloaded templates with accurate data and upload
+                  them on the document upload step. Incomplete or missing
+                  templates may delay processing of your request.
+                </p>
               </div>
             </div>
 
-            {/* Templates Section */}
-            <div className="border border-gray-200 rounded-xl p-5 bg-gray-50">
-              <h3 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
-                <ArrowDownTrayIcon className="h-4 w-4 text-gray-500" />
-                Required Templates
-              </h3>
-              <p className="text-xs text-gray-500 mb-4">
-                Download, fill in, and upload these templates with your request.
-                The refurbishment template is{" "}
-                <span className="font-semibold text-red-600">mandatory</span>.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Refurbishment Template */}
-                <div className="bg-white border border-green-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <ClipboardDocumentListIcon className="h-4 w-4 text-green-700" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">
-                        Refurbishment Template
-                      </p>
-                      <p className="text-xs text-red-600 font-medium">
-                        Mandatory
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3">
-                    List centers, courses, packages, equipment condition, and
-                    reason for refurbishment.
-                  </p>
-                  <button
-                    onClick={() =>
-                      handleDownload(
-                        "refurbishment",
-                        "SEIF_Refurbishment_Template.csv",
-                      )
-                    }
-                    disabled={downloading === "refurbishment"}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
-                  >
-                    <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                    {downloading === "refurbishment"
-                      ? "Downloading…"
-                      : "Download CSV"}
-                  </button>
-                </div>
-
-                {/* Upgradation Template */}
-                <div className="bg-white border border-blue-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <DocumentTextIcon className="h-4 w-4 text-blue-700" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">
-                        Upgradation Template
-                      </p>
-                      <p className="text-xs text-blue-600 font-medium">
-                        If applicable
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Describe rooms/areas, required equipment, quantities, costs,
-                    and proposed improvements.
-                  </p>
-                  <button
-                    onClick={() =>
-                      handleDownload(
-                        "upgradation",
-                        "SEIF_Upgradation_Template.csv",
-                      )
-                    }
-                    disabled={downloading === "upgradation"}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
-                  >
-                    <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                    {downloading === "upgradation"
-                      ? "Downloading…"
-                      : "Download CSV"}
-                  </button>
-                </div>
-              </div>
+            {/* Footer */}
+            <div className="px-8 py-5 border-t border-gray-100 bg-white flex-shrink-0 flex items-center justify-between">
+              <button
+                onClick={onClose}
+                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onStart}
+                className="px-8 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-full transition-colors shadow-sm"
+              >
+                Start Request →
+              </button>
             </div>
-
-            {/* Note */}
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-sm text-amber-800">
-                <span className="font-semibold">Important: </span>
-                Fill in the downloaded templates with accurate data and upload
-                them on the document upload step. Incomplete or missing
-                templates may delay processing of your request.
-              </p>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="px-8 py-5 border-t border-gray-100 bg-white flex-shrink-0 flex items-center justify-between">
-            <button
-              onClick={onClose}
-              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onStart}
-              className="px-8 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-full transition-colors shadow-sm"
-            >
-              Start Request →
-            </button>
-          </div>
-        </div>
-      </div>
+          </div>{" "}
+        </div>{" "}
+      </DialogPortal>
     </Dialog>
   );
 };

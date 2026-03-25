@@ -11,6 +11,7 @@ import {
   XMarkIcon,
   BriefcaseIcon,
   InformationCircleIcon,
+  AcademicCapIcon,
 } from "@heroicons/react/24/outline";
 import {
   uploadCSV,
@@ -26,6 +27,11 @@ import {
   getEmploymentUploadDetails,
   checkApprovedStudents,
 } from "../../services/employment.service";
+import {
+  uploadCertificationData,
+  downloadCertificationTemplate,
+} from "../../services/certification.service";
+import { getMyCenters, getBatchesByCenter } from "../../services/data.service";
 import { MainLayout } from "../../components/layout";
 import UploadPreview from "./UploadPreview";
 import UploadInstructions from "./UploadInstructions";
@@ -84,6 +90,19 @@ const UploadPage = () => {
   const [checkingApprovedStudents, setCheckingApprovedStudents] =
     useState(true);
 
+  // Certification upload state
+  const [certDataFile, setCertDataFile] = useState(null);
+  const [certValidationDoc, setCertValidationDoc] = useState(null);
+  const [certCenterId, setCertCenterId] = useState("");
+  const [certBatchId, setCertBatchId] = useState("");
+  const [certCenters, setCertCenters] = useState([]);
+  const [certBatches, setCertBatches] = useState([]);
+  const [certUploading, setCertUploading] = useState(false);
+  const [certError, setCertError] = useState(null);
+  const [certSuccess, setCertSuccess] = useState(null);
+  const [certDataDragging, setCertDataDragging] = useState(false);
+  const [certDocDragging, setCertDocDragging] = useState(false);
+
   /**
    * Fetch uploads for unified history tab (both student and employment)
    */
@@ -130,14 +149,14 @@ const UploadPage = () => {
             upload.file_name?.toLowerCase().includes(search) ||
             upload.uploaded_by_name?.toLowerCase().includes(search) ||
             upload.reviewed_by_name?.toLowerCase().includes(search) ||
-            upload.type?.toLowerCase().includes(search)
+            upload.type?.toLowerCase().includes(search),
         );
       }
 
       // Status filter
       if (statusFilter) {
         filteredData = filteredData.filter(
-          (upload) => upload.status === statusFilter
+          (upload) => upload.status === statusFilter,
         );
       }
 
@@ -223,12 +242,12 @@ const UploadPage = () => {
     const fileName = selectedFile.name.toLowerCase();
     const validExtensions = [".csv", ".xlsx", ".xls", ".xlsm"];
     const hasValidExtension = validExtensions.some((ext) =>
-      fileName.endsWith(ext)
+      fileName.endsWith(ext),
     );
 
     if (!hasValidExtension) {
       setError(
-        "Invalid file type. Supported formats: CSV (.csv), Excel (.xlsx, .xls, .xlsm). We accept all Excel formats!"
+        "Invalid file type. Supported formats: CSV (.csv), Excel (.xlsx, .xls, .xlsm). We accept all Excel formats!",
       );
       return;
     }
@@ -236,7 +255,7 @@ const UploadPage = () => {
     // Validate file size (10MB)
     if (selectedFile.size > 10 * 1024 * 1024) {
       setError(
-        "File size exceeds 10MB limit. Please compress or split your data."
+        "File size exceeds 10MB limit. Please compress or split your data.",
       );
       return;
     }
@@ -332,7 +351,7 @@ const UploadPage = () => {
     try {
       const result = await confirmUpload(
         preview.uploadData.filePath,
-        preview.uploadData.fileName
+        preview.uploadData.fileName,
       );
 
       if (result.success) {
@@ -408,7 +427,7 @@ const UploadPage = () => {
       console.error("Failed to delete upload:", err);
       setDeleteError(
         err.response?.data?.message ||
-          "Failed to delete upload. Please try again."
+          "Failed to delete upload. Please try again.",
       );
     } finally {
       setDeleteLoading(false);
@@ -503,7 +522,7 @@ const UploadPage = () => {
 
       if (result.success) {
         setEmploymentSuccess(
-          `Successfully uploaded ${result.data.records_processed} employment records!`
+          `Successfully uploaded ${result.data.records_processed} employment records!`,
         );
         setEmploymentFile(null);
         if (employmentFileInputRef.current) {
@@ -608,6 +627,78 @@ const UploadPage = () => {
     }
   };
 
+  // ── Certification handlers ──────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab === "certification" && certCenters.length === 0) {
+      getMyCenters({ status: "approved" })
+        .then((res) => setCertCenters(res.data || []))
+        .catch(() => {});
+    }
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCertCenterChange = async (centerId) => {
+    setCertCenterId(centerId);
+    setCertBatchId("");
+    setCertBatches([]);
+    if (!centerId) return;
+    try {
+      const res = await getBatchesByCenter(centerId);
+      setCertBatches(res.data || res || []);
+    } catch {
+      setCertBatches([]);
+    }
+  };
+
+  const handleCertUpload = async () => {
+    if (!certDataFile || !certValidationDoc) {
+      setCertError(
+        "Please select both the data CSV and the validation document.",
+      );
+      return;
+    }
+    if (!certCenterId || !certBatchId) {
+      setCertError("Please select a center and a batch.");
+      return;
+    }
+    setCertUploading(true);
+    setCertError(null);
+    setCertSuccess(null);
+    try {
+      const result = await uploadCertificationData(
+        certDataFile,
+        certValidationDoc,
+        certCenterId,
+        certBatchId,
+      );
+      if (result.success) {
+        setCertSuccess(
+          `Successfully uploaded ${result.data?.total_records || 0} certification records! Awaiting admin approval.`,
+        );
+        setCertDataFile(null);
+        setCertValidationDoc(null);
+        setCertCenterId("");
+        setCertBatchId("");
+        setCertBatches([]);
+      } else {
+        setCertError(result.message || "Upload failed. Please try again.");
+      }
+    } catch (err) {
+      setCertError(
+        err.response?.data?.message || "Upload failed. Please try again.",
+      );
+    } finally {
+      setCertUploading(false);
+    }
+  };
+
+  const handleDownloadCertTemplate = async () => {
+    try {
+      await downloadCertificationTemplate();
+    } catch {
+      // silently ignore – user will see browser error
+    }
+  };
+
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto">
@@ -641,6 +732,17 @@ const UploadPage = () => {
           >
             <BriefcaseIcon className="h-4 w-4" />
             Employment Data
+          </button>
+          <button
+            onClick={() => setActiveTab("certification")}
+            className={`pb-3 px-2 font-medium transition-colors relative flex items-center gap-2 ${
+              activeTab === "certification"
+                ? "text-primary-600 border-b-2 border-primary-600"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <AcademicCapIcon className="h-4 w-4" />
+            Certification Data
           </button>
           <button
             onClick={() => setActiveTab("history")}
@@ -1180,7 +1282,7 @@ const UploadPage = () => {
                                       {error.error}
                                     </td>
                                   </tr>
-                                )
+                                ),
                               )}
                             </tbody>
                           </table>
@@ -1199,6 +1301,272 @@ const UploadPage = () => {
                 </div>
               </div>
             )}
+          </div>
+        ) : activeTab === "certification" ? (
+          /* ── Certification Data Tab ─────────────────────────────────── */
+          <div>
+            {/* Success banner */}
+            {certSuccess && (
+              <div className="mb-6 bg-green-50 border border-green-400 rounded-lg p-4 flex items-start gap-3">
+                <CheckCircleIcon className="h-6 w-6 text-green-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-green-700">
+                    Upload Submitted!
+                  </h3>
+                  <p className="text-green-600 text-sm mt-0.5">{certSuccess}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error banner */}
+            {certError && (
+              <div className="mb-6 bg-red-50 border border-red-400 rounded-lg p-4 flex items-start gap-3">
+                <XCircleIcon className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-red-700">Upload Error</h3>
+                  <p className="text-red-600 text-sm mt-0.5">{certError}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left: upload zones (2/3) */}
+              <div className="lg:col-span-2 space-y-5">
+                {/* Center + batch selection */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h2 className="font-semibold text-gray-800 mb-4">
+                    Select Center &amp; Batch
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Center *
+                      </label>
+                      <select
+                        value={certCenterId}
+                        onChange={(e) => handleCertCenterChange(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                      >
+                        <option value="">-- Select center --</option>
+                        {certCenters.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Batch *
+                      </label>
+                      <select
+                        value={certBatchId}
+                        onChange={(e) => setCertBatchId(e.target.value)}
+                        disabled={!certCenterId}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50"
+                      >
+                        <option value="">-- Select batch --</option>
+                        {certBatches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.batch_number || b.name || b.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Two drop zones side by side */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Data CSV */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setCertDataDragging(true);
+                    }}
+                    onDragLeave={() => setCertDataDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setCertDataDragging(false);
+                      const f = e.dataTransfer.files[0];
+                      if (f) setCertDataFile(f);
+                    }}
+                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                      certDataDragging
+                        ? "border-primary-400 bg-primary-50"
+                        : "border-gray-300 hover:border-primary-400 hover:bg-gray-50"
+                    }`}
+                    onClick={() =>
+                      document.getElementById("certDataInput").click()
+                    }
+                  >
+                    <input
+                      id="certDataInput"
+                      type="file"
+                      accept=".csv,.xlsx,.xls,.xlsm"
+                      className="hidden"
+                      onChange={(e) =>
+                        setCertDataFile(e.target.files[0] || null)
+                      }
+                    />
+                    <ArrowUpTrayIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                    {certDataFile ? (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 truncate">
+                          {certDataFile.name}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCertDataFile(null);
+                          }}
+                          className="mt-1 text-xs text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">
+                          Batch Data CSV/Excel
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Drag &amp; drop or click
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          .csv / .xlsx / .xls / .xlsm
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Validation doc */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setCertDocDragging(true);
+                    }}
+                    onDragLeave={() => setCertDocDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setCertDocDragging(false);
+                      const f = e.dataTransfer.files[0];
+                      if (f) setCertValidationDoc(f);
+                    }}
+                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                      certDocDragging
+                        ? "border-primary-400 bg-primary-50"
+                        : "border-gray-300 hover:border-primary-400 hover:bg-gray-50"
+                    }`}
+                    onClick={() =>
+                      document.getElementById("certDocInput").click()
+                    }
+                  >
+                    <input
+                      id="certDocInput"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) =>
+                        setCertValidationDoc(e.target.files[0] || null)
+                      }
+                    />
+                    <DocumentArrowDownIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                    {certValidationDoc ? (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 truncate">
+                          {certValidationDoc.name}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCertValidationDoc(null);
+                          }}
+                          className="mt-1 text-xs text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">
+                          Validation Document
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Drag &amp; drop or click
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          PDF / JPEG / PNG
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Upload button */}
+                <button
+                  onClick={handleCertUpload}
+                  disabled={
+                    certUploading ||
+                    !certDataFile ||
+                    !certValidationDoc ||
+                    !certCenterId ||
+                    !certBatchId
+                  }
+                  className="w-full py-3 bg-[#009530] disabled:opacity-60 text-white font-semibold rounded-xl hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  {certUploading ? (
+                    <>
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />{" "}
+                      Uploading…
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpTrayIcon className="h-4 w-4" /> Upload
+                      Certification Data
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Right: instructions (1/3) */}
+              <div className="space-y-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h2 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <AcademicCapIcon className="h-4 w-4 text-primary-600" />
+                    Instructions
+                  </h2>
+                  <ol className="text-sm text-gray-600 space-y-2 list-decimal ml-4">
+                    <li>Download the CSV template using the button below.</li>
+                    <li>
+                      Fill in trainee details: name, course, marks, status,
+                      assessment date, trainer name.
+                    </li>
+                    <li>
+                      Attach a validation document (signed PDF or photo) proving
+                      assessment was conducted.
+                    </li>
+                    <li>
+                      Select the center and batch, then upload both files.
+                    </li>
+                    <li>
+                      Admin will review and approve. ESSCI will then upload the
+                      certificate PDF.
+                    </li>
+                  </ol>
+
+                  <button
+                    onClick={handleDownloadCertTemplate}
+                    className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-primary-500 text-primary-600 rounded-lg hover:bg-primary-50 text-sm font-medium transition-colors"
+                  >
+                    <DocumentArrowDownIcon className="h-4 w-4" />
+                    Download CSV Template
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           /* Upload History Tab */
@@ -1417,14 +1785,14 @@ const UploadPage = () => {
                                   upload.status === "pending"
                                     ? "bg-secondary-100 text-secondary-700"
                                     : upload.status === "approved"
-                                    ? "bg-primary-100 text-primary-700"
-                                    : upload.status === "rejected"
-                                    ? "bg-destructive/10 text-destructive"
-                                    : upload.status === "partial"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : upload.status === "completed"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-muted text-muted-foreground"
+                                      ? "bg-primary-100 text-primary-700"
+                                      : upload.status === "rejected"
+                                        ? "bg-destructive/10 text-destructive"
+                                        : upload.status === "partial"
+                                          ? "bg-blue-100 text-blue-700"
+                                          : upload.status === "completed"
+                                            ? "bg-green-100 text-green-700"
+                                            : "bg-muted text-muted-foreground"
                                 }`}
                               >
                                 {upload.status?.charAt(0).toUpperCase() +
@@ -1441,7 +1809,7 @@ const UploadPage = () => {
                                     year: "numeric",
                                     hour: "2-digit",
                                     minute: "2-digit",
-                                  }
+                                  },
                                 )}
                               </div>
                               <div className="text-xs text-muted-foreground">
@@ -1453,7 +1821,7 @@ const UploadPage = () => {
                                 <>
                                   <div className="text-sm text-muted-foreground">
                                     {new Date(
-                                      upload.reviewed_at
+                                      upload.reviewed_at,
                                     ).toLocaleDateString("en-GB", {
                                       day: "2-digit",
                                       month: "short",
@@ -1527,7 +1895,7 @@ const UploadPage = () => {
                         to{" "}
                         {Math.min(
                           pagination.page * pagination.limit,
-                          pagination.total
+                          pagination.total,
                         )}{" "}
                         of {pagination.total} results
                       </div>

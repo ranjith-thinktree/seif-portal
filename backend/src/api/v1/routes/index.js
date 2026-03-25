@@ -21,6 +21,7 @@ const dashboardRoutes = require('./dashboard.routes');
 const refurbishmentRoutes = require('./refurbishment.routes');
 const partnerRefurbishmentRoutes = require('./partner-refurbishment.routes');
 const templateRoutes = require('./templates.routes');
+const certificationRoutes = require('./certification.routes');
 
 /**
  * API v1 Routes Index
@@ -47,6 +48,7 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/admin/refurbishment', refurbishmentRoutes);
 router.use('/partner/refurbishment', partnerRefurbishmentRoutes);
 router.use('/templates', templateRoutes);
+router.use('/certification', certificationRoutes);
 
 // Future routes will be added here:
 // router.use('/requests', requestRoutes);

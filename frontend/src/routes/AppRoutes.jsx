@@ -39,7 +39,11 @@ import EmploymentUploadPage from "../pages/EmploymentUploadPage";
 import EmploymentManagementPage from "../pages/Admin/EmploymentManagementPage";
 import MyDataPage from "../pages/Partner/MyDataPage";
 import MyRequestsPage from "../pages/Partner/MyRequestsPage";
+import CertificatesPage from "../pages/Partner/CertificatesPage";
 import AnalyticsPage from "../pages/Analytics/AnalyticsPage";
+import ESSCIDataPage from "../pages/ESSCI/ESSCIDataPage";
+import ESSCIBatchDetailPage from "../pages/ESSCI/ESSCIBatchDetailPage";
+import ESSCIUploadPage from "../pages/ESSCI/ESSCIUploadPage";
 
 /**
  * Placeholder page wrapper with MainLayout
@@ -440,6 +444,44 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute>
                 <RefurbishmentDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Partner Certification */}
+          <Route
+            path={ROUTES.PARTNER_CERTIFICATES}
+            element={
+              <ProtectedRoute>
+                <CertificatesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ESSCI Certification */}
+          <Route
+            path={ROUTES.ESSCI_DATA}
+            element={
+              <ProtectedRoute>
+                <ESSCIDataPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ESSCI_DATA_DETAIL}
+            element={
+              <ProtectedRoute>
+                <ESSCIBatchDetailPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.ESSCI_UPLOAD}
+            element={
+              <ProtectedRoute>
+                <ESSCIUploadPage />
               </ProtectedRoute>
             }
           />

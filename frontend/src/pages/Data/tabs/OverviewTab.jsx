@@ -46,113 +46,6 @@ import dashboardData from "../../../data/dashboardData.json";
 import StudentBreakdownTooltip from "../../../components/data/StudentBreakdownTooltip";
 
 /**
- * Merge historical center data from JSON with live API data
- * @param {Array} historicalData - Historical centers from JSON (77 centers)
- * @param {Array} apiData - Live data from API (current year)
- * @param {string} selectedYear - Selected financial year (e.g., "2024-25")
- * @returns {Array} Merged center data sorted by total students
- */
-function mergeCenterData(historicalData, apiData, selectedYear) {
-  const merged = new Map();
-
-  // Add all 76 historical centers
-  historicalData.forEach((h) => {
-    const key = h.centerName;
-    merged.set(key, {
-      center_id: h.id,
-      center_name: h.centerName,
-      partner_name: h.partnerName || "Unknown Partner", // Use partnerName from JSON
-      city: h.city || h.location,
-      state: h.state,
-      students_2022_23: h.students_2022_23 || 0,
-      students_2023_24: h.students_2023_24 || 0,
-      students_2024_25: h.students_2024_25 || 0,
-      currentTotal: 0,
-      currentMale: 0,
-      currentFemale: 0,
-      source: "historical",
-    });
-  });
-
-  // Merge API data (current year)
-  if (Array.isArray(apiData)) {
-    apiData.forEach((api) => {
-      const key = api.center_name;
-      if (merged.has(key)) {
-        // Update existing historical center with API data
-        const existing = merged.get(key);
-        existing.currentTotal = api.total_students;
-        existing.currentMale = api.male_students;
-        existing.currentFemale = api.female_students;
-        existing.partner_name = api.partner_name; // Use API partner name
-        existing.source = "both";
-      } else {
-        // Add new center from API (not in historical)
-        merged.set(key, {
-          center_id: api.center_id,
-          center_name: api.center_name,
-          partner_name: api.partner_name,
-          city: api.city,
-          state: api.state,
-          students_2022_23: 0,
-          students_2023_24: 0,
-          students_2024_25: 0,
-          currentTotal: api.total_students,
-          currentMale: api.male_students,
-          currentFemale: api.female_students,
-          source: "api",
-        });
-      }
-    });
-  }
-
-  // Calculate display values based on selected year
-  return Array.from(merged.values())
-    .map((c) => {
-      let total_students = 0;
-      let male_students = 0;
-      let female_students = 0;
-
-      if (selectedYear === "all") {
-        // Sum all three years
-        total_students =
-          (c.students_2022_23 || 0) +
-          (c.students_2023_24 || 0) +
-          (c.students_2024_25 || 0) +
-          (c.currentTotal || 0);
-        // Gender data only from current API data
-        male_students = c.currentMale || 0;
-        female_students = c.currentFemale || 0;
-      } else if (selectedYear === "2022-23") {
-        total_students = c.students_2022_23 || 0;
-        male_students = 0; // Historical data has no gender breakdown
-        female_students = 0;
-      } else if (selectedYear === "2023-24") {
-        total_students = c.students_2023_24 || 0;
-        male_students = 0;
-        female_students = 0;
-      } else if (selectedYear === "2024-25") {
-        total_students = c.students_2024_25 || 0;
-        male_students = 0;
-        female_students = 0;
-      } else {
-        // Current year from API
-        total_students = c.currentTotal || 0;
-        male_students = c.currentMale || 0;
-        female_students = c.currentFemale || 0;
-      }
-
-      return {
-        ...c,
-        total_students,
-        male_students,
-        female_students,
-      };
-    })
-    .sort((a, b) => b.total_students - a.total_students); // Sort descending by students
-}
-
-/**
  * Overview Tab for Data Management
  * Displays key statistics with trend indicators and consolidated student analytics
  */
@@ -179,7 +72,11 @@ const OverviewTab = () => {
   });
 
   const isPartner = user?.role === "PARTNER";
-  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  const isAdmin =
+    user?.role === "ADMIN" ||
+    user?.role === "SUPER_ADMIN" ||
+    user?.role === "ESSCI" ||
+    user?.role === "SEIF_READONLY";
 
   // Generate autocomplete suggestions
   const searchSuggestions = useMemo(() => {
@@ -291,9 +188,7 @@ const OverviewTab = () => {
       if (isAdmin) {
         console.log("👤 Admin user detected, fetching filter options...");
         await fetchFilterOptions();
-        // Fetch analytics immediately after filter options
-        console.log("📊 Fetching analytics...");
-        await fetchAnalytics();
+        // Analytics are fetched by the filter-change useEffect on mount
       }
     };
 
@@ -445,95 +340,7 @@ const OverviewTab = () => {
     }
   };
 
-  // Helper function: Use only API data (no historicalCenterData)
-  const getFilteredHistoricalData = useMemo(() => {
-    // Return empty array since we're not using historicalCenterData anymore
-    return [];
-  }, []);
-
-  // Helper function: Aggregate historical data by financial year
-  const aggregateHistoricalStudents = useMemo(() => {
-    let total = 0;
-
-    getFilteredHistoricalData.forEach((center) => {
-      if (filters.financialYear === "all") {
-        total +=
-          (center.students_2022_23 || 0) +
-          (center.students_2023_24 || 0) +
-          (center.students_2024_25 || 0);
-      } else if (filters.financialYear === "2022-23") {
-        total += center.students_2022_23 || 0;
-      } else if (filters.financialYear === "2023-24") {
-        total += center.students_2023_24 || 0;
-      } else if (filters.financialYear === "2024-25") {
-        total += center.students_2024_25 || 0;
-      }
-    });
-
-    return total;
-  }, [getFilteredHistoricalData, filters.financialYear]);
-
-  // Helper function: Get state distribution from historical data
-  const getHistoricalStateDistribution = useMemo(() => {
-    const stateMap = {};
-
-    getFilteredHistoricalData.forEach((center) => {
-      const state = center.state;
-      if (!stateMap[state]) {
-        stateMap[state] = 0;
-      }
-
-      if (filters.financialYear === "all") {
-        stateMap[state] +=
-          (center.students_2022_23 || 0) +
-          (center.students_2023_24 || 0) +
-          (center.students_2024_25 || 0);
-      } else if (filters.financialYear === "2022-23") {
-        stateMap[state] += center.students_2022_23 || 0;
-      } else if (filters.financialYear === "2023-24") {
-        stateMap[state] += center.students_2023_24 || 0;
-      } else if (filters.financialYear === "2024-25") {
-        stateMap[state] += center.students_2024_25 || 0;
-      }
-    });
-
-    return Object.entries(stateMap).map(([state, count]) => ({
-      state,
-      count,
-    }));
-  }, [getFilteredHistoricalData, filters.financialYear]);
-
-  // Helper function: Get top centers from historical data
-  const getHistoricalTopCenters = useMemo(() => {
-    const centerData = getFilteredHistoricalData.map((center) => {
-      let studentCount = 0;
-
-      if (filters.financialYear === "all") {
-        studentCount =
-          (center.students_2022_23 || 0) +
-          (center.students_2023_24 || 0) +
-          (center.students_2024_25 || 0);
-      } else if (filters.financialYear === "2022-23") {
-        studentCount = center.students_2022_23 || 0;
-      } else if (filters.financialYear === "2023-24") {
-        studentCount = center.students_2023_24 || 0;
-      } else if (filters.financialYear === "2024-25") {
-        studentCount = center.students_2024_25 || 0;
-      }
-
-      return {
-        centerName: center.centerName,
-        studentCount,
-      };
-    });
-
-    return centerData
-      .filter((c) => c.studentCount > 0)
-      .sort((a, b) => b.studentCount - a.studentCount)
-      .slice(0, 20);
-  }, [getFilteredHistoricalData, filters.financialYear]);
-
-  // Filter dashboard data based on financial year
+  // Helper function: Filter dashboard data based on financial year
   const getFilteredDashboardData = useMemo(() => {
     const year = filters.financialYear;
 
@@ -593,16 +400,6 @@ const OverviewTab = () => {
       }
     );
   }, [filters.financialYear]);
-
-  // Merged stats (API + Historical) eslint-disable-next-line no-unused-vars
-  const mergedStats = useMemo(() => {
-    if (!stats) return null;
-
-    return {
-      ...stats,
-      total_students: (stats.total_students || 0) + aggregateHistoricalStudents,
-    };
-  }, [stats, aggregateHistoricalStudents]);
 
   // Log matching results ONCE (prevents console spam)
   useEffect(() => {
@@ -674,6 +471,7 @@ const OverviewTab = () => {
       partnerId: "all",
       centerId: "all",
       gender: "all",
+      searchQuery: "",
     });
   };
 
@@ -883,7 +681,7 @@ const OverviewTab = () => {
                   <StatCard
                     title="Male Students"
                     value={
-                      (analytics.summary?.male_students || 0) +
+                      parseInt(analytics.summary?.male_students || 0) +
                       (getFilteredDashboardData.male || 0)
                     }
                     trend="up"
@@ -913,7 +711,7 @@ const OverviewTab = () => {
                   <StatCard
                     title="Female Students"
                     value={
-                      (analytics.summary?.female_students || 0) +
+                      parseInt(analytics.summary?.female_students || 0) +
                       (getFilteredDashboardData.female || 0)
                     }
                     trend="up"
@@ -1339,6 +1137,13 @@ const OverviewTab = () => {
                         {Array.isArray(analytics?.partnerBreakdown) &&
                         analytics.partnerBreakdown.length > 0 ? (
                           analytics.partnerBreakdown
+                            .filter(
+                              (partner) =>
+                                !filters.searchQuery ||
+                                partner.partner_name
+                                  ?.toLowerCase()
+                                  .includes(filters.searchQuery.toLowerCase()),
+                            )
                             .slice(0, 10)
                             .map((partner) => (
                               <tr
@@ -1406,28 +1211,41 @@ const OverviewTab = () => {
                       <tbody className="bg-white divide-y divide-gray-200">
                         {Array.isArray(analytics?.centerBreakdown) &&
                         analytics.centerBreakdown.length > 0 ? (
-                          analytics.centerBreakdown.map((center) => (
-                            <tr
-                              key={center.center_id}
-                              className="hover:bg-gray-50"
-                            >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {center.center_name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {center.partner_name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {center.total_students}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {center.male_students}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {center.female_students}
-                              </td>
-                            </tr>
-                          ))
+                          analytics.centerBreakdown
+                            .filter(
+                              (center) =>
+                                !filters.searchQuery ||
+                                center.center_name
+                                  ?.toLowerCase()
+                                  .includes(
+                                    filters.searchQuery.toLowerCase(),
+                                  ) ||
+                                center.partner_name
+                                  ?.toLowerCase()
+                                  .includes(filters.searchQuery.toLowerCase()),
+                            )
+                            .map((center) => (
+                              <tr
+                                key={center.center_id}
+                                className="hover:bg-gray-50"
+                              >
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {center.center_name}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                  {center.partner_name}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {center.total_students}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                  {center.male_students}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                  {center.female_students}
+                                </td>
+                              </tr>
+                            ))
                         ) : (
                           <tr>
                             <td

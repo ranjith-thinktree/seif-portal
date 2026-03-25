@@ -102,7 +102,7 @@ const handleUploadError = (err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'File size exceeds the limit of 10MB',
+        message: 'File size exceeds the allowed limit for this upload type',
         error: err.message,
       });
     }
@@ -132,7 +132,71 @@ const handleUploadError = (err, req, res, next) => {
   next();
 };
 
+// ── PDF / document file filter ──────────────────────────────────────────────
+const pdfFileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+  if (!allowedExtensions.includes(ext)) {
+    return cb(new Error(`Invalid file type. Allowed: PDF, JPG, PNG. Got: ${ext}`), false);
+  }
+  cb(null, true);
+};
+
+const pdfUpload = multer({
+  storage: storage,
+  fileFilter: pdfFileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB for certificate PDFs
+});
+
+/** Single PDF/image upload (field name: 'file') */
+const uploadPDF = pdfUpload.single('file');
+
+// ── Certification multipart: dataFile + validationDoc ────────────────────────
+const certStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const partnerId = req.user?.partnerId || req.user?.partner_id || 'unknown';
+    const partnerDir = path.join(uploadsDir, partnerId);
+    if (!fs.existsSync(partnerDir)) fs.mkdirSync(partnerDir, { recursive: true });
+    cb(null, partnerDir);
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    const originalName = file.originalname.replace(/\s+/g, '_');
+    cb(null, `${timestamp}_${originalName}`);
+  },
+});
+
+const certFileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (file.fieldname === 'dataFile') {
+    const allowed = ['.csv', '.xlsx', '.xls', '.xlsm'];
+    if (!allowed.includes(ext)) {
+      return cb(new Error(`dataFile must be CSV or Excel. Got: ${ext}`), false);
+    }
+  } else if (file.fieldname === 'validationDoc') {
+    const allowed = ['.pdf', '.jpg', '.jpeg', '.png'];
+    if (!allowed.includes(ext)) {
+      return cb(new Error(`validationDoc must be PDF or image. Got: ${ext}`), false);
+    }
+  }
+  cb(null, true);
+};
+
+const certUploadMulter = multer({
+  storage: certStorage,
+  fileFilter: certFileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
+/** Two-field upload for certification: dataFile (CSV) + validationDoc (PDF/image) */
+const uploadCertificationFiles = certUploadMulter.fields([
+  { name: 'dataFile', maxCount: 1 },
+  { name: 'validationDoc', maxCount: 1 },
+]);
+
 module.exports = {
   uploadCSV,
+  uploadPDF,
+  uploadCertificationFiles,
   handleUploadError,
 };

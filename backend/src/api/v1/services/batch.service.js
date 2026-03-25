@@ -68,7 +68,7 @@ class BatchService {
         whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
       // Get total count
-      const countResult = await db.query(
+      const [countRows] = await db.query(
         `SELECT COUNT(*) as total 
         FROM batches b
         LEFT JOIN centers c ON b.center_id = c.id
@@ -76,17 +76,19 @@ class BatchService {
         ${whereClause}`,
         queryParams
       );
-      const total = countResult[0].total;
+      const total = countRows[0]?.total || 0;
 
       // Get paginated data
       const validLimit = parseInt(limit);
       const validOffset = parseInt(offset);
-      const batches = await db.query(
+      const [batchRows] = await db.query(
         `SELECT 
           b.*,
           c.center_name,
           p.name as partner_name,
-          (SELECT COUNT(*) FROM students WHERE batch_id = b.id) as enrolled_students
+          (SELECT COUNT(*) FROM students WHERE batch_id = b.id) as total_students,
+          (SELECT COUNT(*) FROM students WHERE batch_id = b.id AND gender = 'Male') as male_students,
+          (SELECT COUNT(*) FROM students WHERE batch_id = b.id AND gender = 'Female') as female_students
         FROM batches b
         LEFT JOIN centers c ON b.center_id = c.id
         LEFT JOIN partners p ON b.partner_id = p.id
@@ -97,7 +99,7 @@ class BatchService {
       );
 
       return {
-        data: batches,
+        data: batchRows,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),

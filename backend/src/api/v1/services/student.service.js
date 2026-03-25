@@ -126,18 +126,18 @@ class StudentService {
       const sortDirection = sort_order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
       // Get total count
-      const countResult = await db.query(
+      const [countRows] = await db.query(
         `SELECT COUNT(*) as total 
         FROM students s
         ${whereClause}`,
         queryParams
       );
-      const total = countResult[0].total;
+      const total = countRows[0]?.total || 0;
 
       // Get paginated data
       const validLimit = parseInt(limit);
       const validOffset = parseInt(offset);
-      const students = await db.query(
+      const [studentRows] = await db.query(
         `SELECT 
           s.*,
           b.batch_number,
@@ -154,7 +154,7 @@ class StudentService {
       );
 
       return {
-        data: students,
+        data: studentRows,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),

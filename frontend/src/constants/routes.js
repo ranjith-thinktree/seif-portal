@@ -50,6 +50,12 @@ export const ROUTES = {
   REPORTS: "/reports",
   ANALYTICS: "/analytics",
   DOWNLOADS: "/downloads",
+  ESSCI_DATA: "/essci/data",
+  ESSCI_DATA_DETAIL: "/essci/data/:uploadId",
+  ESSCI_UPLOAD: "/essci/upload",
+
+  // Partner Certification Routes
+  PARTNER_CERTIFICATES: "/certificates",
 
   // Common Routes
   NOTIFICATIONS: "/notifications",
