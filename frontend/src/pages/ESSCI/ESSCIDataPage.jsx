@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout";
 import {
@@ -9,8 +9,13 @@ import {
   BuildingOffice2Icon,
   AcademicCapIcon,
   UserGroupIcon,
+  ArrowUpTrayIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { essciGetData } from "../../services/certification.service";
+import {
+  essciGetData,
+  essciUploadCertificatePDF,
+} from "../../services/certification.service";
 import { ROUTES } from "../../constants";
 
 const STATUS_STYLES = {
@@ -31,6 +36,229 @@ const StatCard = ({ label, value, icon: Icon, color }) => (
   </div>
 );
 
+/* ── Upload Modal ─────────────────────────────────────────────── */
+const UploadModal = ({ row, onClose, onSuccess }) => {
+  const [attended, setAttended] = useState("");
+  const [passed, setPassed] = useState("");
+  const [failed, setFailed] = useState("");
+  const [absent, setAbsent] = useState("");
+  const [zipFile, setZipFile] = useState(null);
+  const [studentListDoc, setStudentListDoc] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const zipRef = useRef(null);
+  const slRef = useRef(null);
+
+  const handleSubmit = async () => {
+    if (!zipFile || !studentListDoc) {
+      setError(
+        "Both the ZIP archive and the student list document are required.",
+      );
+      return;
+    }
+    if (attended === "" || passed === "" || failed === "" || absent === "") {
+      setError("Please fill in all attendance numbers.");
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      const res = await essciUploadCertificatePDF(
+        row.partner_id,
+        row.center_id,
+        row.batch_id,
+        row.id,
+        parseInt(attended, 10),
+        parseInt(passed, 10),
+        parseInt(failed, 10),
+        parseInt(absent, 10),
+        zipFile,
+        studentListDoc,
+      );
+      if (res.success) {
+        onSuccess();
+      } else {
+        setError(res.message || "Upload failed. Please try again.");
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Upload failed. Please try again.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div>
+            <h2 className="font-semibold text-gray-900">Upload Certificates</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {row.center_name} — Batch {row.batch_number || row.batch_id}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <XMarkIcon className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {error && (
+            <div className="bg-red-50 border border-red-300 rounded-lg p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Attendance Numbers */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">
+              Attendance Numbers *
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Attended", value: attended, setter: setAttended },
+                { label: "Passed", value: passed, setter: setPassed },
+                { label: "Failed", value: failed, setter: setFailed },
+                { label: "Absent", value: absent, setter: setAbsent },
+              ].map(({ label, value, setter }) => (
+                <div key={label}>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    {label}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={value}
+                    onChange={(e) => setter(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="0"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ZIP File */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
+              Certificate ZIP Archive *
+            </h3>
+            <div
+              className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
+              onClick={() => zipRef.current?.click()}
+            >
+              <input
+                ref={zipRef}
+                type="file"
+                accept=".zip,.tar,.gz,.rar,.7z,.bz2,.tgz,.tbz2"
+                className="hidden"
+                onChange={(e) => setZipFile(e.target.files[0] || null)}
+              />
+              <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+              {zipFile ? (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {zipFile.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setZipFile(null);
+                    }}
+                    className="text-xs text-red-500 hover:text-red-700 mt-0.5"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  ZIP / TAR / RAR / 7z &mdash; click to select
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Student List Document */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
+              Student List Document *
+            </h3>
+            <div
+              className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
+              onClick={() => slRef.current?.click()}
+            >
+              <input
+                ref={slRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx,.xls"
+                className="hidden"
+                onChange={(e) => setStudentListDoc(e.target.files[0] || null)}
+              />
+              <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+              {studentListDoc ? (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {studentListDoc.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStudentListDoc(null);
+                    }}
+                    className="text-xs text-red-500 hover:text-red-700 mt-0.5"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  PDF, Word, CSV, XLSX — click to select
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={uploading}
+            className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={uploading}
+            className="px-5 py-2 text-sm bg-[#009530] text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60 flex items-center gap-2"
+          >
+            {uploading ? (
+              <>
+                <ArrowPathIcon className="w-4 h-4 animate-spin" /> Uploading…
+              </>
+            ) : (
+              <>
+                <ArrowUpTrayIcon className="w-4 h-4" /> Submit
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── Main Page ────────────────────────────────────────────────── */
+
 const ESSCIDataPage = () => {
   const navigate = useNavigate();
 
@@ -44,6 +272,10 @@ const ESSCIDataPage = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 20;
+
+  // Upload modal state
+  const [uploadRow, setUploadRow] = useState(null);
+  const [uploadSuccess, setUploadSuccess] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -76,7 +308,13 @@ const ESSCIDataPage = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(1);
-    // setPage triggers useEffect → fetchData re-runs with page=1
+  };
+
+  const handleUploadSuccess = () => {
+    setUploadRow(null);
+    setUploadSuccess("Certificate files uploaded successfully.");
+    fetchData();
+    setTimeout(() => setUploadSuccess(null), 5000);
   };
 
   return (
@@ -91,6 +329,12 @@ const ESSCIDataPage = () => {
             An overview of your program&apos;s performance
           </p>
         </div>
+
+        {uploadSuccess && (
+          <div className="mb-4 bg-green-50 border border-green-400 rounded-lg p-3 text-sm text-green-700">
+            {uploadSuccess}
+          </div>
+        )}
 
         {/* Top action bar */}
         <div className="flex items-center justify-between mb-4">
@@ -206,7 +450,7 @@ const ESSCIDataPage = () => {
                   BATCH
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">
-                  RECORDS
+                  ATTENDANCE
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">
                   STATUS
@@ -249,7 +493,16 @@ const ESSCIDataPage = () => {
                       {row.batch_number || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {row.total_records}
+                      {row.trainees_attended != null ? (
+                        <span className="text-xs">
+                          A:{row.trainees_attended} P:{row.trainees_passed} F:
+                          {row.trainees_failed} Ab:{row.trainees_absent}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">
+                          Not uploaded
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -262,14 +515,23 @@ const ESSCIDataPage = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() =>
-                          navigate(`${ROUTES.ESSCI_DATA}/${row.id}`)
-                        }
-                        className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-100 transition-colors"
-                      >
-                        View more
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            navigate(`${ROUTES.ESSCI_DATA}/${row.id}`)
+                          }
+                          className="px-3 py-1 text-xs border border-gray-300 rounded-full hover:bg-gray-100 transition-colors"
+                        >
+                          View more
+                        </button>
+                        <button
+                          onClick={() => setUploadRow(row)}
+                          className="px-3 py-1 text-xs bg-[#009530] text-white rounded-full hover:bg-green-700 transition-colors flex items-center gap-1"
+                        >
+                          <ArrowUpTrayIcon className="w-3 h-3" />
+                          Upload
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -304,6 +566,15 @@ const ESSCIDataPage = () => {
           )}
         </div>
       </div>
+
+      {/* Upload Modal */}
+      {uploadRow && (
+        <UploadModal
+          row={uploadRow}
+          onClose={() => setUploadRow(null)}
+          onSuccess={handleUploadSuccess}
+        />
+      )}
     </MainLayout>
   );
 };

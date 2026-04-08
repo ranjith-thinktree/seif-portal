@@ -57,6 +57,18 @@ router.get(
 );
 
 /**
+ * @route   GET /api/v1/partners/simple-list
+ * @desc    Get simple {id, name} list of approved partners for admin dropdowns
+ * @access  Private (Admin, SUPER_ADMIN)
+ */
+router.get(
+  '/simple-list',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  partnerController.getSimpleList
+);
+
+/**
  * @route   POST /api/v1/partners/bulk-upload
  * @desc    Bulk upload partners from CSV
  * @access  Private (ADMIN, SUPER_ADMIN)

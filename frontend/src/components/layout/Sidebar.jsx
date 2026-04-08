@@ -102,12 +102,8 @@ const Sidebar = () => {
         )}
       >
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-b-[#E1E1E1] h-16">
-          <div className="flex justify-center">
-            <div className="rounded-lg flex items-center justify-start">
-              <span className="text-black font-bold text-xl">{userName}</span>
-            </div>
-          </div>
+        <div className="px-4 py-3 border-b border-b-[#E1E1E1] flex items-center justify-center">
+          <Logo size="default" />
         </div>
 
         {/* Navigation Menu */}

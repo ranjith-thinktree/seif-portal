@@ -60,6 +60,7 @@ export const ROUTES = {
   // Common Routes
   NOTIFICATIONS: "/notifications",
   SETTINGS: "/settings",
+  HELP: "/help",
 
   // Error Routes
   NOT_FOUND: "/404",

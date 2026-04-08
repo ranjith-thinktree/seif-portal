@@ -122,6 +122,9 @@ const LoginPage = () => {
         {/* Login Card */}
         <Card>
           <CardContent className="pt-6">
+            <div className="mb-6 flex justify-center">
+              <Logo size="lg" />
+            </div>
             <div className="mb-6">
               <h1 className="text-3xl font text-foreground mb-2">Sign in</h1>
             </div>
@@ -197,7 +200,7 @@ const LoginPage = () => {
             {/* Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input
-                label="user name"
+                label="Email"
                 type="email"
                 name="email"
                 value={formData.email}

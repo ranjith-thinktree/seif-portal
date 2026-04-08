@@ -1,25 +1,23 @@
 import React from "react";
-import { APP_NAME } from "../../constants";
 
 /**
  * Logo Component
- * SEIF Portal logo
+ * Schneider Electric Foundation India logo
  */
 const Logo = ({ className = "", size = "default" }) => {
-  const sizes = {
+  const heights = {
     sm: "h-8",
     default: "h-10",
-    lg: "h-12",
+    lg: "h-14",
   };
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div
-        className={`${sizes[size]} aspect-square bg-primary-500 rounded-lg flex items-center justify-center`}
-      >
-        <span className="text-white font-bold text-xl">S</span>
-      </div>
-      <span className="text-lg font-semibold text-foreground">{APP_NAME}</span>
+    <div className={`flex items-center ${className}`}>
+      <img
+        src="/seif-logo.png"
+        alt="Schneider Electric Foundation India"
+        className={`${heights[size]} w-auto object-contain`}
+      />
     </div>
   );
 };

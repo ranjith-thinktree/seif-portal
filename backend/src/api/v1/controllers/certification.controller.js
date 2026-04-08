@@ -1,10 +1,8 @@
 'use strict';
 
 const certService = require('../services/certification.service');
-const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
-const ExcelJS = require('exceljs');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -14,248 +12,6 @@ const ExcelJS = require('exceljs');
 const toFileUrl = (filePath) => {
   if (!filePath) return null;
   return `/uploads/${path.relative(path.join(__dirname, '../../../../uploads'), filePath).replace(/\\/g, '/')}`;
-};
-
-// Columns expected in the certification data file
-const CERT_COLUMNS = [
-  'Trainee Name',
-  'Student ID',
-  'Course Name',
-  'Assessment Date',
-  'Trainer Name',
-  'Marks',
-  'Status',
-  'Gender',
-];
-
-/**
- * Parse a CSV or Excel (XLSX/XLS/XLSM) file and return plain row objects.
- * Returns array of objects keyed by column name, e.g. { 'Trainee Name': '...' }
- */
-const parseCertDataFile = async (filePath) => {
-  const workbook = new ExcelJS.Workbook();
-
-  // Detect format from magic bytes so renamed files still work
-  let isExcel = false;
-  try {
-    const buf = fs.readFileSync(filePath, { encoding: null });
-    const sig = buf.slice(0, 4).toString('hex');
-    isExcel = sig.startsWith('504b0304') || sig.startsWith('d0cf11e0');
-  } catch (_) {
-    /* fallback: use extension */
-  }
-
-  if (!isExcel) {
-    const ext = path.extname(filePath).toLowerCase();
-    isExcel = ['.xlsx', '.xls', '.xlsm'].includes(ext);
-  }
-
-  if (isExcel) {
-    await workbook.xlsx.readFile(filePath);
-  } else {
-    await workbook.csv.readFile(filePath);
-  }
-
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) throw new Error('No worksheet found in the uploaded file.');
-
-  const rows = [];
-  let headers = null;
-
-  worksheet.eachRow({ includeEmpty: false }, (row, rowIndex) => {
-    if (rowIndex === 1) {
-      headers = row.values.slice(1).map((h) => String(h || '').trim());
-      const missing = CERT_COLUMNS.filter((c) => !headers.includes(c));
-      if (missing.length > 0) {
-        throw new Error(
-          `Missing required columns: ${missing.join(', ')}. Please use the certification data template.`
-        );
-      }
-      return;
-    }
-
-    const rowData = {};
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      const colName = headers[colNumber - 1];
-      if (!colName) return;
-      let val = cell.value;
-      if (val && typeof val === 'object' && val.text !== undefined) val = val.text;
-      if (cell.type === ExcelJS.ValueType.Date && val instanceof Date) {
-        const y = val.getFullYear();
-        const m = String(val.getMonth() + 1).padStart(2, '0');
-        const d = String(val.getDate()).padStart(2, '0');
-        val = `${y}-${m}-${d}`;
-      }
-      if (cell.type === ExcelJS.ValueType.Formula && cell.result !== undefined) val = cell.result;
-      if (cell.type === ExcelJS.ValueType.RichText) val = cell.text;
-      rowData[colName] = val !== null && val !== undefined ? String(val).trim() : '';
-    });
-
-    rows.push(rowData);
-  });
-
-  return rows;
-};
-
-/**
- * Generate a formatted Excel (.xlsx) template for certification data.
- */
-const generateCertExcelTemplate = async () => {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'SEIF Portal';
-  workbook.created = new Date();
-
-  // Data sheet
-  const ws = workbook.addWorksheet('Certification Upload', {
-    properties: { tabColor: { argb: 'FF009530' } },
-    views: [{ state: 'frozen', ySplit: 1 }],
-  });
-
-  ws.columns = [
-    { header: 'Trainee Name', key: 'traineeName', width: 28 },
-    { header: 'Student ID', key: 'studentId', width: 18 },
-    { header: 'Course Name', key: 'courseName', width: 30 },
-    { header: 'Assessment Date', key: 'assessmentDate', width: 20 },
-    { header: 'Trainer Name', key: 'trainerName', width: 28 },
-    { header: 'Marks', key: 'marks', width: 12 },
-    { header: 'Status', key: 'status', width: 14 },
-    { header: 'Gender', key: 'gender', width: 12 },
-  ];
-
-  // Header styling
-  const headerRow = ws.getRow(1);
-  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF009530' } };
-  headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-  headerRow.height = 30;
-  headerRow.eachCell((cell) => {
-    cell.border = {
-      top: { style: 'thin', color: { argb: 'FF000000' } },
-      left: { style: 'thin', color: { argb: 'FF000000' } },
-      bottom: { style: 'thin', color: { argb: 'FF000000' } },
-      right: { style: 'thin', color: { argb: 'FF000000' } },
-    };
-  });
-
-  // Sample rows
-  const SAMPLE = [
-    {
-      traineeName: 'Ravi Kumar',
-      studentId: 'STU001',
-      courseName: 'Electrical Technician',
-      assessmentDate: '2026-03-01',
-      trainerName: 'Priya Singh',
-      marks: 88,
-      status: 'pass',
-      gender: 'Male',
-    },
-    {
-      traineeName: 'Sunita Devi',
-      studentId: 'STU002',
-      courseName: 'Plumbing',
-      assessmentDate: '2026-03-01',
-      trainerName: 'Amit Sharma',
-      marks: 72,
-      status: 'pass',
-      gender: 'Female',
-    },
-    {
-      traineeName: 'Mohd. Arif',
-      studentId: 'STU003',
-      courseName: 'Electrical Technician',
-      assessmentDate: '2026-03-01',
-      trainerName: 'Priya Singh',
-      marks: 45,
-      status: 'fail',
-      gender: 'Male',
-    },
-    {
-      traineeName: 'Kavitha Reddy',
-      studentId: 'STU004',
-      courseName: 'Computer Basics',
-      assessmentDate: '2026-03-02',
-      trainerName: 'Rahul Das',
-      marks: 0,
-      status: 'absent',
-      gender: 'Female',
-    },
-  ];
-
-  SAMPLE.forEach((s) => {
-    const dataRow = ws.addRow(s);
-    dataRow.eachCell((cell) => {
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FFD3D3D3' } },
-        left: { style: 'thin', color: { argb: 'FFD3D3D3' } },
-        bottom: { style: 'thin', color: { argb: 'FFD3D3D3' } },
-        right: { style: 'thin', color: { argb: 'FFD3D3D3' } },
-      };
-    });
-  });
-
-  // Status column dropdown validation (col G = 7)
-  for (let r = 2; r <= 200; r++) {
-    ws.getCell(`G${r}`).dataValidation = {
-      type: 'list',
-      allowBlank: true,
-      formulae: ['"pass,fail,absent"'],
-      showErrorMessage: true,
-      errorTitle: 'Invalid Status',
-      error: 'Select pass, fail, or absent',
-    };
-  }
-
-  // Gender column dropdown validation (col H = 8)
-  for (let r = 2; r <= 200; r++) {
-    ws.getCell(`H${r}`).dataValidation = {
-      type: 'list',
-      allowBlank: true,
-      formulae: ['"Male,Female,Other"'],
-      showErrorMessage: true,
-      errorTitle: 'Invalid Gender',
-      error: 'Select Male, Female, or Other',
-    };
-  }
-
-  // Instructions sheet
-  const instr = workbook.addWorksheet('Instructions', {
-    properties: { tabColor: { argb: 'FFFF9900' } },
-  });
-  instr.columns = [{ header: '', key: 'text', width: 80 }];
-  const lines = [
-    'SEIF Portal — Certification Data Upload Template',
-    '',
-    'REQUIRED COLUMNS (do not rename headers):',
-    '1. Trainee Name       — Full name of the student',
-    '2. Student ID         — Your internal student ID (optional)',
-    '3. Course Name        — Name of the course attended',
-    '4. Assessment Date    — Date of assessment (YYYY-MM-DD)',
-    '5. Trainer Name       — Name of the trainer',
-    '6. Marks              — Marks obtained (number)',
-    '7. Status             — pass / fail / absent (dropdown)',
-    '8. Gender             — Male / Female / Other (dropdown)',
-    '',
-    'Assessment Date format: YYYY-MM-DD (e.g., 2026-03-15)',
-    '',
-    'Supported file formats: .xlsx, .xls, .csv, .xlsm',
-    '',
-    'For support: contact SEIF Portal Administrator',
-  ];
-  lines.forEach((text, i) => {
-    const lr = instr.getRow(i + 1);
-    lr.getCell('A').value = text;
-    lr.getCell('A').alignment = { wrapText: true, vertical: 'top' };
-    if (i === 0) lr.getCell('A').font = { bold: true, size: 13, color: { argb: 'FF009530' } };
-    else if (
-      text.startsWith('REQUIRED') ||
-      text.startsWith('Supported') ||
-      text.startsWith('Assessment Date')
-    ) {
-      lr.getCell('A').font = { bold: true, size: 11 };
-    }
-  });
-
-  return workbook;
 };
 
 const cleanupFile = (fp) => {
@@ -274,84 +30,49 @@ const cleanupFile = (fp) => {
 
 /**
  * POST /certification/upload
- * Multipart: dataFile (CSV) + validationDoc (PDF/image)
- * Body: centerId, batchId
+ * Multipart: supportDoc (optional)
+ * Body: centerId, batchId, batchStartDate, batchEndDate, assessmentDate
  */
 exports.uploadCertificationData = async (req, res) => {
-  const dataFile = req.files?.dataFile?.[0];
-  const validationDoc = req.files?.validationDoc?.[0];
-
+  const supportDoc = req.file; // single file from uploadCertificationFiles middleware
   try {
-    const partnerId = req.user.partner_id || req.user.id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    const targetPartnerId = req.body.targetPartnerId || null;
+    let partnerId = req.user.partner_id || req.user.id;
+    if (isAdmin && targetPartnerId) {
+      partnerId = targetPartnerId;
+    }
     const uploadedBy = req.user.id;
-    const { centerId, batchId } = req.body;
+    const { centerId, batchId, batchStartDate, batchEndDate, assessmentDate } = req.body;
 
     if (!centerId || !batchId) {
-      cleanupFile(dataFile?.path);
-      cleanupFile(validationDoc?.path);
+      cleanupFile(supportDoc?.path);
       return res.status(400).json({ success: false, message: 'centerId and batchId are required' });
     }
 
-    if (!dataFile) {
-      cleanupFile(validationDoc?.path);
-      return res
-        .status(400)
-        .json({ success: false, message: 'Data file (CSV or Excel) is required' });
-    }
-
-    // Parse CSV or Excel
-    const rows = await parseCertDataFile(dataFile.path);
-    if (rows.length === 0) {
-      cleanupFile(dataFile?.path);
-      cleanupFile(validationDoc?.path);
-      return res.status(400).json({ success: false, message: 'Data file contains no data rows' });
-    }
-
-    const fileUrl = toFileUrl(dataFile.path);
-    const validationDocUrl = validationDoc ? toFileUrl(validationDoc.path) : null;
+    const supportDocUrl = supportDoc ? toFileUrl(supportDoc.path) : null;
 
     const result = await certService.createCertificationUpload({
       partnerId,
       centerId,
       batchId,
-      fileUrl,
-      fileName: dataFile.originalname,
-      fileSizeBytes: dataFile.size,
-      validationDocUrl,
-      validationDocName: validationDoc?.originalname || null,
-      rows,
+      batchStartDate: batchStartDate || null,
+      batchEndDate: batchEndDate || null,
+      assessmentDate: assessmentDate || null,
+      supportDocUrl,
+      supportDocName: supportDoc?.originalname || null,
       uploadedBy,
     });
 
     res.json({
       success: true,
-      message: `Certification data uploaded successfully (${rows.length} records)`,
+      message: 'Certification data submitted successfully. Awaiting admin approval.',
       data: result,
     });
   } catch (error) {
-    cleanupFile(dataFile?.path);
-    cleanupFile(validationDoc?.path);
+    cleanupFile(supportDoc?.path);
     console.error('[certController] uploadCertificationData error:', error);
     res.status(500).json({ success: false, message: error.message || 'Upload failed' });
-  }
-};
-
-/**
- * GET /certification/template
- */
-exports.downloadTemplate = async (req, res) => {
-  try {
-    const workbook = await generateCertExcelTemplate();
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader('Content-Disposition', 'attachment; filename="Certification_Data_Template.xlsx"');
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (error) {
-    console.error('[certController] downloadTemplate error:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate template' });
   }
 };
 
@@ -578,43 +299,66 @@ exports.essciGetBatches = async (req, res) => {
 
 /**
  * POST /certification/essci/upload-pdf
- * Single file: 'file' (PDF)
- * Body: partnerId, centerId, batchId, [certificationUploadId]
+ * Multipart: zipFile (archive) + studentListDoc (document)
+ * Body: partnerId, centerId, batchId, [certificationUploadId],
+ *       traineesAttended, traineesPassed, traineesFailed, traineesAbsent
  */
 exports.essciUploadPDF = async (req, res) => {
+  const zipFile = req.files?.zipFile?.[0];
+  const studentListDoc = req.files?.studentListDoc?.[0];
   try {
     const uploadedBy = req.user.id;
-    const { partnerId, centerId, batchId, certificationUploadId } = req.body;
+    const {
+      partnerId,
+      centerId,
+      batchId,
+      certificationUploadId,
+      traineesAttended,
+      traineesPassed,
+      traineesFailed,
+      traineesAbsent,
+    } = req.body;
 
     if (!partnerId || !centerId || !batchId) {
-      cleanupFile(req.file?.path);
+      cleanupFile(zipFile?.path);
+      cleanupFile(studentListDoc?.path);
       return res
         .status(400)
         .json({ success: false, message: 'partnerId, centerId, and batchId are required' });
     }
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'PDF file is required' });
+    if (!zipFile) {
+      cleanupFile(studentListDoc?.path);
+      return res.status(400).json({ success: false, message: 'ZIP archive file is required' });
+    }
+    if (!studentListDoc) {
+      cleanupFile(zipFile?.path);
+      return res.status(400).json({ success: false, message: 'Student list document is required' });
     }
 
-    const fileUrl = toFileUrl(req.file.path);
     const result = await certService.uploadCertificatePDF({
       partnerId,
       centerId,
       batchId,
       certificationUploadId: certificationUploadId || null,
-      fileUrl,
-      fileName: req.file.originalname,
-      fileSizeBytes: req.file.size,
+      traineesAttended: parseInt(traineesAttended) || 0,
+      traineesPassed: parseInt(traineesPassed) || 0,
+      traineesFailed: parseInt(traineesFailed) || 0,
+      traineesAbsent: parseInt(traineesAbsent) || 0,
+      zipFileUrl: toFileUrl(zipFile.path),
+      zipFileName: zipFile.originalname,
+      studentListUrl: toFileUrl(studentListDoc.path),
+      studentListName: studentListDoc.originalname,
       uploadedBy,
     });
 
     res.json({
       success: true,
-      message: 'Certificate PDF uploaded and pending admin review',
+      message: 'Certificate data uploaded and pending admin review',
       data: result,
     });
   } catch (error) {
-    cleanupFile(req.file?.path);
+    cleanupFile(zipFile?.path);
+    cleanupFile(studentListDoc?.path);
     console.error('[certController] essciUploadPDF error:', error);
     res.status(500).json({ success: false, message: error.message || 'Upload failed' });
   }

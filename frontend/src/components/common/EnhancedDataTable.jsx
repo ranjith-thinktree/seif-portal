@@ -455,6 +455,7 @@ export const StatusBadge = ({ status }) => {
   const variants = {
     active: "bg-green-100 text-green-800 py-2 px-4",
     inactive: "bg-gray-100 text-gray-800 py-2 px-4",
+    suspended: "bg-orange-100 text-orange-800 py-2 px-4",
     pending: "bg-orange-100 text-orange-800 py-2 px-4",
     approved: "bg-green-100 text-green-800 py-2 px-4",
     rejected: "bg-red-100 text-red-800 py-2 px-4",

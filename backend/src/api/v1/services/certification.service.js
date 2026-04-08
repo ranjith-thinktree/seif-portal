@@ -5,143 +5,69 @@ const { v4: uuidv4 } = require('uuid');
 const notificationService = require('./notification.service');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CSV Template columns for partner certification upload
-// ─────────────────────────────────────────────────────────────────────────────
-const CERT_CSV_COLUMNS = [
-  'Trainee Name',
-  'Student ID',
-  'Course Name',
-  'Assessment Date',
-  'Trainer Name',
-  'Marks',
-  'Status',
-  'Gender',
-];
-
-/**
- * Generate a plain CSV template string
- */
-const generateCertificationTemplate = () => {
-  const header = CERT_CSV_COLUMNS.join(',');
-  const sampleRow = [
-    'John Doe',
-    'STU001',
-    'Electrical Technician',
-    '2026-03-01',
-    'Jane Smith',
-    '85',
-    'pass',
-    'Male',
-  ].join(',');
-  return `${header}\n${sampleRow}\n`;
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PARTNER: Upload certification data (CSV rows stored as uploaded_certifications)
+// PARTNER: Create a certification upload record (form-based, no CSV rows)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Create a certification_upload record and store parsed CSV rows.
- *
  * @param {Object} params
  * @param {string} params.partnerId
  * @param {string} params.centerId
  * @param {string} params.batchId
- * @param {string|null} params.fileUrl
- * @param {string|null} params.fileName
- * @param {number|null} params.fileSizeBytes
- * @param {string|null} params.validationDocUrl
- * @param {string|null} params.validationDocName
- * @param {Array<Object>} params.rows  - Parsed CSV rows
- * @param {string} params.uploadedBy  - user id
- * @returns {Promise<Object>}
+ * @param {string|null} params.batchStartDate  YYYY-MM-DD
+ * @param {string|null} params.batchEndDate    YYYY-MM-DD
+ * @param {string|null} params.assessmentDate  YYYY-MM-DD
+ * @param {string|null} params.supportDocUrl
+ * @param {string|null} params.supportDocName
+ * @param {string}      params.uploadedBy      user id
  */
 const createCertificationUpload = async (params) => {
   const {
     partnerId,
     centerId,
     batchId,
-    fileUrl,
-    fileName,
-    fileSizeBytes,
-    validationDocUrl,
-    validationDocName,
-    rows,
+    batchStartDate,
+    batchEndDate,
+    assessmentDate,
+    supportDocUrl,
+    supportDocName,
     uploadedBy,
   } = params;
 
-  const connection = await db.pool.getConnection();
-  try {
-    await connection.beginTransaction();
+  const uploadId = uuidv4();
+  await db.query(
+    `INSERT INTO certification_uploads
+       (id, partner_id, center_id, batch_id,
+        batch_start_date, batch_end_date, assessment_date,
+        support_doc_url, support_doc_name,
+        status, uploaded_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW())`,
+    [
+      uploadId,
+      partnerId,
+      centerId,
+      batchId,
+      batchStartDate || null,
+      batchEndDate || null,
+      assessmentDate || null,
+      supportDocUrl || null,
+      supportDocName || null,
+      uploadedBy,
+    ]
+  );
 
-    const uploadId = uuidv4();
-    await connection.query(
-      `INSERT INTO certification_uploads
-         (id, partner_id, center_id, batch_id,
-          file_url, file_name, file_size_bytes,
-          validation_doc_url, validation_doc_name,
-          total_records, status, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW())`,
-      [
-        uploadId,
-        partnerId,
-        centerId,
-        batchId,
-        fileUrl,
-        fileName,
-        fileSizeBytes || null,
-        validationDocUrl,
-        validationDocName,
-        rows.length,
-        uploadedBy,
-      ]
-    );
+  // Notify all admins
+  await db.query(
+    `INSERT INTO notifications
+       (id, recipient_role, type, alert_type, title, message,
+        related_entity_type, related_entity_id, is_read, sent_via, created_at)
+     VALUES (UUID(), 'ADMIN', 'certification_upload', 'info',
+       'New Certification Data Uploaded',
+       'A partner has submitted certification data for review.',
+       'certification_upload', ?, 0, 'platform', NOW())`,
+    [uploadId]
+  );
 
-    // Insert individual student rows
-    for (const row of rows) {
-      await connection.query(
-        `INSERT INTO uploaded_certifications
-           (id, certification_upload_id, partner_id, center_id, batch_id,
-            trainee_name, student_id, course_name, assessment_date,
-            trainer_name, marks, status, gender, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [
-          uuidv4(),
-          uploadId,
-          partnerId,
-          centerId,
-          batchId,
-          row.trainee_name || row['Trainee Name'] || '',
-          row.student_id || row['Student ID'] || null,
-          row.course_name || row['Course Name'] || null,
-          row.assessment_date || row['Assessment Date'] || null,
-          row.trainer_name || row['Trainer Name'] || null,
-          row.marks !== undefined ? row.marks : row['Marks'] !== undefined ? row['Marks'] : null,
-          row.status || row['Status'] || null,
-          row.gender || row['Gender'] || null,
-        ]
-      );
-    }
-
-    // Notify all admins
-    await connection.query(
-      `INSERT INTO notifications
-         (id, recipient_role, type, alert_type, title, message,
-          related_entity_type, related_entity_id, is_read, sent_via, created_at)
-       VALUES (UUID(), 'ADMIN', 'certification_upload', 'info',
-         'New Certification Data Uploaded',
-         ?, 'certification_upload', ?, 0, 'platform', NOW())`,
-      [`A partner has uploaded certification data for review (${rows.length} records).`, uploadId]
-    );
-
-    await connection.commit();
-    return { uploadId, totalRecords: rows.length };
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
-  }
+  return { uploadId };
 };
 
 /**
@@ -169,7 +95,7 @@ const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
 };
 
 /**
- * Get one upload + its student rows.
+ * Get one upload + associated students from the students table.
  */
 const getUploadDetails = async (uploadId, partnerId = null) => {
   const whereExtra = partnerId ? 'AND cu.partner_id = ?' : '';
@@ -189,9 +115,13 @@ const getUploadDetails = async (uploadId, partnerId = null) => {
   );
   if (!upload) return null;
 
+  // Fetch approved students for this batch from the main students table
   const [students] = await db.query(
-    'SELECT * FROM uploaded_certifications WHERE certification_upload_id = ? ORDER BY trainee_name',
-    [uploadId]
+    `SELECT id, student_name AS trainee_name, student_id, gender
+     FROM students
+     WHERE batch_id = ? AND status = 'approved'
+     ORDER BY student_name`,
+    [upload.batch_id]
   );
   return { ...upload, students };
 };
@@ -376,15 +306,22 @@ const getESSCIData = async ({ page = 1, limit = 20, search, filter } = {}) => {
        cu.partner_id,
        cu.center_id,
        cu.batch_id,
-       cu.total_records,
+       cu.batch_start_date,
+       cu.batch_end_date,
+       cu.assessment_date,
+       cu.support_doc_url,
+       cu.support_doc_name,
        cu.created_at,
        p.name      as partner_name,
-       p.type      as partner_type,
+       p.organization_type as partner_type,
        c.center_name,
        b.batch_number,
        cp.id       as pdf_id,
        cp.status   as pdf_status,
-       cp.file_url as pdf_url,
+       cp.trainees_attended,
+       cp.trainees_passed,
+       cp.trainees_failed,
+       cp.trainees_absent,
        CASE
          WHEN cp.id IS NULL            THEN 'Ongoing'
          WHEN cp.status = 'pending'    THEN 'Under review'
@@ -409,10 +346,14 @@ const getESSCIData = async ({ page = 1, limit = 20, search, filter } = {}) => {
     `SELECT
        COUNT(DISTINCT cu.partner_id)  as total_partners,
        COUNT(DISTINCT cu.center_id)   as total_centers,
-       COALESCE(SUM(cu.total_records), 0)   as total_students,
-       (SELECT COUNT(*) FROM uploaded_certifications uc
-        JOIN certification_uploads cu2 ON cu2.id = uc.certification_upload_id
-        WHERE cu2.status = 'approved' AND (uc.gender = 'Female' OR uc.gender = 'female')) as female_trainees
+       (SELECT COUNT(*) FROM students s
+        JOIN batches   bx ON bx.id = s.batch_id
+        JOIN certification_uploads cu2 ON cu2.batch_id = bx.id AND cu2.status = 'approved'
+        WHERE s.status = 'approved') as total_students,
+       (SELECT COUNT(*) FROM students s
+        JOIN batches   bx ON bx.id = s.batch_id
+        JOIN certification_uploads cu2 ON cu2.batch_id = bx.id AND cu2.status = 'approved'
+        WHERE s.status = 'approved' AND (s.gender = 'Female' OR s.gender = 'female')) as female_trainees
      FROM certification_uploads cu
      WHERE cu.status = 'approved'`
   );
@@ -483,9 +424,14 @@ const uploadCertificatePDF = async ({
   centerId,
   batchId,
   certificationUploadId,
-  fileUrl,
-  fileName,
-  fileSizeBytes,
+  traineesAttended,
+  traineesPassed,
+  traineesFailed,
+  traineesAbsent,
+  zipFileUrl,
+  zipFileName,
+  studentListUrl,
+  studentListName,
   uploadedBy,
 }) => {
   const connection = await db.pool.getConnection();
@@ -496,17 +442,24 @@ const uploadCertificatePDF = async ({
     await connection.query(
       `INSERT INTO certification_pdfs
          (id, certification_upload_id, partner_id, center_id, batch_id,
-          file_url, file_name, file_size_bytes, status, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW())`,
+          trainees_attended, trainees_passed, trainees_failed, trainees_absent,
+          zip_file_url, zip_file_name, student_list_url, student_list_name,
+          status, uploaded_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW())`,
       [
         pdfId,
         certificationUploadId || null,
         partnerId,
         centerId,
         batchId,
-        fileUrl,
-        fileName,
-        fileSizeBytes || null,
+        traineesAttended || 0,
+        traineesPassed || 0,
+        traineesFailed || 0,
+        traineesAbsent || 0,
+        zipFileUrl || null,
+        zipFileName || null,
+        studentListUrl || null,
+        studentListName || null,
         uploadedBy,
       ]
     );
@@ -517,8 +470,8 @@ const uploadCertificatePDF = async ({
          (id, recipient_role, type, alert_type, title, message,
           related_entity_type, related_entity_id, is_read, sent_via, created_at)
        VALUES (UUID(), 'ADMIN', 'certification_pdf_uploaded', 'info',
-         'Certificate PDF Uploaded by ESSCI',
-         'An ESSCI member has uploaded a certificate PDF for admin review.',
+         'Certificate Data Uploaded by ESSCI',
+         'An ESSCI member has uploaded attendance and certificate data for admin review.',
          'certification_pdf', ?, 0, 'platform', NOW())`,
       [pdfId]
     );
@@ -690,8 +643,6 @@ const getPartnerCertificatePDFs = async (partnerId, { page = 1, limit = 20 } = {
 };
 
 module.exports = {
-  CERT_CSV_COLUMNS,
-  generateCertificationTemplate,
   createCertificationUpload,
   getPartnerUploads,
   getUploadDetails,

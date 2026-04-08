@@ -622,6 +622,21 @@ class PartnerController {
       return errorResponse(res, error.message || 'Failed to delete partners', 500);
     }
   }
+
+  /**
+   * Get simple list of approved partners for admin dropdowns
+   * @route GET /api/v1/partners/simple-list
+   * @access Admin, SUPER_ADMIN
+   */
+  async getSimpleList(req, res) {
+    try {
+      const list = await partnerService.getSimpleList();
+      return successResponse(res, 'Partner list retrieved', list);
+    } catch (error) {
+      console.error('Error in getSimpleList:', error);
+      return errorResponse(res, error.message || 'Failed to retrieve partners', 500);
+    }
+  }
 }
 
 module.exports = new PartnerController();

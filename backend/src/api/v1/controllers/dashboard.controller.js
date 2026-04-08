@@ -64,6 +64,26 @@ class DashboardController {
   }
 
   /**
+   * Get detailed course breakdown for a specific state
+   * @route GET /api/v1/dashboard/state-detail
+   * @access Admin, Super Admin
+   */
+  static async getStateDetail(req, res, next) {
+    try {
+      const { state, year } = req.query;
+
+      if (!state) {
+        return res.status(400).json({ success: false, message: 'State name is required' });
+      }
+
+      const detail = await DashboardService.getStateDetail(state, year);
+      return ApiResponse.success(res, detail, 'State detail retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Get SEIF/ESSCI dashboard
    * @route GET /api/v1/dashboard/seif
    * @access SEIF_READONLY, ESSCI, Admin, Super Admin

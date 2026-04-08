@@ -4,7 +4,12 @@ import React from "react";
  * India Map SVG Component with accurate state boundaries
  * Uses SimpleMaps data for precise geographical representation
  */
-const IndiaMap = ({ stateColors, onStateHover, onStateLeave }) => {
+const IndiaMap = ({
+  stateColors,
+  onStateHover,
+  onStateLeave,
+  onStateClick,
+}) => {
   const handleMouseEnter = (stateCode) => {
     if (onStateHover) {
       onStateHover(stateCode);
@@ -14,6 +19,12 @@ const IndiaMap = ({ stateColors, onStateHover, onStateLeave }) => {
   const handleMouseLeave = () => {
     if (onStateLeave) {
       onStateLeave();
+    }
+  };
+
+  const handleClick = (stateCode) => {
+    if (onStateClick) {
+      onStateClick(stateCode);
     }
   };
 
@@ -156,6 +167,7 @@ const IndiaMap = ({ stateColors, onStateHover, onStateLeave }) => {
               strokeWidth="0.5"
               onMouseEnter={() => handleMouseEnter(state.code)}
               onMouseLeave={handleMouseLeave}
+              onClick={() => handleClick(state.code)}
               style={{
                 cursor: "pointer",
                 transition: "fill 0.15s ease",

@@ -88,4 +88,17 @@ router.get(
   DashboardController.getStateStats
 );
 
+/**
+ * @route   GET /api/v1/dashboard/state-detail
+ * @desc    Get detailed course breakdown for a specific state
+ * @access  Admin, Super Admin
+ * @query   state - Full state name, year - Optional year filter
+ */
+router.get(
+  '/state-detail',
+  authenticate,
+  checkRole([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]),
+  DashboardController.getStateDetail
+);
+
 module.exports = router;

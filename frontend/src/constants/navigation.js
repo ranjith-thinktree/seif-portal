@@ -17,6 +17,7 @@ import {
   CircleStackIcon,
   CommandLineIcon,
   WrenchScrewdriverIcon,
+  QuestionMarkCircleIcon,
 } from "@heroicons/react/24/outline";
 import { ROLES } from "./roles";
 import { ROUTES } from "./routes";
@@ -52,7 +53,7 @@ export const SIDEBAR_MENU = [
     name: "Upload",
     path: ROUTES.UPLOAD_DATA,
     icon: ArrowUpTrayIcon,
-    roles: [ROLES.PARTNER],
+    roles: [ROLES.PARTNER, ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   // {
   //   name: "Employment Upload",
@@ -109,12 +110,6 @@ export const SIDEBAR_MENU = [
     roles: [ROLES.ESSCI],
   },
   {
-    name: "Upload Certificates",
-    path: ROUTES.ESSCI_UPLOAD,
-    icon: ArrowUpTrayIcon,
-    roles: [ROLES.ESSCI],
-  },
-  {
     name: "Refurbishment",
     path: ROUTES.REFURBISHMENT,
     icon: WrenchScrewdriverIcon,
@@ -124,12 +119,6 @@ export const SIDEBAR_MENU = [
     name: "Employment",
     path: ROUTES.EMPLOYMENT_MANAGEMENT,
     icon: AcademicCapIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  },
-  {
-    name: "Analytics",
-    path: ROUTES.ANALYTICS,
-    icon: ChartBarIcon,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {
@@ -167,6 +156,18 @@ export const SIDEBAR_MENU = [
     path: ROUTES.ADMIN_TERMINAL,
     icon: CommandLineIcon,
     roles: [ROLES.SUPER_ADMIN],
+  },
+  {
+    name: "Help",
+    path: ROUTES.HELP,
+    icon: QuestionMarkCircleIcon,
+    roles: [
+      ROLES.SUPER_ADMIN,
+      ROLES.ADMIN,
+      ROLES.PARTNER,
+      ROLES.SEIF_READONLY,
+      ROLES.ESSCI,
+    ],
   },
 ];
 

@@ -52,15 +52,20 @@ const downloadTemplate = async (req, res, next) => {
  */
 const downloadDynamicTemplate = async (req, res, next) => {
   try {
-    // Only partners can download templates
-    if (!req.user || !req.user.partner_id) {
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user?.role);
+
+    // Determine partnerId: admin can pass ?partnerId=, partners use their own
+    let partnerId;
+    if (isAdmin && req.query.partnerId) {
+      partnerId = req.query.partnerId;
+    } else if (req.user?.partner_id) {
+      partnerId = req.user.partner_id;
+    } else {
       return res.status(403).json({
         success: false,
-        message: 'Only partners can download templates',
+        message: 'Partner ID required. Please select a partner or log in as a partner user.',
       });
     }
-
-    const partnerId = req.user.partner_id;
 
     // Get partner info
     const partnerData = await uploadService.getPartnerById(partnerId);
@@ -125,7 +130,21 @@ const uploadCSV = async (req, res, next) => {
       });
     }
 
-    const partnerId = req.user.partner_id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    const targetPartnerId = req.body.targetPartnerId || null;
+    let partnerId = req.user.partner_id;
+
+    if (isAdmin && targetPartnerId) {
+      // Admin uploading on behalf of a partner
+      partnerId = targetPartnerId;
+    } else if (!partnerId) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Partner ID not found. Please ensure you are logged in as a partner user or select a partner.',
+      });
+    }
+
     const userId = req.user.id;
     const filePath = req.file.path;
     const fileName = req.file.originalname;
@@ -376,10 +395,20 @@ const confirmUpload = async (req, res, next) => {
       });
     }
 
-    const partnerId = req.user.partner_id;
-    const userId = req.user.id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    const targetPartnerId = req.body.targetPartnerId || null;
+    let partnerId = req.user.partner_id;
 
-    // Re-parse and validate file using ExcelJS
+    if (isAdmin && targetPartnerId) {
+      partnerId = targetPartnerId;
+    } else if (!partnerId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Partner ID not found.',
+      });
+    }
+
+    const userId = req.user.id;
     const { rows, totalRows, fileFormat } = await excelHandler.parseExcelFile(filePath, fileName);
     const availableCourses = await uploadService.getAllCourses();
 
@@ -455,6 +484,11 @@ const getUploads = async (req, res, next) => {
     const partnerId = req.user.partner_id;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const { status, dateFrom, dateTo } = req.query;
+    const filters = {};
+    if (status) filters.status = status;
+    if (dateFrom) filters.dateFrom = dateFrom;
+    if (dateTo) filters.dateTo = dateTo;
 
     if (!partnerId) {
       return res.status(400).json({
@@ -463,7 +497,7 @@ const getUploads = async (req, res, next) => {
       });
     }
 
-    const result = await uploadService.getPartnerUploads(partnerId, page, limit);
+    const result = await uploadService.getPartnerUploads(partnerId, page, limit, filters);
 
     res.status(200).json({
       success: true,
@@ -511,8 +545,13 @@ const getAllUploadsForAdmin = async (req, res, next) => {
     const status = req.query.status || null;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const { dateFrom, dateTo, partnerId: filterPartnerId } = req.query;
+    const filters = {};
+    if (dateFrom) filters.dateFrom = dateFrom;
+    if (dateTo) filters.dateTo = dateTo;
+    if (filterPartnerId) filters.partnerId = filterPartnerId;
 
-    const result = await uploadService.getAllUploadsForAdmin(status, page, limit);
+    const result = await uploadService.getAllUploadsForAdmin(status, page, limit, filters);
 
     res.status(200).json({
       success: true,
@@ -744,6 +783,72 @@ const bulkDeleteUploads = async (req, res) => {
   }
 };
 
+/**
+ * Download the original uploaded file (B10)
+ * GET /api/v1/uploads/:id/download
+ * Partners can download their own, admins can download any
+ */
+const downloadUploadFile = async (req, res, next) => {
+  try {
+    const uploadId = req.params.id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    const partnerId = req.user.partner_id;
+
+    // Fetch upload record
+    const [rows] = await require('../../../database/connection').query(
+      `SELECT id, file_name, file_url, partner_id FROM data_uploads WHERE id = ? AND deleted_at IS NULL`,
+      [uploadId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Upload not found' });
+    }
+
+    const upload = rows[0];
+
+    // Partners can only download their own uploads
+    if (!isAdmin && upload.partner_id !== partnerId) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const fileUrl = upload.file_url;
+    if (!fileUrl) {
+      return res.status(404).json({ success: false, message: 'No file stored for this upload' });
+    }
+
+    // S3 file: generate presigned URL (valid 15 min)
+    if (fileUrl.startsWith('http') || fileUrl.includes('.amazonaws.com')) {
+      const { generatePresignedUrl } = require('../../../utils/s3.util');
+      // Extract S3 key from full URL
+      let s3Key = fileUrl;
+      if (fileUrl.startsWith('http')) {
+        try {
+          const u = new URL(fileUrl);
+          s3Key = u.pathname.replace(/^\//, '');
+        } catch (_) {}
+      }
+      const presignedUrl = await generatePresignedUrl(s3Key, 900); // 15 min
+      return res.json({
+        success: true,
+        data: { downloadUrl: presignedUrl, fileName: upload.file_name },
+      });
+    }
+
+    // Local file: stream it
+    const absPath = path.isAbsolute(fileUrl)
+      ? fileUrl
+      : path.join(__dirname, '../../../../', fileUrl);
+
+    if (!fs.existsSync(absPath)) {
+      return res.status(404).json({ success: false, message: 'File not found on server' });
+    }
+
+    res.download(absPath, upload.file_name);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   downloadTemplate,
   downloadDynamicTemplate,
@@ -759,4 +864,5 @@ module.exports = {
   resubmitUpload,
   deleteUpload,
   bulkDeleteUploads,
+  downloadUploadFile,
 };

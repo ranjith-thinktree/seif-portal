@@ -28,17 +28,25 @@ export const downloadTemplate = async () => {
 
 /**
  * Download CSV template with dynamic partner name (authenticated)
+ * @param {string|null} targetPartnerId - admin only: generate template for this partner
  */
-export const downloadDynamicTemplate = async () => {
+export const downloadDynamicTemplate = async (targetPartnerId = null) => {
+  const params = targetPartnerId ? { partnerId: targetPartnerId } : {};
   const response = await apiClient.get("/uploads/download-template", {
     responseType: "blob",
+    params,
   });
+
+  // Derive filename from Content-Disposition header if available
+  const disposition = response.headers?.["content-disposition"] || "";
+  const match = disposition.match(/filename="?([^";\n]+)"?/);
+  const fileName = match ? match[1] : "SEIF_Data_Upload_Template.xlsx";
 
   // Create download link
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement("a");
   link.href = url;
-  link.setAttribute("download", "SEIF_Data_Upload_Template.csv");
+  link.setAttribute("download", fileName);
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -50,9 +58,10 @@ export const downloadDynamicTemplate = async () => {
 /**
  * Upload CSV file for validation and preview
  */
-export const uploadCSV = async (file) => {
+export const uploadCSV = async (file, targetPartnerId = null) => {
   const formData = new FormData();
   formData.append("file", file);
+  if (targetPartnerId) formData.append("targetPartnerId", targetPartnerId);
 
   const response = await apiClient.post("/uploads", formData, {
     headers: {
@@ -66,10 +75,15 @@ export const uploadCSV = async (file) => {
 /**
  * Confirm upload after preview
  */
-export const confirmUpload = async (filePath, fileName) => {
+export const confirmUpload = async (
+  filePath,
+  fileName,
+  targetPartnerId = null,
+) => {
   const response = await apiClient.post("/uploads/confirm", {
     filePath,
     fileName,
+    ...(targetPartnerId ? { targetPartnerId } : {}),
   });
 
   return response.data;
@@ -78,10 +92,13 @@ export const confirmUpload = async (filePath, fileName) => {
 /**
  * Get partner's upload history
  */
-export const getUploads = async (page = 1, limit = 10) => {
-  const response = await apiClient.get("/uploads", {
-    params: { page, limit },
-  });
+export const getUploads = async (page = 1, limit = 10, filters = {}) => {
+  const params = { page, limit };
+  if (filters.status) params.status = filters.status;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo) params.dateTo = filters.dateTo;
+
+  const response = await apiClient.get("/uploads", { params });
 
   return response.data;
 };
@@ -100,10 +117,14 @@ export const getUploadDetails = async (uploadId) => {
 export const getAllUploadsForAdmin = async (
   status = null,
   page = 1,
-  limit = 10
+  limit = 10,
+  filters = {},
 ) => {
   const params = { page, limit };
   if (status) params.status = status;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo) params.dateTo = filters.dateTo;
+  if (filters.partnerId) params.partnerId = filters.partnerId;
 
   const response = await apiClient.get("/uploads/admin/all", { params });
   return response.data;
@@ -133,7 +154,7 @@ export const approveUpload = async (uploadId, remarks = null) => {
 export const rejectUpload = async (
   uploadId,
   rejectionReason,
-  remarks = null
+  remarks = null,
 ) => {
   const response = await apiClient.post(`/uploads/${uploadId}/reject`, {
     rejectionReason,
@@ -161,6 +182,37 @@ export const deleteUpload = async (uploadId) => {
 };
 
 /**
+ * Download the original uploaded file (B10)
+ * Handles both S3 presigned URL redirect and direct file stream
+ */
+export const downloadUploadFile = async (uploadId, fileName) => {
+  const response = await apiClient.get(`/uploads/${uploadId}/download`, {
+    responseType: "blob",
+  });
+
+  // If backend returned JSON (S3 presigned URL case), parse it and open
+  const contentType = response.headers["content-type"] || "";
+  if (contentType.includes("application/json")) {
+    const text = await response.data.text();
+    const json = JSON.parse(text);
+    if (json.data?.downloadUrl) {
+      window.open(json.data.downloadUrl, "_blank");
+    }
+    return;
+  }
+
+  // Direct blob download (local file case)
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", fileName || "upload.csv");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+/**
  * Bulk delete uploads
  */
 export const bulkDeleteUploads = async (ids) => {
@@ -182,4 +234,5 @@ export default {
   rejectUpload,
   deleteUpload,
   bulkDeleteUploads,
+  downloadUploadFile,
 };

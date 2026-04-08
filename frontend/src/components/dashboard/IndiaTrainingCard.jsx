@@ -5,6 +5,7 @@ import {
   AcademicCapIcon,
   UsersIcon,
   ChevronDownIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import IndiaMap from "./IndiaMap";
 import * as dataService from "../../services/data.service";
@@ -55,38 +56,58 @@ const STATE_CODE_MAP = {
 /**
  * India Map Wrapper Component
  */
-const IndiaMapComponent = ({ stateStats, selectedStateCode, onStateHover }) => {
+const IndiaMapComponent = ({
+  stateStats,
+  selectedStateCode,
+  onStateHover,
+  onStateClick,
+}) => {
   const [hoveredState, setHoveredState] = React.useState(null);
 
-  const statesWithData = React.useMemo(
-    () => Object.keys(stateStats).filter((code) => stateStats[code]?.hasData),
-    [stateStats],
-  );
-
-  // Calculate colors for each state
+  // Calculate colors for each state — green gradient by center count
   const stateColors = React.useMemo(() => {
     const colors = {};
+
+    // Find max center count to normalise the gradient
+    const maxCenters = Math.max(
+      1,
+      ...Object.values(stateStats).map((s) => s?.centers || 0),
+    );
+
+    /**
+     * Interpolate between light green (#C8EFC1) and dark green (#1A6B2C).
+     * ratio: 0–1 (1 = most centers = darkest green)
+     * darken: apply a 15% darkening for hover states
+     */
+    const greenShade = (centers, darken = false) => {
+      const rawRatio = centers / maxCenters;
+      // Ensure a visible minimum shade for any state with data
+      const ratio = rawRatio < 0.1 ? 0.1 : rawRatio;
+      const factor = darken ? 0.82 : 1;
+
+      const r = Math.round((200 - ratio * 174) * factor);
+      const g = Math.round((239 - ratio * 132) * factor);
+      const b = Math.round((193 - ratio * 149) * factor);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+
     Object.keys(STATE_CODE_MAP).forEach((code) => {
       const isHovered = hoveredState === code;
       const isSelected = selectedStateCode === code;
-      const hasData = statesWithData.includes(code);
+      const centers = stateStats[code]?.centers || 0;
+      const hasData = centers > 0;
 
-      if (isHovered) {
-        if (isSelected)
-          colors[code] = "#CC7100"; // Darker orange
-        else if (hasData)
-          colors[code] = "#E5C560"; // Darker gold
-        else colors[code] = "#D0D0D0"; // Darker grey
+      if (isSelected) {
+        colors[code] = isHovered ? "#CC7100" : "#E47F00"; // Orange for selected
+      } else if (hasData) {
+        colors[code] = greenShade(centers, isHovered);
       } else {
-        if (isSelected)
-          colors[code] = "#E47F00"; // Orange
-        else if (hasData)
-          colors[code] = "#FFD978"; // Gold
-        else colors[code] = "#E7E7E7"; // Grey
+        colors[code] = isHovered ? "#D0D0D0" : "#E7E7E7"; // Grey for no data
       }
     });
+
     return colors;
-  }, [hoveredState, selectedStateCode, statesWithData]);
+  }, [hoveredState, selectedStateCode, stateStats]);
 
   const handleStateHover = (stateCode) => {
     setHoveredState(stateCode);
@@ -106,6 +127,7 @@ const IndiaMapComponent = ({ stateStats, selectedStateCode, onStateHover }) => {
         stateColors={stateColors}
         onStateHover={handleStateHover}
         onStateLeave={handleStateLeave}
+        onStateClick={onStateClick}
       />
     </div>
   );
@@ -146,6 +168,11 @@ const IndiaTrainingCard = ({
   const [hoveredStateCode, setHoveredStateCode] = useState("KA"); // Active state on hover, default Karnataka
   const [stateStats, setStateStats] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+
+  // B13: State click detail panel
+  const [clickedStateCode, setClickedStateCode] = useState(null);
+  const [stateDetail, setStateDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   /**
    * Fetch state statistics from API
@@ -452,6 +479,30 @@ const IndiaTrainingCard = ({
     setHoveredStateCode(stateCode);
   }, []);
 
+  const handleStateClick = React.useCallback(
+    async (stateCode) => {
+      const stateName =
+        stateStats[stateCode]?.name || STATE_CODE_MAP[stateCode];
+      if (!stateName) return;
+
+      setClickedStateCode(stateCode);
+      setStateDetail(null);
+      setDetailLoading(true);
+      try {
+        const detail = await dataService.getStateDetail(
+          stateName,
+          selectedYear,
+        );
+        setStateDetail(detail);
+      } catch (err) {
+        console.error("Error fetching state detail:", err);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [stateStats, selectedYear],
+  );
+
   // Memoize selected state to prevent flickering
   const selectedState = React.useMemo(() => {
     return (
@@ -487,6 +538,7 @@ const IndiaTrainingCard = ({
               stateStats={stateStats}
               selectedStateCode={hoveredStateCode}
               onStateHover={handleStateHover}
+              onStateClick={handleStateClick}
             />
           </div>
         </div>
@@ -506,22 +558,12 @@ const IndiaTrainingCard = ({
 
             {/* Stats List */}
             {showOnlyCounts ? (
-              /* Simplified view - only show counts */
+              /* Simplified view — only centers count */
               <div className="space-y-5">
                 <StatItem
                   icon={BuildingOfficeIcon}
                   label="No. of centers"
                   value={selectedState.centers}
-                />
-                <StatItem
-                  icon={AcademicCapIcon}
-                  label="Trainers"
-                  value={selectedState.trainers}
-                />
-                <StatItem
-                  icon={UserGroupIcon}
-                  label="Trainees"
-                  value={selectedState.trainees}
                 />
               </div>
             ) : (
@@ -552,6 +594,114 @@ const IndiaTrainingCard = ({
           </div>
         </div>
       </div>
+
+      {/* B13: State Detail Panel — slide-in from right */}
+      {clickedStateCode && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end"
+          onClick={() => setClickedStateCode(null)}
+        >
+          <div
+            className="w-full max-w-md bg-white shadow-2xl border-l border-gray-200 flex flex-col h-full overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Panel Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {stateStats[clickedStateCode]?.name ||
+                    STATE_CODE_MAP[clickedStateCode] ||
+                    clickedStateCode}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Course (Lab) Breakdown
+                </p>
+              </div>
+              <button
+                onClick={() => setClickedStateCode(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Panel Body */}
+            <div className="flex-1 px-6 py-5">
+              {detailLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-8 h-8 border-2 border-[#009530] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : stateDetail ? (
+                <>
+                  {/* Summary counts */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-green-50 rounded-xl p-4 text-center">
+                      <BuildingOfficeIcon className="w-6 h-6 text-[#009530] mx-auto mb-1" />
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stateDetail.centerCount}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">Centers</p>
+                    </div>
+                    <div className="bg-green-50 rounded-xl p-4 text-center">
+                      <UserGroupIcon className="w-6 h-6 text-[#009530] mx-auto mb-1" />
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stateDetail.totalStudents}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">Students</p>
+                    </div>
+                  </div>
+
+                  {/* Course breakdown */}
+                  {stateDetail.courseBreakdown.length > 0 ? (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                        Courses
+                      </h3>
+                      {stateDetail.courseBreakdown.map((course, idx) => (
+                        <div key={idx}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span
+                              className="text-sm text-gray-700 truncate max-w-[70%]"
+                              title={course.courseName}
+                            >
+                              {course.courseName}
+                            </span>
+                            <span className="text-sm font-semibold text-gray-900 ml-2 flex-shrink-0">
+                              {course.studentCount}{" "}
+                              <span className="text-xs font-normal text-gray-500">
+                                ({course.percentage}%)
+                              </span>
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-2">
+                            <div
+                              className="bg-[#009530] h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${course.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <AcademicCapIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-sm text-gray-500">
+                        No course data available for this state
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-sm text-gray-400">
+                    Could not load state details
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

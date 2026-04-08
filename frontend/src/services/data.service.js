@@ -52,6 +52,13 @@ export const getStateStats = async (year = "all") => {
   return response.data?.data || response.data;
 };
 
+export const getStateDetail = async (stateName, year = "all") => {
+  const params = { state: stateName };
+  if (year && year !== "all") params.year = year;
+  const response = await apiClient.get("/dashboard/state-detail", { params });
+  return response.data?.data || response.data;
+};
+
 // ==================== PARTNERS ====================
 
 /**

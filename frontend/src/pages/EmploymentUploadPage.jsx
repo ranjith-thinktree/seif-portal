@@ -2,6 +2,16 @@ import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
 import axios from "axios";
 import { MainLayout } from "../components/layout";
+import {
+  BriefcaseIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  PaperClipIcon,
+  ClockIcon,
+  XMarkIcon,
+  ArrowPathIcon,
+  FunnelIcon,
+} from "@heroicons/react/24/outline";
 
 /**
  * EmploymentUploadPage - Two-tab interface for employment data management
@@ -19,12 +29,26 @@ const EmploymentUploadPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [templatePeriod, setTemplatePeriod] = useState("all");
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [attachmentFiles, setAttachmentFiles] = useState([]);
+
+  // B11: History filters
+  const [showHistoryFilters, setShowHistoryFilters] = useState(false);
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("");
+  const [historyDateFrom, setHistoryDateFrom] = useState("");
+  const [historyDateTo, setHistoryDateTo] = useState("");
 
   // Fetch upload history
   const fetchUploadHistory = useCallback(async () => {
     try {
+      const params = { page: currentPage, limit: 10 };
+      if (historyStatusFilter) params.status = historyStatusFilter;
+      if (historyDateFrom) params.dateFrom = historyDateFrom;
+      if (historyDateTo) params.dateTo = historyDateTo;
+
       const response = await axios.get("/api/v1/employment/uploads", {
-        params: { page: currentPage, limit: 10 },
+        params,
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -38,7 +62,7 @@ const EmploymentUploadPage = () => {
       console.error("Error fetching upload history:", error);
       toast.error("Failed to load upload history");
     }
-  }, [currentPage]);
+  }, [currentPage, historyStatusFilter, historyDateFrom, historyDateTo]);
 
   useEffect(() => {
     if (activeTab === "history") {
@@ -114,6 +138,9 @@ const EmploymentUploadPage = () => {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
+      // B7: append attachment files if any
+      attachmentFiles.forEach((f) => formData.append("attachments", f));
+
       const response = await axios.post("/api/v1/employment/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
@@ -133,6 +160,7 @@ const EmploymentUploadPage = () => {
 
         // Clear file and switch to history tab
         setSelectedFile(null);
+        setAttachmentFiles([]);
         setActiveTab("history");
         fetchUploadHistory();
       } else {
@@ -148,30 +176,47 @@ const EmploymentUploadPage = () => {
     }
   };
 
-  // Download template
+  // Download template (B4 — supports time-period for pre-filled data)
   const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true);
     try {
       const response = await axios.get("/api/v1/employment/template", {
+        params: { period: templatePeriod },
         responseType: "blob",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
 
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `Employment_Template_${Date.now()}.xlsx`);
+      const periodLabel =
+        templatePeriod === "all" ? "All" : templatePeriod.toUpperCase();
+      link.setAttribute(
+        "download",
+        `Employment_Template_${periodLabel}_${Date.now()}.xlsx`,
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-
-      toast.success("Template downloaded");
+      toast.success("Pre-filled template downloaded");
     } catch (error) {
       console.error("Template download error:", error);
-      toast.error("Failed to download template");
+      if (error.response?.status === 400) {
+        // Parse blob error response
+        const text = await error.response.data.text();
+        const parsed = JSON.parse(text);
+        toast.error(
+          parsed.message ||
+            "No approved students found for the selected period",
+        );
+      } else {
+        toast.error("Failed to download template");
+      }
+    } finally {
+      setDownloadingTemplate(false);
     }
   };
 
@@ -197,205 +242,296 @@ const EmploymentUploadPage = () => {
     }
   };
 
+  const PERIOD_OPTIONS = [
+    { value: "1m", label: "Last 1 Month" },
+    { value: "6m", label: "Last 6 Months" },
+    { value: "1y", label: "Last 1 Year" },
+    { value: "all", label: "All Time" },
+  ];
+
+  const tabs = [
+    { id: "upload", label: "Upload Data", icon: ArrowUpTrayIcon },
+    { id: "history", label: "Upload History", icon: ClockIcon },
+  ];
+
+  const statusBadge = (status) => {
+    const map = {
+      completed: "bg-green-100 text-green-700",
+      failed: "bg-red-100 text-red-700",
+      processing: "bg-yellow-100 text-yellow-700",
+    };
+    return map[status] || "bg-gray-100 text-gray-600";
+  };
+
   return (
     <MainLayout>
-      <div style={{ padding: "24px" }}>
-        <div style={{ marginBottom: "24px" }}>
-          <h2>Employment Data Upload</h2>
-          <p style={{ color: "#6c757d" }}>
-            Upload employment status for approved students
-          </p>
-        </div>
-
-        {/* Tab Navigation */}
-        <div
-          style={{ borderBottom: "2px solid #dee2e6", marginBottom: "24px" }}
-        >
-          <div style={{ display: "flex", gap: "16px" }}>
-            <button
-              onClick={() => setActiveTab("upload")}
-              style={{
-                padding: "12px 24px",
-                background: "none",
-                border: "none",
-                borderBottom:
-                  activeTab === "upload" ? "3px solid #007bff" : "none",
-                color: activeTab === "upload" ? "#007bff" : "#6c757d",
-                fontWeight: activeTab === "upload" ? "bold" : "normal",
-                cursor: "pointer",
-              }}
-            >
-              📤 Upload Data
-            </button>
-            <button
-              onClick={() => setActiveTab("history")}
-              style={{
-                padding: "12px 24px",
-                background: "none",
-                border: "none",
-                borderBottom:
-                  activeTab === "history" ? "3px solid #007bff" : "none",
-                color: activeTab === "history" ? "#007bff" : "#6c757d",
-                fontWeight: activeTab === "history" ? "bold" : "normal",
-                cursor: "pointer",
-              }}
-            >
-              📋 Upload History
-            </button>
+      <div className="p-6 max-w-5xl mx-auto">
+        {/* ── Page Header ── */}
+        <div className="mb-8 flex items-center gap-4">
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <BriefcaseIcon className="w-6 h-6 text-[#009530]" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Employment Data Upload
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Upload employment status for approved students
+            </p>
           </div>
         </div>
 
-        {/* Upload Tab */}
-        {activeTab === "upload" && (
-          <div>
-            {/* Download Template */}
-            <div
-              style={{
-                padding: "16px",
-                background: "#e7f3ff",
-                border: "1px solid #b3d7ff",
-                borderRadius: "8px",
-                marginBottom: "24px",
-              }}
+        {/* ── Tabs ── */}
+        <div className="flex gap-1 mb-6 border-b border-gray-200">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative ${
+                activeTab === id
+                  ? "text-[#009530] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#009530]"
+                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-t-lg"
+              }`}
             >
-              <h5 style={{ marginBottom: "8px" }}>
-                📥 Step 1: Download Template
-              </h5>
-              <p style={{ marginBottom: "12px", fontSize: "14px" }}>
-                Download the Excel template with required columns and sample
-                data
-              </p>
-              <button
-                onClick={handleDownloadTemplate}
-                className="btn btn-primary"
-              >
-                Download Employment Template
-              </button>
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Upload Tab ── */}
+        {activeTab === "upload" && (
+          <div className="space-y-5">
+            {/* Step 1 — Download Template */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-3">
+                <ArrowDownTrayIcon className="w-5 h-5 text-[#009530]" />
+                <div>
+                  <h3 className="font-semibold text-gray-800 text-sm">
+                    Step 1: Download Pre-Filled Template
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Choose a time period — the template will be pre-filled with
+                    your approved students' details.
+                  </p>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-sm text-gray-600 mb-4">
+                  Students approved in:
+                </p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {PERIOD_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setTemplatePeriod(opt.value)}
+                      className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                        templatePeriod === opt.value
+                          ? "bg-[#009530] border-[#009530] text-white"
+                          : "bg-white border-gray-300 text-gray-600 hover:border-[#009530] hover:text-[#009530]"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={handleDownloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#009530] hover:bg-green-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  {downloadingTemplate ? (
+                    <>
+                      <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                      Downloading…
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownTrayIcon className="w-4 h-4" />
+                      Download Pre-Filled Template
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
-            {/* Upload Area */}
-            <div
-              style={{
-                padding: "16px",
-                background: "#fff",
-                border: "1px solid #dee2e6",
-                borderRadius: "8px",
-              }}
-            >
-              <h5 style={{ marginBottom: "16px" }}>
-                📤 Step 2: Upload Filled Template
-              </h5>
+            {/* Step 2 — Upload Filled Template */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-3">
+                <ArrowUpTrayIcon className="w-5 h-5 text-[#009530]" />
+                <div>
+                  <h3 className="font-semibold text-gray-800 text-sm">
+                    Step 2: Upload Filled Template
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    CSV, XLS or XLSX — max 10 MB
+                  </p>
+                </div>
+              </div>
+              <div className="p-5 space-y-4">
+                {/* Drag & Drop Zone */}
+                <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  onClick={() => document.getElementById("fileInput").click()}
+                  className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
+                    dragActive
+                      ? "border-[#009530] bg-green-50"
+                      : selectedFile
+                        ? "border-[#009530] bg-green-50"
+                        : "border-gray-300 bg-gray-50 hover:border-gray-400"
+                  }`}
+                >
+                  <ArrowUpTrayIcon className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+                  {selectedFile ? (
+                    <p className="text-sm font-medium text-gray-700">
+                      {selectedFile.name}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-gray-700">
+                        Drop your file here or click to browse
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Supported formats: CSV, XLS, XLSX
+                      </p>
+                    </>
+                  )}
+                  <input
+                    id="fileInput"
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </div>
 
-              {/* Drag & Drop Zone */}
-              <div
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-                style={{
-                  border: `2px dashed ${dragActive ? "#007bff" : "#dee2e6"}`,
-                  borderRadius: "8px",
-                  padding: "48px",
-                  textAlign: "center",
-                  background: dragActive ? "#f0f8ff" : "#f8f9fa",
-                  marginBottom: "16px",
-                  cursor: "pointer",
-                  transition: "all 0.3s ease",
-                }}
-                onClick={() => document.getElementById("fileInput").click()}
-              >
-                <div style={{ fontSize: "48px", marginBottom: "16px" }}>📁</div>
-                <h5 style={{ marginBottom: "8px" }}>
-                  {selectedFile
-                    ? selectedFile.name
-                    : "Drop your file here or click to browse"}
-                </h5>
-                <p style={{ color: "#6c757d", fontSize: "14px" }}>
-                  Supported formats: CSV, XLS, XLSX (Max 10MB)
-                </p>
+                {/* Selected file chip */}
+                {selectedFile && (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
+                    <span className="text-sm text-green-800 font-medium">
+                      {selectedFile.name}{" "}
+                      <span className="font-normal text-green-600">
+                        ({(selectedFile.size / 1024).toFixed(1)} KB)
+                      </span>
+                    </span>
+                    <button
+                      onClick={() => setSelectedFile(null)}
+                      className="text-green-600 hover:text-red-500 transition-colors ml-3"
+                    >
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Step 3 — Attachments */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <PaperClipIcon className="w-5 h-5 text-gray-400" />
+                  <div>
+                    <h3 className="font-semibold text-gray-800 text-sm">
+                      Step 3: Supporting Documents{" "}
+                      <span className="font-normal text-gray-400">
+                        (Optional)
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Offer letters, payslips or ZIP bundle — PDF, JPEG, PNG,
+                      ZIP · up to 10 files
+                    </p>
+                  </div>
+                </div>
+                <label
+                  htmlFor="attachmentInput"
+                  className="px-3 py-1.5 text-sm font-semibold border border-[#009530] text-[#009530] rounded-lg cursor-pointer hover:bg-green-50 transition-colors"
+                >
+                  + Add Files
+                </label>
                 <input
-                  id="fileInput"
+                  id="attachmentInput"
                   type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={handleFileChange}
-                  style={{ display: "none" }}
+                  accept=".pdf,.jpg,.jpeg,.png,.zip"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const newFiles = Array.from(e.target.files);
+                    setAttachmentFiles((prev) => {
+                      const combined = [...prev, ...newFiles];
+                      if (combined.length > 10) {
+                        toast.warning("Maximum 10 attachments allowed");
+                        return combined.slice(0, 10);
+                      }
+                      return combined;
+                    });
+                    e.target.value = "";
+                  }}
                 />
               </div>
-
-              {/* File Info */}
-              {selectedFile && (
-                <div
-                  style={{
-                    padding: "12px",
-                    background: "#d4edda",
-                    border: "1px solid #c3e6cb",
-                    borderRadius: "4px",
-                    marginBottom: "16px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <div>
-                    <strong>{selectedFile.name}</strong>
-                    <span style={{ marginLeft: "12px", color: "#6c757d" }}>
-                      ({(selectedFile.size / 1024).toFixed(2)} KB)
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setSelectedFile(null)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "#dc3545",
-                      cursor: "pointer",
-                      fontSize: "18px",
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-
-              {/* Upload Button */}
-              <button
-                onClick={handleUpload}
-                disabled={!selectedFile || uploading}
-                className="btn btn-success btn-lg"
-                style={{ width: "100%" }}
-              >
-                {uploading ? (
-                  <>
-                    <span
-                      className="spinner-border spinner-border-sm"
-                      style={{ marginRight: "8px" }}
-                    />
-                    Uploading...
-                  </>
+              <div className="p-5">
+                {attachmentFiles.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">
+                    No attachments added yet.
+                  </p>
                 ) : (
-                  "🚀 Upload Employment Data"
+                  <ul className="space-y-2">
+                    {attachmentFiles.map((f, i) => (
+                      <li
+                        key={i}
+                        className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                      >
+                        <span className="text-gray-700">
+                          {f.name}{" "}
+                          <span className="text-gray-400">
+                            ({(f.size / 1024).toFixed(0)} KB)
+                          </span>
+                        </span>
+                        <button
+                          onClick={() =>
+                            setAttachmentFiles((prev) =>
+                              prev.filter((_, idx) => idx !== i),
+                            )
+                          }
+                          className="text-gray-400 hover:text-red-500 transition-colors ml-3"
+                        >
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </button>
+              </div>
             </div>
 
-            {/* Instructions */}
-            <div
-              style={{
-                padding: "16px",
-                background: "#fff3cd",
-                border: "1px solid #ffc107",
-                borderRadius: "8px",
-                marginTop: "24px",
-              }}
+            {/* Upload Button */}
+            <button
+              onClick={handleUpload}
+              disabled={!selectedFile || uploading}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-[#009530] hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-xl transition-colors"
             >
-              <h6 style={{ marginBottom: "12px" }}>📝 Important Notes:</h6>
-              <ul
-                style={{
-                  marginBottom: 0,
-                  paddingLeft: "20px",
-                  fontSize: "14px",
-                }}
-              >
+              {uploading ? (
+                <>
+                  <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                  Uploading…
+                </>
+              ) : (
+                <>
+                  <ArrowUpTrayIcon className="w-5 h-5" />
+                  Upload Employment Data
+                </>
+              )}
+            </button>
+
+            {/* Notes */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
+                Important Notes
+              </p>
+              <ul className="space-y-1 text-sm text-amber-800 list-disc list-inside">
                 <li>
                   Only approved students can have employment data uploaded
                 </li>
@@ -406,8 +542,8 @@ const EmploymentUploadPage = () => {
                   If a student is not found, the record will be logged as failed
                 </li>
                 <li>
-                  Employment Status options: Employed, Self-Employed,
-                  Entrepreneur, Unemployed, Further Education
+                  Employment Status: Employed, Self-Employed, Entrepreneur,
+                  Higher Study, NA, Unemployed, Further Education
                 </li>
                 <li>Date format: YYYY-MM-DD (e.g., 2024-01-15)</li>
               </ul>
@@ -415,93 +551,189 @@ const EmploymentUploadPage = () => {
           </div>
         )}
 
-        {/* History Tab */}
+        {/* ── History Tab ── */}
         {activeTab === "history" && (
-          <div>
-            {/* History Table */}
-            <div
-              style={{
-                background: "#fff",
-                border: "1px solid #dee2e6",
-                borderRadius: "8px",
-                overflow: "hidden",
-              }}
-            >
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead style={{ background: "#f8f9fa" }}>
+          <div className="space-y-4">
+            {/* Filter Bar */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">
+                  Upload History
+                </span>
+                <button
+                  onClick={() => setShowHistoryFilters(!showHistoryFilters)}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${
+                    showHistoryFilters ||
+                    historyStatusFilter ||
+                    historyDateFrom ||
+                    historyDateTo
+                      ? "bg-green-50 border-[#009530] text-[#009530]"
+                      : "border-gray-300 text-gray-600 hover:border-gray-400"
+                  }`}
+                >
+                  <FunnelIcon className="w-4 h-4" />
+                  Filters
+                  {(historyStatusFilter ||
+                    historyDateFrom ||
+                    historyDateTo) && (
+                    <span className="ml-1 px-1.5 py-0.5 bg-[#009530] text-white text-xs rounded-full">
+                      {
+                        [
+                          historyStatusFilter,
+                          historyDateFrom,
+                          historyDateTo,
+                        ].filter(Boolean).length
+                      }
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {showHistoryFilters && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Status
+                      </label>
+                      <select
+                        value={historyStatusFilter}
+                        onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#009530] focus:border-[#009530]"
+                      >
+                        <option value="">All Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                        <option value="processing">Processing</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        From Date
+                      </label>
+                      <input
+                        type="date"
+                        value={historyDateFrom}
+                        onChange={(e) => setHistoryDateFrom(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#009530] focus:border-[#009530]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        To Date
+                      </label>
+                      <input
+                        type="date"
+                        value={historyDateTo}
+                        onChange={(e) => setHistoryDateTo(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#009530] focus:border-[#009530]"
+                      />
+                    </div>
+                  </div>
+                  {(historyStatusFilter ||
+                    historyDateFrom ||
+                    historyDateTo) && (
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
+                      {historyStatusFilter && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                          Status: {historyStatusFilter}
+                          <button onClick={() => setHistoryStatusFilter("")}>
+                            <XMarkIcon className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+                      {historyDateFrom && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                          From: {historyDateFrom}
+                          <button onClick={() => setHistoryDateFrom("")}>
+                            <XMarkIcon className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+                      {historyDateTo && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                          To: {historyDateTo}
+                          <button onClick={() => setHistoryDateTo("")}>
+                            <XMarkIcon className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+                      <button
+                        onClick={() => {
+                          setHistoryStatusFilter("");
+                          setHistoryDateFrom("");
+                          setHistoryDateTo("");
+                        }}
+                        className="ml-auto text-xs text-gray-400 hover:text-gray-600 underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th style={tableHeaderStyle}>Upload Date</th>
-                    <th style={tableHeaderStyle}>File Name</th>
-                    <th style={tableHeaderStyle}>Total Records</th>
-                    <th style={tableHeaderStyle}>Processed</th>
-                    <th style={tableHeaderStyle}>Failed</th>
-                    <th style={tableHeaderStyle}>Status</th>
-                    <th style={tableHeaderStyle}>Actions</th>
+                    {[
+                      "Upload Date",
+                      "File Name",
+                      "Total",
+                      "Processed",
+                      "Failed",
+                      "Status",
+                      "Actions",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100">
                   {uploadHistory.length > 0 ? (
                     uploadHistory.map((upload) => (
                       <tr
                         key={upload.id}
-                        style={{ borderBottom: "1px solid #dee2e6" }}
+                        className="hover:bg-gray-50 transition-colors"
                       >
-                        <td style={tableCellStyle}>
+                        <td className="px-4 py-3 text-gray-700">
                           {new Date(upload.created_at).toLocaleDateString()}
                           <br />
-                          <small style={{ color: "#6c757d" }}>
+                          <span className="text-xs text-gray-400">
                             {new Date(upload.created_at).toLocaleTimeString()}
-                          </small>
+                          </span>
                         </td>
-                        <td style={tableCellStyle}>{upload.file_name}</td>
-                        <td style={tableCellStyle}>{upload.total_records}</td>
-                        <td
-                          style={{
-                            ...tableCellStyle,
-                            color: "#28a745",
-                            fontWeight: "bold",
-                          }}
-                        >
+                        <td className="px-4 py-3 text-gray-700 max-w-xs truncate">
+                          {upload.file_name}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {upload.total_records}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-green-600">
                           {upload.records_processed}
                         </td>
-                        <td
-                          style={{
-                            ...tableCellStyle,
-                            color: "#dc3545",
-                            fontWeight: "bold",
-                          }}
-                        >
+                        <td className="px-4 py-3 font-semibold text-red-500">
                           {upload.records_failed}
                         </td>
-                        <td style={tableCellStyle}>
+                        <td className="px-4 py-3">
                           <span
-                            style={{
-                              padding: "4px 12px",
-                              borderRadius: "12px",
-                              fontSize: "12px",
-                              fontWeight: "bold",
-                              background:
-                                upload.status === "completed"
-                                  ? "#d4edda"
-                                  : upload.status === "failed"
-                                    ? "#f8d7da"
-                                    : "#fff3cd",
-                              color:
-                                upload.status === "completed"
-                                  ? "#155724"
-                                  : upload.status === "failed"
-                                    ? "#721c24"
-                                    : "#856404",
-                            }}
+                            className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusBadge(upload.status)}`}
                           >
                             {upload.status}
                           </span>
                         </td>
-                        <td style={tableCellStyle}>
+                        <td className="px-4 py-3">
                           {upload.records_failed > 0 && (
                             <button
                               onClick={() => handleViewDetails(upload)}
-                              className="btn btn-sm btn-outline-danger"
+                              className="text-xs font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 rounded-lg px-3 py-1 transition-colors"
                             >
                               View Errors
                             </button>
@@ -511,19 +743,12 @@ const EmploymentUploadPage = () => {
                     ))
                   ) : (
                     <tr>
-                      <td
-                        colSpan="7"
-                        style={{
-                          ...tableCellStyle,
-                          textAlign: "center",
-                          padding: "48px",
-                        }}
-                      >
-                        <div style={{ fontSize: "48px", marginBottom: "16px" }}>
-                          📭
-                        </div>
-                        <h5>No upload history yet</h5>
-                        <p style={{ color: "#6c757d" }}>
+                      <td colSpan="7" className="px-4 py-16 text-center">
+                        <ClockIcon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p className="text-sm font-medium text-gray-500">
+                          No upload history yet
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
                           Upload your first employment data file to see it here
                         </p>
                       </td>
@@ -531,143 +756,117 @@ const EmploymentUploadPage = () => {
                   )}
                 </tbody>
               </table>
-            </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  marginTop: "24px",
-                  gap: "8px",
-                }}
-              >
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="btn btn-outline-primary"
-                >
-                  Previous
-                </button>
-                <span style={{ padding: "8px 16px", alignSelf: "center" }}>
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="btn btn-outline-primary"
-                >
-                  Next
-                </button>
-              </div>
-            )}
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 px-4 py-3 border-t border-gray-100">
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-4 py-1.5 text-sm font-medium border border-gray-300 rounded-lg disabled:opacity-40 hover:border-[#009530] hover:text-[#009530] transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-500">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-1.5 text-sm font-medium border border-gray-300 rounded-lg disabled:opacity-40 hover:border-[#009530] hover:text-[#009530] transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Error Details Modal */}
+        {/* ── Error Details Modal ── */}
         {showErrorModal && selectedUpload && (
           <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1000,
-            }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
             onClick={() => setShowErrorModal(false)}
           >
             <div
-              style={{
-                background: "white",
-                padding: "24px",
-                borderRadius: "8px",
-                maxWidth: "800px",
-                maxHeight: "80vh",
-                overflow: "auto",
-                width: "90%",
-              }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col mx-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 style={{ marginBottom: "16px" }}>
-                Upload Errors - {selectedUpload.file_name}
-              </h3>
-
-              <div style={{ marginBottom: "16px" }}>
-                <strong>Summary:</strong>
-                <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-                  <li>Total Records: {selectedUpload.total_records}</li>
-                  <li style={{ color: "#28a745" }}>
-                    Processed: {selectedUpload.records_processed}
-                  </li>
-                  <li style={{ color: "#dc3545" }}>
-                    Failed: {selectedUpload.records_failed}
-                  </li>
-                </ul>
+              {/* Modal header */}
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Upload Errors</h3>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate max-w-sm">
+                    {selectedUpload.file_name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowErrorModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
               </div>
 
-              <h5 style={{ marginTop: "24px", marginBottom: "12px" }}>
-                Error Log:
-              </h5>
+              {/* Summary */}
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex gap-6 text-sm">
+                <span className="text-gray-600">
+                  Total: <strong>{selectedUpload.total_records}</strong>
+                </span>
+                <span className="text-green-600">
+                  Processed: <strong>{selectedUpload.records_processed}</strong>
+                </span>
+                <span className="text-red-500">
+                  Failed: <strong>{selectedUpload.records_failed}</strong>
+                </span>
+              </div>
 
-              {selectedUpload.error_log &&
-              selectedUpload.error_log.length > 0 ? (
-                <div style={{ maxHeight: "400px", overflow: "auto" }}>
-                  <table style={{ width: "100%", fontSize: "14px" }}>
-                    <thead
-                      style={{
-                        background: "#f8f9fa",
-                        position: "sticky",
-                        top: 0,
-                      }}
-                    >
+              {/* Error table */}
+              <div className="overflow-auto flex-1">
+                {selectedUpload.error_log &&
+                selectedUpload.error_log.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 sticky top-0 border-b border-gray-200">
                       <tr>
-                        <th style={{ ...tableHeaderStyle, padding: "8px" }}>
-                          Row
-                        </th>
-                        <th style={{ ...tableHeaderStyle, padding: "8px" }}>
-                          Student ID
-                        </th>
-                        <th style={{ ...tableHeaderStyle, padding: "8px" }}>
-                          Error
-                        </th>
+                        {["Row", "Student ID", "Error"].map((h) => (
+                          <th
+                            key={h}
+                            className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                          >
+                            {h}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody>
-                      {selectedUpload.error_log.map((error, idx) => (
-                        <tr
-                          key={idx}
-                          style={{ borderBottom: "1px solid #dee2e6" }}
-                        >
-                          <td style={{ padding: "8px" }}>{error.row}</td>
-                          <td style={{ padding: "8px" }}>{error.student_id}</td>
-                          <td style={{ padding: "8px", color: "#dc3545" }}>
-                            {error.error}
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedUpload.error_log.map((err, idx) => (
+                        <tr key={idx}>
+                          <td className="px-4 py-2.5 text-gray-600">
+                            {err.row}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-600">
+                            {err.student_id}
+                          </td>
+                          <td className="px-4 py-2.5 text-red-600">
+                            {err.error}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
-              ) : (
-                <p>No errors found.</p>
-              )}
+                ) : (
+                  <p className="px-6 py-8 text-sm text-gray-400 text-center">
+                    No errors found.
+                  </p>
+                )}
+              </div>
 
-              <div
-                style={{
-                  marginTop: "24px",
-                  display: "flex",
-                  justifyContent: "flex-end",
-                }}
-              >
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
                 <button
                   onClick={() => setShowErrorModal(false)}
-                  className="btn btn-secondary"
+                  className="px-4 py-2 text-sm font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
                 >
                   Close
                 </button>
@@ -678,18 +877,6 @@ const EmploymentUploadPage = () => {
       </div>
     </MainLayout>
   );
-};
-
-// Table styles
-const tableHeaderStyle = {
-  padding: "12px",
-  textAlign: "left",
-  fontWeight: "bold",
-  borderBottom: "2px solid #dee2e6",
-};
-
-const tableCellStyle = {
-  padding: "12px",
 };
 
 export default EmploymentUploadPage;

@@ -16,7 +16,16 @@ import {
   Building2,
   Key,
   AlertCircle,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
 import { toast } from "react-toastify";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
 import {
@@ -299,46 +308,53 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleViewCenters(row.original)}
-            >
-              <Eye className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleEdit(row.original)}
-            >
-              <Edit className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedPartner(row.original);
-                setShowResetPasswordDialog(true);
-              }}
-            >
-              <Key className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedPartner(row.original);
-                if (row.original.total_centers > 0) {
-                  setShowBlockedDeleteDialog(true);
-                } else {
-                  setShowDeleteDialog(true);
-                }
-              }}
-            >
-              <Trash2 className="w-4 h-4 text-red-600" />
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => handleViewCenters(row.original)}
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleEdit(row.original)}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedPartner(row.original);
+                  setShowResetPasswordDialog(true);
+                }}
+              >
+                <Key className="w-4 h-4 mr-2" />
+                Reset Password
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-red-600 focus:text-red-600"
+                onClick={() => {
+                  setSelectedPartner(row.original);
+                  if (row.original.total_centers > 0) {
+                    setShowBlockedDeleteDialog(true);
+                  } else {
+                    setShowDeleteDialog(true);
+                  }
+                }}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ),
       },
     ],

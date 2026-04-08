@@ -112,7 +112,7 @@ class UserController {
 
       const user = await UserService.create(userData);
 
-      return ApiResponse.created(res, 'User created successfully', user);
+      return ApiResponse.created(res, user, 'User created successfully');
     } catch (error) {
       next(error);
     }
@@ -164,7 +164,7 @@ class UserController {
         result = await UserService.softDelete(req.params.id);
       }
 
-      return ApiResponse.success(res, result.message);
+      return ApiResponse.success(res, null, result.message);
     } catch (error) {
       next(error);
     }

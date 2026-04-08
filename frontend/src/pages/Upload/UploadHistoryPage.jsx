@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios";
+import { toast } from "react-toastify";
 import {
   ArrowPathIcon,
   TrashIcon,
@@ -7,6 +9,7 @@ import {
   MagnifyingGlassIcon,
   FunnelIcon,
   XMarkIcon,
+  ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 import {
   getUploads,
@@ -37,6 +40,8 @@ const UploadHistoryPage = () => {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
   const [showFilters, setShowFilters] = useState(false);
@@ -55,26 +60,28 @@ const UploadHistoryPage = () => {
     setError(null);
 
     try {
-      const result = await getUploads(pagination.page, pagination.limit);
+      const filters = {};
+      if (statusFilter) filters.status = statusFilter;
+      if (dateFrom) filters.dateFrom = dateFrom;
+      if (dateTo) filters.dateTo = dateTo;
+
+      const result = await getUploads(
+        pagination.page,
+        pagination.limit,
+        filters,
+      );
 
       // Apply client-side filtering and sorting
       let filteredData = result.data || [];
 
-      // Search filter
+      // Search filter (client-side only — file name / uploader name)
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
         filteredData = filteredData.filter(
           (upload) =>
             upload.file_name?.toLowerCase().includes(search) ||
             upload.uploaded_by_name?.toLowerCase().includes(search) ||
-            upload.reviewed_by_name?.toLowerCase().includes(search)
-        );
-      }
-
-      // Status filter
-      if (statusFilter) {
-        filteredData = filteredData.filter(
-          (upload) => upload.status === statusFilter
+            upload.reviewed_by_name?.toLowerCase().includes(search),
         );
       }
 
@@ -113,6 +120,8 @@ const UploadHistoryPage = () => {
     pagination.limit,
     searchTerm,
     statusFilter,
+    dateFrom,
+    dateTo,
     sortBy,
     sortOrder,
   ]);
@@ -133,7 +142,7 @@ const UploadHistoryPage = () => {
       // Show success toast if any deletions succeeded
       if (response.data.summary.successful > 0) {
         console.log(
-          `Successfully deleted ${response.data.summary.successful} upload(s)`
+          `Successfully deleted ${response.data.summary.successful} upload(s)`,
         );
         fetchUploads(); // Refresh table
         setSelectedRows([]); // Clear selection
@@ -164,6 +173,47 @@ const UploadHistoryPage = () => {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  /**
+   * Download original uploaded file (B10)
+   */
+  const handleDownloadFile = async (upload) => {
+    try {
+      const res = await axios.get(`/api/v1/uploads/${upload.id}/download`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (res.data.success && res.data.data.downloadUrl) {
+        // S3 presigned URL
+        const link = document.createElement("a");
+        link.href = res.data.data.downloadUrl;
+        link.setAttribute(
+          "download",
+          res.data.data.fileName || upload.file_name,
+        );
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    } catch (error) {
+      // Local file: axios blob download fallback
+      try {
+        const res = await axios.get(`/api/v1/uploads/${upload.id}/download`, {
+          responseType: "blob",
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", upload.file_name);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (_) {
+        toast.error("Failed to download file");
+      }
+    }
   };
 
   /**
@@ -254,16 +304,16 @@ const UploadHistoryPage = () => {
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`inline-flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-                showFilters || statusFilter
+                showFilters || statusFilter || dateFrom || dateTo
                   ? "bg-primary-50 border-primary-500 text-primary-700"
                   : "border-border hover:bg-background-secondary"
               }`}
             >
               <FunnelIcon className="h-5 w-5" />
               Filters
-              {statusFilter && (
+              {(statusFilter || dateFrom || dateTo) && (
                 <span className="ml-1 px-2 py-0.5 bg-primary-500 text-white text-xs rounded-full">
-                  1
+                  {[statusFilter, dateFrom, dateTo].filter(Boolean).length}
                 </span>
               )}
             </button>
@@ -308,11 +358,37 @@ const UploadHistoryPage = () => {
                     <option value="partial">Partial</option>
                   </select>
                 </div>
+
+                {/* Date From */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    From Date
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+
+                {/* Date To */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    To Date
+                  </label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
               </div>
 
               {/* Clear Filters */}
-              {statusFilter && (
-                <div className="mt-4 flex items-center gap-2">
+              {(statusFilter || dateFrom || dateTo) && (
+                <div className="mt-4 flex items-center gap-2 flex-wrap">
                   <span className="text-sm text-muted-foreground">
                     Active filters:
                   </span>
@@ -325,6 +401,34 @@ const UploadHistoryPage = () => {
                       <XMarkIcon className="h-3 w-3" />
                     </button>
                   )}
+                  {dateFrom && (
+                    <button
+                      onClick={() => setDateFrom("")}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-700 text-xs rounded-full hover:bg-primary-200"
+                    >
+                      From: {dateFrom}
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  )}
+                  {dateTo && (
+                    <button
+                      onClick={() => setDateTo("")}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-700 text-xs rounded-full hover:bg-primary-200"
+                    >
+                      To: {dateTo}
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setStatusFilter("");
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                    className="ml-auto text-xs text-muted-foreground hover:text-foreground underline"
+                  >
+                    Clear all
+                  </button>
                 </div>
               )}
             </div>
@@ -427,7 +531,7 @@ const UploadHistoryPage = () => {
                                 setSelectedRows([...selectedRows, upload.id]);
                               } else {
                                 setSelectedRows(
-                                  selectedRows.filter((id) => id !== upload.id)
+                                  selectedRows.filter((id) => id !== upload.id),
                                 );
                               }
                             }}
@@ -476,6 +580,13 @@ const UploadHistoryPage = () => {
                             <button className="text-primary-600 hover:text-primary-700 font-medium">
                               View
                             </button>
+                            <button
+                              onClick={() => handleDownloadFile(upload)}
+                              className="text-gray-500 hover:text-[#009530] transition-colors"
+                              title="Download original file"
+                            >
+                              <ArrowDownTrayIcon className="h-5 w-5" />
+                            </button>
                             {(upload.status === "pending" ||
                               upload.status === "rejected") && (
                               <button
@@ -501,7 +612,7 @@ const UploadHistoryPage = () => {
                     Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
                     {Math.min(
                       pagination.page * pagination.limit,
-                      pagination.total
+                      pagination.total,
                     )}{" "}
                     of {pagination.total} results
                   </div>

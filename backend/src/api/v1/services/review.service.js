@@ -488,10 +488,10 @@ class ReviewService {
         await connection.query(
           `INSERT INTO students (
             id, batch_id, center_id, partner_id, partner_student_id, student_name,
-            date_of_birth, gender, mobile_number, email, address, city, state,
+            date_of_birth, gender, mobile_number, email, address, city, state, district, country,
             enrollment_date, course_name, course_duration_months, training_status,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
           [
             approvedStudentId,
             approvedBatchId,
@@ -506,6 +506,8 @@ class ReviewService {
             student.address,
             student.city,
             student.state,
+            student.district || null,
+            student.country || 'India',
             student.enrollment_date,
             student.course_name,
             student.course_duration_months,

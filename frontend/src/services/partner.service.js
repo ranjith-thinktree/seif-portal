@@ -10,7 +10,7 @@ const partnerService = {
   saveEditedStudents: async (uploadId, centerId, data) => {
     const response = await apiClient.put(
       `/partners/uploads/${uploadId}/centers/${centerId}/students`,
-      data
+      data,
     );
     return response.data;
   },
@@ -20,7 +20,7 @@ const partnerService = {
    */
   resubmitUpload: async (uploadId) => {
     const response = await apiClient.post(
-      `/partners/uploads/${uploadId}/resubmit`
+      `/partners/uploads/${uploadId}/resubmit`,
     );
     return response.data;
   },
@@ -30,7 +30,7 @@ const partnerService = {
    */
   getUploadChanges: async (uploadId) => {
     const response = await apiClient.get(
-      `/partners/uploads/${uploadId}/changes`
+      `/partners/uploads/${uploadId}/changes`,
     );
     return response.data;
   },
@@ -50,8 +50,17 @@ const partnerService = {
    */
   getRejectedCenters: async (uploadId) => {
     const response = await apiClient.get(
-      `/partners/uploads/${uploadId}/rejected-centers`
+      `/partners/uploads/${uploadId}/rejected-centers`,
     );
+    return response.data;
+  },
+
+  /**
+   * Get simple list of approved partners for admin dropdowns
+   * @returns {Promise<Array>} Array of {id, name}
+   */
+  getSimpleList: async () => {
+    const response = await apiClient.get("/partners/simple-list");
     return response.data;
   },
 };

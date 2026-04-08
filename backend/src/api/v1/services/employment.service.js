@@ -70,15 +70,18 @@ class EmploymentService {
         await connection.query(
           `INSERT INTO employment (
              id, student_id, partner_id, partner_student_id, employment_upload_id,
-             company_name, designation, date_of_joining, salary_per_month, is_verified, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+             employment_status, company_name, company_location, designation,
+             date_of_joining, salary_per_month, is_verified, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
           [
             employmentId,
             student.id,
             partnerId,
             String(record.student_id).trim(),
             uploadId,
+            record.employment_status || 'Employed',
             record.company_name,
+            record.company_location || null,
             record.designation || null,
             record.employment_date || null,
             record.salary || null,
@@ -140,15 +143,36 @@ class EmploymentService {
    * @param {Object} options - Pagination options
    * @returns {Promise<Object>} Upload history with pagination
    */
-  async getPartnerEmploymentUploads(partnerId, { page = 1, limit = 10 }) {
+  async getPartnerEmploymentUploads(
+    partnerId,
+    { page = 1, limit = 10, status = null, dateFrom = null, dateTo = null }
+  ) {
     try {
       const partnerUuid = convertToUUID(partnerId);
       const offset = (page - 1) * limit;
 
+      const conditions = ['eu.partner_id = ?'];
+      const params = [partnerUuid];
+
+      if (status) {
+        conditions.push('eu.status = ?');
+        params.push(status);
+      }
+      if (dateFrom) {
+        conditions.push('DATE(eu.created_at) >= ?');
+        params.push(dateFrom);
+      }
+      if (dateTo) {
+        conditions.push('DATE(eu.created_at) <= ?');
+        params.push(dateTo);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
       // Get total count
       const [countResult] = await db.pool.query(
-        'SELECT COUNT(*) as total FROM employment_uploads WHERE partner_id = ?',
-        [partnerUuid]
+        `SELECT COUNT(*) as total FROM employment_uploads eu WHERE ${whereClause}`,
+        params
       );
       const total = countResult[0].total;
 
@@ -161,10 +185,10 @@ class EmploymentService {
           u.full_name as uploaded_by_name
         FROM employment_uploads eu
         LEFT JOIN users u ON eu.uploaded_by = u.id
-        WHERE eu.partner_id = ?
+        WHERE ${whereClause}
         ORDER BY eu.created_at DESC
         LIMIT ${validLimit} OFFSET ${validOffset}`,
-        [partnerUuid]
+        params
       );
 
       return {
@@ -264,17 +288,38 @@ class EmploymentService {
    * @param {Object} options - Pagination and filter options
    * @returns {Promise<Object>} Employment uploads with pagination
    */
-  async getAllEmploymentUploads({ page = 1, limit = 10, status = null }) {
+  async getAllEmploymentUploads({
+    page = 1,
+    limit = 10,
+    status = null,
+    dateFrom = null,
+    dateTo = null,
+    partnerId = null,
+  }) {
     try {
       const offset = (page - 1) * limit;
 
-      let whereClause = '1=1';
+      const conditions = ['1=1'];
       const params = [];
 
       if (status) {
-        whereClause += ' AND eu.status = ?';
+        conditions.push('eu.status = ?');
         params.push(status);
       }
+      if (dateFrom) {
+        conditions.push('DATE(eu.created_at) >= ?');
+        params.push(dateFrom);
+      }
+      if (dateTo) {
+        conditions.push('DATE(eu.created_at) <= ?');
+        params.push(dateTo);
+      }
+      if (partnerId) {
+        conditions.push('eu.partner_id = ?');
+        params.push(partnerId);
+      }
+
+      const whereClause = conditions.join(' AND ');
 
       // Get total count
       const [countResult] = await db.pool.query(

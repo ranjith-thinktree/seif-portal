@@ -40,10 +40,10 @@ import EmploymentManagementPage from "../pages/Admin/EmploymentManagementPage";
 import MyDataPage from "../pages/Partner/MyDataPage";
 import MyRequestsPage from "../pages/Partner/MyRequestsPage";
 import CertificatesPage from "../pages/Partner/CertificatesPage";
-import AnalyticsPage from "../pages/Analytics/AnalyticsPage";
 import ESSCIDataPage from "../pages/ESSCI/ESSCIDataPage";
 import ESSCIBatchDetailPage from "../pages/ESSCI/ESSCIBatchDetailPage";
-import ESSCIUploadPage from "../pages/ESSCI/ESSCIUploadPage";
+import SettingsPage from "../pages/Settings/SettingsPage";
+import HelpPage from "../pages/Help/HelpPage";
 
 /**
  * Placeholder page wrapper with MainLayout
@@ -386,15 +386,6 @@ const AppRoutes = () => {
           />
 
           <Route
-            path={ROUTES.ANALYTICS}
-            element={
-              <ProtectedRoute>
-                <AnalyticsPage />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
             path={ROUTES.DOWNLOADS}
             element={
               <ProtectedRoute>
@@ -416,7 +407,7 @@ const AppRoutes = () => {
             path={ROUTES.SETTINGS}
             element={
               <ProtectedRoute>
-                <PlaceholderPage title="Settings" />
+                <SettingsPage />
               </ProtectedRoute>
             }
           />
@@ -478,10 +469,10 @@ const AppRoutes = () => {
           />
 
           <Route
-            path={ROUTES.ESSCI_UPLOAD}
+            path={ROUTES.HELP}
             element={
               <ProtectedRoute>
-                <ESSCIUploadPage />
+                <HelpPage />
               </ProtectedRoute>
             }
           />

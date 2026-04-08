@@ -20,7 +20,7 @@ router.get('/template', uploadController.downloadTemplate);
 router.get(
   '/download-template',
   authenticate,
-  authorize(['PARTNER']),
+  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
   uploadController.downloadDynamicTemplate
 );
 
@@ -32,14 +32,19 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize(['PARTNER']),
+  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
   uploadCSV,
   handleUploadError,
   uploadController.uploadCSV
 );
 
 // Confirm upload after preview
-router.post('/confirm', authenticate, authorize(['PARTNER']), uploadController.confirmUpload);
+router.post(
+  '/confirm',
+  authenticate,
+  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
+  uploadController.confirmUpload
+);
 
 // Resubmit upload with edits (creates version 2)
 router.post(
@@ -62,6 +67,14 @@ router.post(
 
 // Get partner's upload history
 router.get('/', authenticate, authorize(['PARTNER']), uploadController.getUploads);
+
+// Download original uploaded file (B10)
+router.get(
+  '/:id/download',
+  authenticate,
+  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
+  uploadController.downloadUploadFile
+);
 
 // Get upload details (partner view)
 router.get('/:id', authenticate, authorize(['PARTNER']), uploadController.getUploadDetails);

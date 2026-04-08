@@ -27,7 +27,7 @@ const initialState = getInitialState();
  */
 export const login = createAsyncThunk(
   "auth/login",
-  async (credentials, { rejectWithValue: _rejectWithValue }) => {
+  async (credentials, { rejectWithValue }) => {
     try {
       const response = await authApi.login(credentials);
 

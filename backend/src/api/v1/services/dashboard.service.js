@@ -1,5 +1,6 @@
 const db = require('../../../database/connection');
 const { DatabaseError } = require('../../../utils/error.util');
+const { KpiService } = require('./kpi.service');
 
 /**
  * Dashboard Service
@@ -405,7 +406,7 @@ class DashboardService {
       );
       const totalStudents = studentsResult[0].total;
 
-      // Get total states covered
+      // Get total states and UTs covered
       const [statesResult] = await db.query(
         `SELECT COUNT(DISTINCT state) as total 
          FROM centers 
@@ -424,8 +425,19 @@ class DashboardService {
       const maleStudents = genderResult[0]?.male || 0;
       const femaleStudents = genderResult[0]?.female || 0;
 
-      // Get total employments (mock data for now - replace with actual table when available)
-      const totalEmployments = Math.floor(totalStudents * 0.75); // 75% employment rate
+      // Get total employments (records in the employment table)
+      const [employmentsResult] = await db.query(`SELECT COUNT(*) as total FROM employment`);
+      const totalEmployments = employmentsResult[0]?.total || 0;
+
+      // Get count of students in EDP courses
+      const [edpResult] = await db.query(
+        `SELECT COUNT(DISTINCT us.id) as total
+         FROM uploaded_students us
+         WHERE us.approval_status = ?
+           AND us.course_name LIKE ?`,
+        ['approved', '%EDP%']
+      );
+      const edpCount = edpResult[0]?.total || 0;
 
       // Get course breakdown
       const [courseBreakdown] = await db.query(
@@ -520,6 +532,9 @@ class DashboardService {
         monthlyBreakdown = monthlyData;
       }
 
+      // Fetch KPI settings (custom values + visibility) merged for this year
+      const kpiSettings = await KpiService.getSettings(year || 'all');
+
       return {
         // Basic statistics for StatCards
         totalPartners,
@@ -530,8 +545,14 @@ class DashboardService {
         maleStudents,
         femaleStudents,
 
+        // Extended KPI fields
+        edpCount,
+
         // Course breakdown for tooltip
         courseBreakdown,
+
+        // KPI settings (admin-controlled custom values + visibility)
+        kpiSettings,
 
         // Yearly data (for "all" years view)
         ...yearlyData,
@@ -723,6 +744,67 @@ class DashboardService {
     } catch (error) {
       console.error('Error in getStateStats:', error);
       throw new DatabaseError('Failed to fetch state statistics');
+    }
+  }
+
+  /**
+   * Get detailed course (lab) breakdown for a specific state
+   * @param {string} stateName - Full state name (e.g. 'Karnataka')
+   * @param {string|null} year - Year filter or null for all
+   * @returns {Object} { stateName, centerCount, courseBreakdown: [{courseName, studentCount, percentage}] }
+   */
+  static async getStateDetail(stateName, year = null) {
+    try {
+      // Center count for this state
+      let centerQuery = `SELECT COUNT(*) as total FROM centers WHERE state = ? AND status = ?`;
+      const centerParams = [stateName, 'active'];
+      if (year && year !== 'all') {
+        centerQuery += ` AND year_of_establishment = ?`;
+        centerParams.push(year);
+      }
+      const [centerResult] = await db.query(centerQuery, centerParams);
+      const centerCount = centerResult[0]?.total || 0;
+
+      // Course breakdown from uploaded_students via uploaded_centers.state
+      let courseQuery = `
+        SELECT 
+          us.course_name,
+          COUNT(*) as student_count
+        FROM uploaded_students us
+        JOIN uploaded_centers uc ON us.uploaded_center_id = uc.id
+        WHERE uc.state = ?
+          AND us.approval_status = 'approved'
+          AND us.course_name IS NOT NULL
+          AND us.course_name != ''
+      `;
+      const courseParams = [stateName];
+
+      if (year && year !== 'all') {
+        courseQuery += ` AND YEAR(us.created_at) = ?`;
+        courseParams.push(year);
+      }
+
+      courseQuery += ` GROUP BY us.course_name ORDER BY student_count DESC LIMIT 20`;
+
+      const [courseRows] = await db.query(courseQuery, courseParams);
+
+      const totalStudents = courseRows.reduce((sum, r) => sum + parseInt(r.student_count), 0);
+
+      const courseBreakdown = courseRows.map((r) => ({
+        courseName: r.course_name,
+        studentCount: parseInt(r.student_count),
+        percentage: totalStudents > 0 ? Math.round((r.student_count / totalStudents) * 100) : 0,
+      }));
+
+      return {
+        stateName,
+        centerCount,
+        totalStudents,
+        courseBreakdown,
+      };
+    } catch (error) {
+      console.error('Error in getStateDetail:', error);
+      throw new DatabaseError('Failed to fetch state detail');
     }
   }
 }

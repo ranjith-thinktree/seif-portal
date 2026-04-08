@@ -98,7 +98,7 @@ const ReviewCentersPage = () => {
   // Handle filter change
   const handleFilterChange = (value, checked) => {
     setFilters((prev) =>
-      prev.map((f) => (f.value === value ? { ...f, checked } : f))
+      prev.map((f) => (f.value === value ? { ...f, checked } : f)),
     );
     setCurrentPage(1);
   };
@@ -117,7 +117,7 @@ const ReviewCentersPage = () => {
     const activeFilters = filters.filter((f) => f.checked).map((f) => f.value);
     if (activeFilters.length > 0) {
       filtered = filtered.filter((center) =>
-        activeFilters.includes(center.review_status)
+        activeFilters.includes(center.review_status),
       );
     }
 
@@ -230,7 +230,7 @@ const ReviewCentersPage = () => {
   const handleCenterClick = (center) => {
     const path = ROUTES.REVIEW_STUDENTS.replace(":uploadId", uploadId).replace(
       ":centerId",
-      center.id
+      center.id,
     );
     navigate(path);
   };
@@ -281,20 +281,42 @@ const ReviewCentersPage = () => {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-100">
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Uploaded By</p>
-              <p className="text-sm font-medium text-gray-900">{upload?.uploaded_by_name || "-"}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                Uploaded By
+              </p>
+              <p className="text-sm font-medium text-gray-900">
+                {upload?.uploaded_by_name || "-"}
+              </p>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Upload Date</p>
-              <p className="text-sm font-medium text-gray-900">{upload?.uploaded_at ? new Date(upload.uploaded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                Upload Date
+              </p>
+              <p className="text-sm font-medium text-gray-900">
+                {upload?.uploaded_at
+                  ? new Date(upload.uploaded_at).toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "-"}
+              </p>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">File</p>
-              <p className="text-sm font-medium text-gray-900 truncate">{upload?.file_name || "-"}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                File
+              </p>
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {upload?.file_name || "-"}
+              </p>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Total Students</p>
-              <p className="text-sm font-medium text-gray-900">{upload?.total_students || "-"}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                Total Students
+              </p>
+              <p className="text-sm font-medium text-gray-900">
+                {upload?.total_students || "-"}
+              </p>
             </div>
           </div>
         </div>
@@ -306,7 +328,9 @@ const ReviewCentersPage = () => {
               <BuildingOffice2Icon className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{upload?.centers_total ?? 0}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {upload?.centers_total ?? 0}
+              </p>
               <p className="text-xs text-gray-500">Total Centers</p>
             </div>
           </div>
@@ -315,7 +339,9 @@ const ReviewCentersPage = () => {
               <ClockIcon className="h-5 w-5 text-yellow-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-yellow-700">{(upload?.centers_total ?? 0) - (upload?.centers_reviewed ?? 0)}</p>
+              <p className="text-2xl font-bold text-yellow-700">
+                {(upload?.centers_total ?? 0) - (upload?.centers_reviewed ?? 0)}
+              </p>
               <p className="text-xs text-gray-500">Pending Review</p>
             </div>
           </div>
@@ -324,7 +350,9 @@ const ReviewCentersPage = () => {
               <CheckCircleIcon className="h-5 w-5 text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-green-700">{upload?.centers_approved ?? 0}</p>
+              <p className="text-2xl font-bold text-green-700">
+                {upload?.centers_approved ?? 0}
+              </p>
               <p className="text-xs text-gray-500">Approved</p>
             </div>
           </div>
@@ -333,7 +361,9 @@ const ReviewCentersPage = () => {
               <XCircleIcon className="h-5 w-5 text-red-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-red-700">{upload?.centers_rejected ?? 0}</p>
+              <p className="text-2xl font-bold text-red-700">
+                {upload?.centers_rejected ?? 0}
+              </p>
               <p className="text-xs text-gray-500">Rejected</p>
             </div>
           </div>
@@ -370,8 +400,8 @@ const ReviewCentersPage = () => {
                 {searchTerm
                   ? "No centers found matching your search"
                   : filters.some((f) => f.checked)
-                  ? "No centers found matching selected filters"
-                  : "No centers to review"}
+                    ? "No centers found matching selected filters"
+                    : "No centers to review"}
               </div>
             </div>
           ) : (
@@ -445,7 +475,7 @@ const ReviewCentersPage = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
                             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(
-                              center.review_status
+                              center.review_status,
                             )}`}
                           >
                             {center.review_status === "pending" &&

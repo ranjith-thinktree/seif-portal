@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../../hooks";
 import { useNotifications } from "../../hooks/useNotifications";
-import { ROLES, ROLE_LABELS } from "../../constants";
+import { ROLES, ROLE_LABELS, ROUTES } from "../../constants";
 import { MainLayout } from "../../components/layout";
 import {
   Card,
@@ -17,6 +17,10 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   ChevronDownIcon,
+  ArrowDownTrayIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import {
   AreaChart,
@@ -34,6 +38,8 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import IndiaTrainingCard from "../../components/dashboard/IndiaTrainingCard";
 import { useNavigate } from "react-router-dom";
 import dataService from "../../services/data.service";
+import { essciGetData } from "../../services/certification.service";
+import { KPI_CARD_DEFINITIONS } from "../../services/kpi.service";
 import dashboardData from "../../data/dashboardData.json";
 
 /**
@@ -491,17 +497,47 @@ const AdminDashboard = () => {
   const combinedValues = useMemo(() => {
     const jsonData = getFilteredDashboardData;
     const apiData = analytics || {};
+    const kpiSettings = apiData.kpiSettings || {};
+
+    // Helper: dbValue + custom value from admin settings
+    const combined = (dbVal, kpiKey) => {
+      const custom = kpiSettings[kpiKey]?.customValue || 0;
+      return (dbVal || 0) + custom;
+    };
 
     // Merge: API data first, then JSON fallback, then 0
     const merged = {
-      partners: apiData.totalPartners || 0, // Only from API
-      centers: apiData.totalCenters || jsonData?.totalCenters || 0,
-      students: apiData.totalStudents || jsonData?.totalStudents || 0,
-      employments: apiData.totalEmployments || jsonData?.totalEmployments || 0,
-      states: apiData.totalStates || jsonData?.totalStates || 28,
+      partners: combined(apiData.totalPartners || 0, "partners"),
+      centers: combined(
+        apiData.totalCenters || jsonData?.totalCenters || 0,
+        "centers",
+      ),
+      students: combined(
+        apiData.totalStudents || jsonData?.totalStudents || 0,
+        "youth_trained",
+      ),
+      employments: combined(
+        apiData.totalEmployments || jsonData?.totalEmployments || 0,
+        "youth_employed",
+      ),
+      states: combined(
+        apiData.totalStates || jsonData?.totalStates || 28,
+        "states_uts",
+      ),
       maleStudents: apiData.maleStudents || jsonData?.maleStudents || 0,
       femaleStudents: apiData.femaleStudents || jsonData?.femaleStudents || 0,
+      edpCount: combined(apiData.edpCount || 0, "edp"),
+      trainersCount: combined(0, "trainers_trained"),
+      greaterIndia: combined(0, "greater_india"),
+      nsi: combined(0, "nsi"),
+      alumni: combined(0, "alumni"),
     };
+
+    // Attach visibility flags from kpiSettings (default all visible)
+    merged.visibility = {};
+    KPI_CARD_DEFINITIONS.forEach(({ key }) => {
+      merged.visibility[key] = kpiSettings[key]?.isVisible !== false;
+    });
 
     console.log("Total Partners:", merged.partners);
 
@@ -575,94 +611,197 @@ const AdminDashboard = () => {
         {selectedYear !== "all" ? ` for ${selectedYear}` : ""}.
       </p>
 
-      {/* Stats Grid - 5 Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {/* Total Partners */}
-        <StatCard
-          title="Total Partners"
-          value={combinedValues.partners.toLocaleString()}
-          trend="up"
-          graphData={getGraphData([
-            42,
-            44,
-            46,
-            48,
-            49,
-            50,
-            combinedValues.partners,
-          ])}
-        />
+      {/* Stats Grid - KPI Cards (order driven by admin settings) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {(() => {
+          const kpiSettings = (analytics || {}).kpiSettings || {};
+          const kpiCardData = [
+            {
+              key: "youth_trained",
+              title: "Youth Trained",
+              value: combinedValues.students,
+              graphData: getGraphData([
+                800,
+                950,
+                1100,
+                1200,
+                1180,
+                1220,
+                combinedValues.students,
+              ]),
+              wrapper: "gender",
+            },
+            {
+              key: "trainers_trained",
+              title: "Trainers Trained (TOT)",
+              value: combinedValues.trainersCount,
+              graphData: getGraphData([
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                combinedValues.trainersCount,
+              ]),
+              wrapper: null,
+            },
+            {
+              key: "edp",
+              title: "EDP",
+              value: combinedValues.edpCount,
+              graphData: getGraphData([
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                combinedValues.edpCount,
+              ]),
+              wrapper: null,
+            },
+            {
+              key: "youth_employed",
+              title: "Youth Employed",
+              value: combinedValues.employments,
+              graphData: getGraphData([
+                600,
+                700,
+                800,
+                900,
+                950,
+                980,
+                combinedValues.employments,
+              ]),
+              wrapper: null,
+            },
+            {
+              key: "partners",
+              title: "Partners",
+              value: combinedValues.partners,
+              graphData: getGraphData([
+                42,
+                44,
+                46,
+                48,
+                49,
+                50,
+                combinedValues.partners,
+              ]),
+              wrapper: null,
+            },
+            {
+              key: "centers",
+              title: "Centers",
+              value: combinedValues.centers,
+              graphData: getGraphData([
+                78,
+                79,
+                81,
+                82,
+                84,
+                85,
+                combinedValues.centers,
+              ]),
+              wrapper: "course",
+            },
+            {
+              key: "states_uts",
+              title: "States & UTs",
+              value: combinedValues.states,
+              graphData: getGraphData([
+                12,
+                14,
+                16,
+                18,
+                20,
+                22,
+                combinedValues.states,
+              ]),
+              wrapper: null,
+            },
+            {
+              key: "greater_india",
+              title: "Greater India",
+              value: combinedValues.greaterIndia,
+              graphData: getGraphData([
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                combinedValues.greaterIndia,
+              ]),
+              wrapper: null,
+            },
+            {
+              key: "nsi",
+              title: "NSI",
+              value: combinedValues.nsi,
+              graphData: getGraphData([0, 0, 0, 0, 0, 0, combinedValues.nsi]),
+              wrapper: null,
+            },
+            {
+              key: "alumni",
+              title: "Alumni",
+              value: combinedValues.alumni,
+              graphData: getGraphData([
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                combinedValues.alumni,
+              ]),
+              wrapper: null,
+            },
+          ];
 
-        {/* Total Centers with Course Breakdown Tooltip */}
-        <CourseBreakdownTooltip courses={courseBreakdown}>
-          <StatCard
-            title="Total Centers"
-            value={combinedValues.centers.toLocaleString()}
-            trend="up"
-            graphData={getGraphData([
-              78,
-              79,
-              81,
-              82,
-              84,
-              85,
-              combinedValues.centers,
-            ])}
-          />
-        </CourseBreakdownTooltip>
+          const sorted = [...kpiCardData].sort((a, b) => {
+            const orderA = kpiSettings[a.key]?.sortOrder ?? 99;
+            const orderB = kpiSettings[b.key]?.sortOrder ?? 99;
+            return orderA - orderB;
+          });
 
-        {/* Total Students with Gender Breakdown Tooltip */}
-        <GenderBreakdownTooltip
-          male={combinedValues.maleStudents}
-          female={combinedValues.femaleStudents}
-        >
-          <StatCard
-            title="Total Students Trained"
-            value={combinedValues.students.toLocaleString()}
-            trend="up"
-            graphData={getGraphData([
-              800,
-              950,
-              1100,
-              1200,
-              1180,
-              1220,
-              combinedValues.students,
-            ])}
-          />
-        </GenderBreakdownTooltip>
-
-        {/* Total Employments */}
-        <StatCard
-          title="Total Employments"
-          value={combinedValues.employments.toLocaleString()}
-          trend="up"
-          graphData={getGraphData([
-            600,
-            700,
-            800,
-            900,
-            950,
-            980,
-            combinedValues.employments,
-          ])}
-        />
-
-        {/* Total States Covered */}
-        <StatCard
-          title="Total States Covered"
-          value={combinedValues.states}
-          trend="up"
-          graphData={getGraphData([
-            12,
-            14,
-            16,
-            18,
-            20,
-            22,
-            combinedValues.states,
-          ])}
-        />
+          return sorted
+            .filter((card) => combinedValues.visibility?.[card.key] !== false)
+            .map((card) => {
+              const statCard = (
+                <StatCard
+                  key={card.key}
+                  title={card.title}
+                  value={card.value.toLocaleString()}
+                  trend="up"
+                  graphData={card.graphData}
+                />
+              );
+              if (card.wrapper === "gender") {
+                return (
+                  <GenderBreakdownTooltip
+                    key={card.key}
+                    male={combinedValues.maleStudents}
+                    female={combinedValues.femaleStudents}
+                  >
+                    {statCard}
+                  </GenderBreakdownTooltip>
+                );
+              }
+              if (card.wrapper === "course") {
+                return (
+                  <CourseBreakdownTooltip
+                    key={card.key}
+                    courses={courseBreakdown}
+                  >
+                    {statCard}
+                  </CourseBreakdownTooltip>
+                );
+              }
+              return statCard;
+            });
+        })()}
       </div>
 
       {/* Two Line Charts */}
@@ -819,16 +958,36 @@ const AdminDashboard = () => {
  * Partner Dashboard
  */
 const PartnerDashboard = ({ userName }) => {
+  const [selectedYear, setSelectedYear] = useState("all");
+
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">
-          Welcome back, {userName}!
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Manage your centers, data uploads, and requests.
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">
+            Welcome back, {userName}!
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Manage your centers, data uploads, and requests.
+          </p>
+        </div>
+
+        {/* Year Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+          >
+            <option value="all">All Years</option>
+            <option value="2022-23">2022-23</option>
+            <option value="2023-24">2023-24</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+          </select>
+          <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -959,16 +1118,36 @@ const PartnerDashboard = ({ userName }) => {
  * SEIF Read-Only Dashboard
  */
 const SeifReadOnlyDashboard = ({ userName }) => {
+  const [selectedYear, setSelectedYear] = useState("all");
+
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">
-          Welcome back, {userName}!
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          View analytics and reports across all partners and centers.
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">
+            Welcome back, {userName}!
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            View analytics and reports across all partners and centers.
+          </p>
+        </div>
+
+        {/* Year Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+          >
+            <option value="all">All Years</option>
+            <option value="2022-23">2022-23</option>
+            <option value="2023-24">2023-24</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+          </select>
+          <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -1069,82 +1248,192 @@ const SeifReadOnlyDashboard = ({ userName }) => {
  * ESSCI Dashboard
  */
 const EssciDashboard = ({ userName }) => {
+  const navigate = useNavigate();
+  const [selectedYear, setSelectedYear] = useState("all");
+  const [certStats, setCertStats] = useState({
+    total: 0,
+    done: 0,
+    underReview: 0,
+    ongoing: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setStatsLoading(true);
+        const yearParam = selectedYear !== "all" ? { year: selectedYear } : {};
+        const [allRes, doneRes, reviewRes, ongoingRes] = await Promise.all([
+          essciGetData({ page: 1, limit: 1, ...yearParam }),
+          essciGetData({ page: 1, limit: 1, status: "Done", ...yearParam }),
+          essciGetData({
+            page: 1,
+            limit: 1,
+            status: "Under review",
+            ...yearParam,
+          }),
+          essciGetData({ page: 1, limit: 1, status: "Ongoing", ...yearParam }),
+        ]);
+        setCertStats({
+          total: allRes?.data?.total ?? allRes?.total ?? 0,
+          done: doneRes?.data?.total ?? doneRes?.total ?? 0,
+          underReview: reviewRes?.data?.total ?? reviewRes?.total ?? 0,
+          ongoing: ongoingRes?.data?.total ?? ongoingRes?.total ?? 0,
+        });
+      } catch {
+        // stats stay at 0 on error
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+    fetchStats();
+  }, [selectedYear]);
+
+  const statCards = [
+    {
+      label: "Total Uploads",
+      value: certStats.total,
+      icon: ClipboardDocumentListIcon,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+    },
+    {
+      label: "Done",
+      value: certStats.done,
+      icon: CheckCircleIcon,
+      color: "text-green-600",
+      bg: "bg-green-50",
+    },
+    {
+      label: "Under Review",
+      value: certStats.underReview,
+      icon: ClockIcon,
+      color: "text-yellow-600",
+      bg: "bg-yellow-50",
+    },
+    {
+      label: "Ongoing",
+      value: certStats.ongoing,
+      icon: ArrowPathIcon,
+      color: "text-purple-600",
+      bg: "bg-purple-50",
+    },
+  ];
+
+  const quickActions = [
+    {
+      label: "View Certification Data",
+      description: "Browse and filter all certification uploads",
+      icon: ClipboardDocumentListIcon,
+      action: () => navigate(ROUTES.ESSCI_DATA),
+      variant: "primary",
+    },
+    {
+      label: "Upload Certificate PDF",
+      description: "Submit a new certificate PDF for a batch",
+      icon: ArrowDownTrayIcon,
+      action: () => navigate(ROUTES.ESSCI_UPLOAD),
+      variant: "primary",
+    },
+    {
+      label: "Download Partner Data",
+      description: "Export complete partner database as CSV",
+      icon: DocumentTextIcon,
+      action: () => dataService.downloadPartnersCSV?.(),
+      variant: "secondary",
+    },
+    {
+      label: "Download Student Records",
+      description: "Export all student data as CSV",
+      icon: DocumentTextIcon,
+      action: () => dataService.downloadStudentsCSV?.(),
+      variant: "secondary",
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">
-          Welcome back, {userName}!
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Download and export data for analysis.
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">
+            Welcome back, {userName}!
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Manage certifications and export data for analysis.
+          </p>
+        </div>
+
+        {/* Year Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+          >
+            <option value="all">All Years</option>
+            <option value="2022-23">2022-23</option>
+            <option value="2023-24">2023-24</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+          </select>
+          <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+        </div>
       </div>
 
-      {/* Quick Downloads */}
+      {/* Certification Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {statCards.map(({ label, value, icon: Icon, color, bg }) => (
+          <div
+            key={label}
+            className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4"
+          >
+            <div className={`${bg} p-3 rounded-lg`}>
+              <Icon className={`h-6 w-6 ${color}`} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">{label}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {statsLoading ? "—" : value}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick Actions */}
       <Card>
         <CardHeader>
-          <CardTitle>Quick Downloads</CardTitle>
-          <CardDescription>Export data in various formats</CardDescription>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>
+            Navigate to key certification workflows
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button className="p-4 border border-border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left">
-              <DocumentTextIcon className="h-8 w-8 text-primary-500 mb-2" />
-              <p className="font-medium">All Partners Data</p>
-              <p className="text-sm text-muted-foreground">
-                Export complete partner database
-              </p>
-            </button>
-            <button className="p-4 border border-border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left">
-              <DocumentTextIcon className="h-8 w-8 text-primary-500 mb-2" />
-              <p className="font-medium">Student Records</p>
-              <p className="text-sm text-muted-foreground">
-                Export all student data
-              </p>
-            </button>
-            <button className="p-4 border border-border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left">
-              <ChartBarIcon className="h-8 w-8 text-primary-500 mb-2" />
-              <p className="font-medium">Analytics Report</p>
-              <p className="text-sm text-muted-foreground">
-                Generate comprehensive analytics
-              </p>
-            </button>
-            <button className="p-4 border border-border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left">
-              <ClipboardDocumentListIcon className="h-8 w-8 text-primary-500 mb-2" />
-              <p className="font-medium">Request History</p>
-              <p className="text-sm text-muted-foreground">
-                Export all request records
-              </p>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Downloads */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Downloads</CardTitle>
-          <CardDescription>Your download history</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[1, 2, 3].map((item) => (
-              <div
-                key={item}
-                className="flex items-center justify-between py-3 border-b border-border last:border-0"
-              >
-                <div>
-                  <p className="font-medium">Partner Data Export</p>
-                  <p className="text-sm text-muted-foreground">
-                    Downloaded 2 days ago - 2.4 MB
+            {quickActions.map(
+              ({ label, description, icon: Icon, action, variant }) => (
+                <button
+                  key={label}
+                  onClick={action}
+                  className={`p-4 border rounded-lg text-left transition-colors ${
+                    variant === "primary"
+                      ? "border-blue-200 hover:border-blue-400 hover:bg-blue-50"
+                      : "border-gray-200 hover:border-gray-400 hover:bg-gray-50"
+                  }`}
+                >
+                  <Icon
+                    className={`h-8 w-8 mb-2 ${
+                      variant === "primary" ? "text-blue-600" : "text-gray-500"
+                    }`}
+                  />
+                  <p className="font-medium text-gray-900">{label}</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {description}
                   </p>
-                </div>
-                <button className="text-primary-500 hover:text-primary-600 font-medium text-sm">
-                  Download Again
                 </button>
-              </div>
-            ))}
+              ),
+            )}
           </div>
         </CardContent>
       </Card>

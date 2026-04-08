@@ -132,6 +132,20 @@ const handleUploadError = (err, req, res, next) => {
   next();
 };
 
+// ── Shared dynamic storage factory ───────────────────────────────────────────
+const makeDiskStorage = (subDir) =>
+  multer.diskStorage({
+    destination: (req, file, cb) => {
+      const dir = path.join(uploadsDir, subDir);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const originalName = file.originalname.replace(/\s+/g, '_');
+      cb(null, `${Date.now()}_${originalName}`);
+    },
+  });
+
 // ── PDF / document file filter ──────────────────────────────────────────────
 const pdfFileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
@@ -143,60 +157,129 @@ const pdfFileFilter = (req, file, cb) => {
 };
 
 const pdfUpload = multer({
-  storage: storage,
+  storage: makeDiskStorage('pdf_uploads'),
   fileFilter: pdfFileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB for certificate PDFs
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 /** Single PDF/image upload (field name: 'file') */
 const uploadPDF = pdfUpload.single('file');
 
-// ── Certification multipart: dataFile + validationDoc ────────────────────────
-const certStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const partnerId = req.user?.partnerId || req.user?.partner_id || 'unknown';
-    const partnerDir = path.join(uploadsDir, partnerId);
-    if (!fs.existsSync(partnerDir)) fs.mkdirSync(partnerDir, { recursive: true });
-    cb(null, partnerDir);
-  },
-  filename: (req, file, cb) => {
-    const timestamp = Date.now();
-    const originalName = file.originalname.replace(/\s+/g, '_');
-    cb(null, `${timestamp}_${originalName}`);
-  },
+// ── Certification partner form upload: single support doc ────────────────────
+// Allowed: PDF, images, Word (.doc/.docx), CSV, XLSX
+const certSupportDocFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
+  if (!allowed.includes(ext)) {
+    return cb(
+      new Error(`Support document must be PDF, image, Word, or spreadsheet. Got: ${ext}`),
+      false
+    );
+  }
+  cb(null, true);
+};
+
+const certSupportUpload = multer({
+  storage: makeDiskStorage('cert_support'),
+  fileFilter: certSupportDocFilter,
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-const certFileFilter = (req, file, cb) => {
+/** Single support doc for partner certification form (field name: 'supportDoc') */
+const uploadCertificationFiles = certSupportUpload.single('supportDoc');
+
+// ── ESSCI upload: zipFile (archives) + studentListDoc (docs) ─────────────────
+const essciFileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (file.fieldname === 'dataFile') {
-    const allowed = ['.csv', '.xlsx', '.xls', '.xlsm'];
+  if (file.fieldname === 'zipFile') {
+    const allowed = ['.zip', '.tar', '.gz', '.rar', '.7z', '.bz2', '.tgz', '.tbz2'];
     if (!allowed.includes(ext)) {
-      return cb(new Error(`dataFile must be CSV or Excel. Got: ${ext}`), false);
+      return cb(
+        new Error(`ZIP field only accepts archive files (.zip,.tar,.gz,.rar,.7z). Got: ${ext}`),
+        false
+      );
     }
-  } else if (file.fieldname === 'validationDoc') {
-    const allowed = ['.pdf', '.jpg', '.jpeg', '.png'];
+  } else if (file.fieldname === 'studentListDoc') {
+    const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
     if (!allowed.includes(ext)) {
-      return cb(new Error(`validationDoc must be PDF or image. Got: ${ext}`), false);
+      return cb(
+        new Error(`Student list must be PDF, image, Word, or spreadsheet. Got: ${ext}`),
+        false
+      );
     }
   }
   cb(null, true);
 };
 
-const certUploadMulter = multer({
-  storage: certStorage,
-  fileFilter: certFileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 },
+const essciUpload = multer({
+  storage: makeDiskStorage('essci_uploads'),
+  fileFilter: essciFileFilter,
 });
 
-/** Two-field upload for certification: dataFile (CSV) + validationDoc (PDF/image) */
-const uploadCertificationFiles = certUploadMulter.fields([
-  { name: 'dataFile', maxCount: 1 },
-  { name: 'validationDoc', maxCount: 1 },
+/** Two-field upload for ESSCI: zipFile (archive) + studentListDoc (document) */
+const uploadESSCIFiles = essciUpload.fields([
+  { name: 'zipFile', maxCount: 1 },
+  { name: 'studentListDoc', maxCount: 1 },
 ]);
+
+// ── Employment upload: Excel/CSV data file + optional PDF/ZIP attachments ────
+const employmentAttachmentFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (file.fieldname === 'file') {
+    // Main employment data file
+    const allowed = ['.csv', '.xlsx', '.xls', '.xlsm'];
+    if (!allowed.includes(ext)) {
+      return cb(
+        new Error(`Employment data file must be CSV or Excel (.csv,.xlsx,.xls). Got: ${ext}`),
+        false
+      );
+    }
+  } else if (file.fieldname === 'attachments') {
+    // Supporting documents (offer letters, payslips, ZIP archives)
+    const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.zip'];
+    if (!allowed.includes(ext)) {
+      return cb(new Error(`Attachments must be PDF, image, or ZIP. Got: ${ext}`), false);
+    }
+  }
+  cb(null, true);
+};
+
+const employmentUploadMulter = multer({
+  storage: makeDiskStorage('employment_attachments'),
+  fileFilter: employmentAttachmentFilter,
+  limits: { fileSize: 50 * 1024 * 1024, files: 11 }, // 1 data file + up to 10 attachments
+});
+
+/** Multi-field upload for employment: file (Excel/CSV) + attachments (PDF/ZIP, up to 10) */
+const uploadEmploymentWithAttachments = employmentUploadMulter.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'attachments', maxCount: 10 },
+]);
+
+// ── Settings template upload: .xlsx only ─────────────────────────────────────
+const templateFileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ext !== '.xlsx') {
+    return cb(new Error(`Template file must be .xlsx. Got: ${ext}`), false);
+  }
+  cb(null, true);
+};
+
+const templateUpload = multer({
+  storage: makeDiskStorage('templates'),
+  fileFilter: templateFileFilter,
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+/** Single .xlsx template upload (field name: 'templateFile') */
+const uploadTemplateFile = templateUpload.single('templateFile');
 
 module.exports = {
   uploadCSV,
   uploadPDF,
   uploadCertificationFiles,
+  uploadESSCIFiles,
+  uploadEmploymentWithAttachments,
+  uploadTemplateFile,
   handleUploadError,
 };

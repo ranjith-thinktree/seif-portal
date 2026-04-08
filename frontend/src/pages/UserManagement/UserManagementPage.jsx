@@ -23,14 +23,25 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import {
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  KeyIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  EyeIcon,
-} from "@heroicons/react/24/outline";
+  MoreHorizontal,
+  Eye,
+  Pencil,
+  KeyRound,
+  CheckCircle2,
+  XCircle,
+  Trash2,
+  Plus,
+  UserCheck,
+  UserX,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
 import {
   getUsers,
   getUserFilterOptions,
@@ -79,6 +90,7 @@ const UserManagementPage = () => {
   });
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
+  const [table, setTable] = useState(null);
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -195,7 +207,7 @@ const UserManagementPage = () => {
         page: response.data.page || 1,
         limit: response.data.limit || 10,
         total: response.data.total || 0,
-        pages:
+        totalPages:
           Math.ceil((response.data.total || 0) / (response.data.limit || 10)) ||
           1,
       });
@@ -363,18 +375,20 @@ const UserManagementPage = () => {
   };
 
   // Handle status change
-  const handleStatusChange = async (newStatus) => {
-    if (!selectedUser) return;
+  // targetUser can be passed directly to avoid React async state race condition
+  const handleStatusChange = async (newStatus, targetUser = null) => {
+    const userToUpdate = targetUser || selectedUser;
+    if (!userToUpdate) return;
 
     // Prevent self-deactivation
-    if (selectedUser.id === currentUserId && newStatus !== "active") {
+    if (userToUpdate.id === currentUserId && newStatus !== "active") {
       toast.error("You cannot deactivate your own account");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await updateUserStatus(selectedUser.id, newStatus);
+      await updateUserStatus(userToUpdate.id, newStatus);
       toast.success(
         `User ${newStatus === "active" ? "activated" : newStatus} successfully`,
       );
@@ -523,16 +537,7 @@ const UserManagementPage = () => {
         id: "status",
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => {
-          const statusConfig = {
-            active: { variant: "success", label: "Active" },
-            inactive: { variant: "secondary", label: "Inactive" },
-            suspended: { variant: "error", label: "Suspended" },
-          };
-          const config =
-            statusConfig[row.original.status] || statusConfig.inactive;
-          return <StatusBadge variant={config.variant} label={config.label} />;
-        },
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
       },
       {
         id: "last_login_at",
@@ -557,85 +562,84 @@ const UserManagementPage = () => {
           const isSelf = user.id === currentUserId;
 
           return (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => openViewModal(user)}
-                title="View Details"
-              >
-                <EyeIcon className="h-4 w-4" />
-              </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-8 w-8 p-0">
+                  <span className="sr-only">Open menu</span>
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => openViewModal(user)}>
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Details
+                </DropdownMenuItem>
 
-              {canManageUsers && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEditModal(user)}
-                    title="Edit User"
-                  >
-                    <PencilIcon className="h-4 w-4" />
-                  </Button>
+                {canManageUsers && (
+                  <>
+                    <DropdownMenuItem onClick={() => openEditModal(user)}>
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Edit User
+                    </DropdownMenuItem>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedUser(user);
-                      setShowResetPasswordModal(true);
-                    }}
-                    title="Reset Password"
-                  >
-                    <KeyIcon className="h-4 w-4" />
-                  </Button>
-
-                  {user.status === "active" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <DropdownMenuItem
                       onClick={() => {
                         setSelectedUser(user);
-                        setShowStatusModal(true);
+                        setShowResetPasswordModal(true);
                       }}
-                      title="Change Status"
-                      disabled={isSelf}
                     >
-                      <XCircleIcon className="h-4 w-4 text-orange-600" />
-                    </Button>
-                  )}
+                      <KeyRound className="w-4 h-4 mr-2" />
+                      Reset Password
+                    </DropdownMenuItem>
 
-                  {user.status !== "active" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedUser(user);
-                        handleStatusChange("active");
-                      }}
-                      title="Activate User"
-                    >
-                      <CheckCircleIcon className="h-4 w-4 text-green-600" />
-                    </Button>
-                  )}
+                    <DropdownMenuSeparator />
 
-                  {isSuperAdmin && !isSelf && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setShowDeleteModal(true);
-                      }}
-                      title="Delete User"
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
+                    {user.status === "active" && !isSelf && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowStatusModal(true);
+                        }}
+                        className="text-orange-600 focus:text-orange-600"
+                      >
+                        <UserX className="w-4 h-4 mr-2" />
+                        Deactivate
+                      </DropdownMenuItem>
+                    )}
+
+                    {user.status !== "active" && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSelectedUser(user);
+                          handleStatusChange("active", user);
+                        }}
+                        className="text-green-600 focus:text-green-600"
+                      >
+                        <UserCheck className="w-4 h-4 mr-2" />
+                        Activate
+                      </DropdownMenuItem>
+                    )}
+
+                    {isSuperAdmin && !isSelf && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setShowDeleteModal(true);
+                          }}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete User
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           );
         },
       },
@@ -643,12 +647,27 @@ const UserManagementPage = () => {
     [canManageUsers, isSuperAdmin, currentUserId],
   );
 
-  // Filter configuration for AdvancedSearchBar
-  const filters = [
+  // Sort handler
+  const handleSortChange = useCallback((field, order) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, []);
+
+  // Sort options
+  const sortOptions = [
+    { label: "Name", value: "full_name" },
+    { label: "Email", value: "email" },
+    { label: "Role", value: "role" },
+    { label: "Status", value: "status" },
+    { label: "Created Date", value: "created_at" },
+  ];
+
+  // Filter configuration for AdvancedSearchBar (filterGroups format)
+  const filterGroups = [
     {
       key: "role",
       label: "Role",
-      type: "select",
       options: (filterOptions?.roles || []).map((role) => ({
         value: role,
         label: role,
@@ -657,7 +676,6 @@ const UserManagementPage = () => {
     {
       key: "status",
       label: "Status",
-      type: "select",
       options: (filterOptions?.statuses || []).map((status) => ({
         value: status,
         label: status.charAt(0).toUpperCase() + status.slice(1),
@@ -666,12 +684,10 @@ const UserManagementPage = () => {
     {
       key: "partner_id",
       label: "Partner",
-      type: "select",
       options: (filterOptions?.partners || []).map((partner) => ({
         value: partner.id,
         label: partner.name,
       })),
-      condition: (filters) => filters.role === "PARTNER",
     },
   ];
 
@@ -694,7 +710,7 @@ const UserManagementPage = () => {
               onClick={openCreateModal}
               className="flex items-center gap-2"
             >
-              <PlusIcon className="h-5 w-5" />
+              <Plus className="h-5 w-5" />
               Create User
             </Button>
           )}
@@ -727,8 +743,11 @@ const UserManagementPage = () => {
 
         {/* Search and Filters */}
         <AdvancedSearchBar
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
+          value={searchTerm}
+          onChange={(val) => {
+            setSearchTerm(val);
+            setPagination((prev) => ({ ...prev, page: 1 }));
+          }}
           activeFilters={activeFilters}
           onFilterChange={(key, value) => {
             setActiveFilters((prev) => ({ ...prev, [key]: value }));
@@ -738,8 +757,14 @@ const UserManagementPage = () => {
             setActiveFilters({ role: "", status: "", partner_id: "" });
             setPagination((prev) => ({ ...prev, page: 1 }));
           }}
-          filters={filters}
+          filterGroups={filterGroups}
           placeholder="Search by name or email..."
+          table={table}
+          storageKey="user-management"
+          sortOptions={sortOptions}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={handleSortChange}
         />
 
         {/* Table */}
@@ -748,14 +773,12 @@ const UserManagementPage = () => {
           data={users}
           pagination={pagination}
           onPageChange={(page) => setPagination((prev) => ({ ...prev, page }))}
-          onRowsPerPageChange={(limit) =>
+          onPageSizeChange={(limit) =>
             setPagination((prev) => ({ ...prev, limit, page: 1 }))
           }
           isLoading={isLoading}
-          onSortChange={(field, order) => {
-            setSortBy(field);
-            setSortOrder(order);
-          }}
+          storageKey="user-management"
+          onTableReady={setTable}
         />
 
         {/* Create/Edit User Modal */}

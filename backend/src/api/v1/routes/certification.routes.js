@@ -7,7 +7,7 @@ const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 const {
   uploadCertificationFiles,
-  uploadPDF,
+  uploadESSCIFiles,
   handleUploadError,
 } = require('../../../middleware/upload.middleware');
 
@@ -15,12 +15,10 @@ const {
 // PARTNER routes
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.get('/template', authenticate, checkRole('PARTNER'), certController.downloadTemplate);
-
 router.post(
   '/upload',
   authenticate,
-  checkRole('PARTNER'),
+  checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
   uploadCertificationFiles,
   handleUploadError,
   certController.uploadCertificationData
@@ -111,7 +109,7 @@ router.post(
   '/essci/upload-pdf',
   authenticate,
   checkRole('ESSCI'),
-  uploadPDF,
+  uploadESSCIFiles,
   handleUploadError,
   certController.essciUploadPDF
 );

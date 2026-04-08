@@ -6,40 +6,32 @@ const BASE = "/certification";
 // PARTNER
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Download CSV template */
-export const downloadCertificationTemplate = async () => {
-  const response = await apiClient.get(`${BASE}/template`, {
-    responseType: "blob",
-  });
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", "Certification_Data_Template.xlsx");
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
-  return { success: true };
-};
-
 /**
- * Upload certification CSV + optional validation doc.
- * @param {File} dataFile   - CSV/Excel
- * @param {File|null} validationDoc - PDF/image (optional)
+ * Upload certification data (form-based, no CSV).
  * @param {string} centerId
  * @param {string} batchId
+ * @param {string} batchStartDate  - ISO date string
+ * @param {string} batchEndDate    - ISO date string
+ * @param {string} assessmentDate  - ISO date string
+ * @param {File|null} supportDoc   - PDF/image/Word/CSV/XLSX (optional)
  */
 export const uploadCertificationData = async (
-  dataFile,
-  validationDoc,
   centerId,
   batchId,
+  batchStartDate,
+  batchEndDate,
+  assessmentDate,
+  supportDoc,
+  targetPartnerId = null,
 ) => {
   const formData = new FormData();
-  formData.append("dataFile", dataFile);
-  if (validationDoc) formData.append("validationDoc", validationDoc);
   formData.append("centerId", centerId);
   formData.append("batchId", batchId);
+  if (batchStartDate) formData.append("batchStartDate", batchStartDate);
+  if (batchEndDate) formData.append("batchEndDate", batchEndDate);
+  if (assessmentDate) formData.append("assessmentDate", assessmentDate);
+  if (supportDoc) formData.append("supportDoc", supportDoc);
+  if (targetPartnerId) formData.append("targetPartnerId", targetPartnerId);
 
   const response = await apiClient.post(`${BASE}/upload`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -176,30 +168,79 @@ export const essciGetBatches = async (centerId, partnerId) => {
 };
 
 /**
- * ESSCI uploads a certificate PDF for a batch.
- * @param {File} pdfFile
+ * ESSCI uploads attendance data + files for a batch.
  * @param {string} partnerId
  * @param {string} centerId
  * @param {string} batchId
  * @param {string|null} certificationUploadId
+ * @param {number} traineesAttended
+ * @param {number} traineesPassed
+ * @param {number} traineesFailed
+ * @param {number} traineesAbsent
+ * @param {File} zipFile           - ZIP archive (required)
+ * @param {File} studentListDoc    - Student list document (required)
  */
 export const essciUploadCertificatePDF = async (
-  pdfFile,
   partnerId,
   centerId,
   batchId,
   certificationUploadId = null,
+  traineesAttended,
+  traineesPassed,
+  traineesFailed,
+  traineesAbsent,
+  zipFile,
+  studentListDoc,
 ) => {
   const formData = new FormData();
-  formData.append("file", pdfFile);
   formData.append("partnerId", partnerId);
   formData.append("centerId", centerId);
   formData.append("batchId", batchId);
   if (certificationUploadId)
     formData.append("certificationUploadId", certificationUploadId);
+  formData.append("traineesAttended", traineesAttended);
+  formData.append("traineesPassed", traineesPassed);
+  formData.append("traineesFailed", traineesFailed);
+  formData.append("traineesAbsent", traineesAbsent);
+  formData.append("zipFile", zipFile);
+  formData.append("studentListDoc", studentListDoc);
 
   const response = await apiClient.post(`${BASE}/essci/upload-pdf`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+  return response.data;
+};
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS (Admin)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getPortalSettings = async () => {
+  const response = await apiClient.get("/settings");
+  return response.data;
+};
+
+export const updateInstruction = async (key, value) => {
+  const response = await apiClient.put(`/settings/${key}/instruction`, {
+    value,
+  });
+  return response.data;
+};
+
+export const updateTemplate = async (key, file) => {
+  const formData = new FormData();
+  formData.append("templateFile", file);
+  const response = await apiClient.put(`/settings/${key}/template`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
+export const getDashboardData = async () => {
+  const response = await apiClient.get("/settings/dashboard-data");
+  return response.data;
+};
+
+export const updateDashboardData = async (data) => {
+  const response = await apiClient.put("/settings/dashboard-data", data);
   return response.data;
 };

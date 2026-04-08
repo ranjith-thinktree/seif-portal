@@ -1905,6 +1905,22 @@ class PartnerService {
       throw error;
     }
   }
+
+  /**
+   * Get simple list of approved partners for admin selectors
+   * @returns {Promise<Array>} Array of {id, name}
+   */
+  async getSimpleList() {
+    try {
+      const [rows] = await db.query(
+        `SELECT id, name FROM partners WHERE approval_status = 'approved' AND status = 'active' ORDER BY name ASC`
+      );
+      return rows;
+    } catch (error) {
+      console.error('Error in getSimpleList:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new PartnerService();

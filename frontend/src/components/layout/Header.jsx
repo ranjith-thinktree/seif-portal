@@ -55,9 +55,18 @@ const Header = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Show only the first two words of the username
+  const shortName = userName ? userName.split(" ").slice(0, 2).join(" ") : "";
+
   return (
     <header className="bg-white border-b border-border sticky top-0 z-30">
-      <div className="flex items-center justify-end h-16 px-6">
+      <div className="flex items-center justify-between h-16 px-6">
+        {/* Left side - Username */}
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-semibold text-foreground">
+            {shortName}
+          </span>
+        </div>
         {/* Right side - Notifications and User Menu */}
         <div className="flex items-center gap-4">
           {/* Upload Button - only displayed for partner roles */}

@@ -3,14 +3,14 @@ const router = express.Router();
 const employmentController = require('../controllers/employment.controller');
 const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
-const { uploadCSV } = require('../../../middleware/upload.middleware');
+const { uploadEmploymentWithAttachments } = require('../../../middleware/upload.middleware');
 
 // Partner routes
 router.post(
   '/upload',
   authenticate,
-  checkRole('PARTNER'),
-  uploadCSV,
+  checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
+  uploadEmploymentWithAttachments,
   employmentController.uploadEmployment
 );
 

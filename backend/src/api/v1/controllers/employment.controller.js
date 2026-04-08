@@ -1,8 +1,9 @@
 const employmentService = require('../services/employment.service');
 const {
   generateEmploymentTemplate,
+  generatePrefilledEmploymentTemplate,
   parseExcelFile,
-  validateHeaders,
+  extractEmploymentData,
   EXPECTED_EMPLOYMENT_COLUMNS,
 } = require('../../../utils/excelHandler');
 const db = require('../../../database/connection');
@@ -11,36 +12,89 @@ const path = require('path');
 const fs = require('fs');
 
 /**
- * Upload employment CSV
+ * Upload employment CSV + optional PDF/ZIP attachments (B7)
  * POST /api/v1/employment/upload
+ * Accepts multipart/form-data with:
+ *   file        — Excel/CSV employment data (required)
+ *   attachments — PDF/ZIP supporting documents (optional, up to 10)
  */
 exports.uploadEmployment = async (req, res) => {
+  // Support both uploadCSV (req.file) and uploadEmploymentWithAttachments (req.files)
+  const dataFile = req.file || (req.files && req.files['file'] && req.files['file'][0]);
+  const attachmentFiles = (req.files && req.files['attachments']) || [];
+
   try {
-    const partnerId = req.user.partner_id || req.user.id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    const targetPartnerId = req.body.targetPartnerId || null;
+    let partnerId = req.user.partner_id || req.user.id;
+    if (isAdmin && targetPartnerId) {
+      partnerId = targetPartnerId;
+    }
     const uploadedBy = req.user.id;
 
-    if (!req.file) {
+    if (!dataFile) {
       return res.status(400).json({
         success: false,
-        message: 'No file uploaded',
+        message: 'No employment data file uploaded. Please attach a CSV or Excel file.',
       });
     }
 
-    // Parse the uploaded file
-    const { data: csvData, headers } = await parseExcelFile(req.file.path, 'employment');
+    // Parse the uploaded file (fix: correct arg order and destructuring)
+    const { rows } = await parseExcelFile(dataFile.path, dataFile.originalname, 'employment');
 
-    // Validate headers
-    const headerValidation = validateHeaders(headers, 'employment');
-    if (!headerValidation.isValid) {
+    if (!rows || rows.length === 0) {
       try {
-        fs.unlinkSync(req.file.path);
+        fs.unlinkSync(dataFile.path);
       } catch (e) {
         /* ignore */
       }
-      return res.status(400).json({
-        success: false,
-        message: `Invalid file format: ${headerValidation.errors.join(', ')}`,
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: 'File is empty or has no data rows.' });
+    }
+
+    // Map parsed rows to service-expected field names
+    const csvData = rows.map((row) => extractEmploymentData(row.data));
+
+    // Handle attachment files (B7): store to S3 if configured, else keep local path
+    const attachmentUrls = [];
+    for (const attach of attachmentFiles) {
+      let fileUrl = null;
+      try {
+        if (process.env.AWS_BUCKET_NAME && process.env.AWS_ACCESS_KEY_ID) {
+          // S3 upload
+          const AWS = require('aws-sdk');
+          const s3 = new AWS.S3({
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            region: process.env.AWS_REGION || 'ap-south-1',
+          });
+          const fileContent = fs.readFileSync(attach.path);
+          const s3Key = `employment-attachments/${partnerId}/${Date.now()}_${attach.originalname.replace(/\s+/g, '_')}`;
+          await s3
+            .upload({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: s3Key,
+              Body: fileContent,
+              ContentType: attach.mimetype,
+            })
+            .promise();
+          fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
+          // Clean up local file after S3 upload
+          try {
+            fs.unlinkSync(attach.path);
+          } catch (e) {
+            /* ignore */
+          }
+        } else {
+          // Local fallback — keep the saved path as URL
+          fileUrl = attach.path;
+        }
+      } catch (uploadErr) {
+        console.warn(`Failed to upload attachment ${attach.originalname}:`, uploadErr.message);
+        fileUrl = attach.path; // fallback to local
+      }
+      attachmentUrls.push(fileUrl);
     }
 
     // Create employment_uploads record
@@ -49,15 +103,23 @@ exports.uploadEmployment = async (req, res) => {
       `INSERT INTO employment_uploads
          (id, partner_id, file_name, total_records, status, uploaded_by, created_at)
        VALUES (?, ?, ?, ?, 'processing', ?, NOW())`,
-      [uploadId, partnerId, req.file.originalname, csvData.length, uploadedBy]
+      [uploadId, partnerId, dataFile.originalname, csvData.length, uploadedBy]
     );
+
+    // Store attachment URLs if any
+    if (attachmentUrls.length > 0) {
+      await db.query(`UPDATE employment_uploads SET file_url = ? WHERE id = ?`, [
+        JSON.stringify(attachmentUrls),
+        uploadId,
+      ]);
+    }
 
     // Process pre-parsed data through service
     const result = await employmentService.processEmploymentUpload(
       partnerId,
       uploadId,
       csvData,
-      req.file.originalname
+      dataFile.originalname
     );
 
     // Update upload record with final stats
@@ -70,9 +132,9 @@ exports.uploadEmployment = async (req, res) => {
       [result.processed, result.failed, finalStatus, JSON.stringify(result.error_log), uploadId]
     );
 
-    // Clean up uploaded file
+    // Clean up data file
     try {
-      fs.unlinkSync(req.file.path);
+      fs.unlinkSync(dataFile.path);
     } catch (err) {
       /* ignore */
     }
@@ -81,10 +143,10 @@ exports.uploadEmployment = async (req, res) => {
   } catch (error) {
     console.error('Error in uploadEmployment:', error);
 
-    // Clean up uploaded file on error
-    if (req.file && req.file.path) {
+    // Clean up data file on error
+    if (dataFile && dataFile.path) {
       try {
-        fs.unlinkSync(req.file.path);
+        fs.unlinkSync(dataFile.path);
       } catch (err) {
         /* ignore */
       }
@@ -98,44 +160,81 @@ exports.uploadEmployment = async (req, res) => {
 };
 
 /**
- * Download employment template
+ * Download pre-filled employment template (B4/B5/B6)
  * GET /api/v1/employment/template
+ * Query params:
+ *   period=1m|6m|1y|all  (default: all) — filter students approved in the last N months
  */
 exports.downloadTemplate = async (req, res) => {
   try {
     const partnerId = req.user.partner_id || req.user.id;
     const partnerName = req.user.partner_name || req.user.full_name || 'Partner';
-    const sampleRowCount = parseInt(req.query.samples) || 3;
+    const period = req.query.period || 'all';
 
-    // Check if partner has any approved students
-    const [approvedStudents] = await db.query(
-      `SELECT COUNT(*) as count 
-       FROM uploaded_students 
-       WHERE partner_id = ? 
-       AND review_status = 'approved'`,
-      [partnerId]
-    );
+    // Calculate cutoff date based on period
+    let cutoffDate = null;
+    if (period !== 'all') {
+      const now = new Date();
+      if (period === '1m') now.setMonth(now.getMonth() - 1);
+      else if (period === '6m') now.setMonth(now.getMonth() - 6);
+      else if (period === '1y') now.setFullYear(now.getFullYear() - 1);
+      else {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid period. Use 1m, 6m, 1y, or all.',
+        });
+      }
+      cutoffDate = now;
+    }
 
-    const approvedCount = approvedStudents[0]?.count || 0;
+    // Fetch approved students for this partner, filtered by approval date (students.created_at)
+    // Join with uploaded_students to get father_name, batches for batch_number, centers for center_csv_id
+    let query = `
+      SELECT
+        s.id            AS student_uuid,
+        s.partner_student_id,
+        s.student_name,
+        us.father_name,
+        b.batch_number,
+        c.center_id     AS center_csv_id,
+        s.created_at    AS approved_at
+      FROM students s
+      LEFT JOIN uploaded_students us ON us.approved_student_id = s.id
+      LEFT JOIN batches b ON b.id = s.batch_id
+      LEFT JOIN centers c ON c.id = s.center_id
+      WHERE s.partner_id = ?
+        AND s.deleted_at IS NULL
+    `;
+    const params = [partnerId];
 
-    if (approvedCount === 0) {
+    if (cutoffDate) {
+      query += ' AND s.created_at >= ?';
+      params.push(cutoffDate);
+    }
+
+    query += ' ORDER BY c.center_id, b.batch_number, s.student_name';
+
+    const [students] = await db.query(query, params);
+
+    if (students.length === 0) {
+      const periodLabel = period === 'all' ? '' : ` approved in the last ${period}`;
       return res.status(400).json({
         success: false,
-        message:
-          'No approved students found. Please upload and get student data approved before downloading employment template.',
+        message: `No approved students found${periodLabel}. Please upload and get student data approved first.`,
         code: 'NO_APPROVED_STUDENTS',
       });
     }
 
-    const templateBuffer = await generateEmploymentTemplate(partnerName, sampleRowCount);
+    const templateBuffer = await generatePrefilledEmploymentTemplate(students, partnerName);
 
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     );
+    const periodSuffix = period === 'all' ? '' : `_${period}`;
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename=Employment_Data_Template_${Date.now()}.xlsx`
+      `attachment; filename=Employment_Template_${partnerName.replace(/\s+/g, '_')}${periodSuffix}_${Date.now()}.xlsx`
     );
 
     res.send(templateBuffer);
@@ -190,10 +289,14 @@ exports.getUploadHistory = async (req, res) => {
     const partnerId = req.user.partner_id || req.user.id;
     const page = req.query.page || 1;
     const limit = req.query.limit || 10;
+    const { status, dateFrom, dateTo } = req.query;
 
     const result = await employmentService.getPartnerEmploymentUploads(partnerId, {
       page,
       limit,
+      status: status || null,
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null,
     });
 
     res.json({
@@ -266,11 +369,15 @@ exports.getAllUploads = async (req, res) => {
     const page = req.query.page || 1;
     const limit = req.query.limit || 10;
     const status = req.query.status || null;
+    const { dateFrom, dateTo, partnerId } = req.query;
 
     const result = await employmentService.getAllEmploymentUploads({
       page,
       limit,
       status,
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null,
+      partnerId: partnerId || null,
     });
 
     res.json({

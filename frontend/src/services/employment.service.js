@@ -8,11 +8,13 @@ import apiClient from "../api/client";
 /**
  * Upload employment CSV file
  * @param {File} file - Employment CSV file
+ * @param {string|null} targetPartnerId - For admin uploads on behalf of partner
  * @returns {Promise}
  */
-export const uploadEmploymentCSV = async (file) => {
+export const uploadEmploymentCSV = async (file, targetPartnerId = null) => {
   const formData = new FormData();
   formData.append("file", file);
+  if (targetPartnerId) formData.append("targetPartnerId", targetPartnerId);
 
   const response = await apiClient.post("/employment/upload", formData, {
     headers: {
@@ -44,7 +46,7 @@ export const downloadEmploymentTemplate = async () => {
     link.href = url;
     link.setAttribute(
       "download",
-      `Employment_Data_Template_${Date.now()}.xlsx`
+      `Employment_Data_Template_${Date.now()}.xlsx`,
     );
     document.body.appendChild(link);
     link.click();

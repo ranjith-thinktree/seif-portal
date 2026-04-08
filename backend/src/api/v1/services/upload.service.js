@@ -159,6 +159,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
     let totalCenters = 0;
     let totalBatches = 0;
     let totalStudents = 0;
+    let studentSeqCounter = 0; // Used to auto-generate partner_student_id
     const errors = [];
 
     // Iterate through centers
@@ -252,7 +253,11 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
         // Insert students with new fields
         for (const student of batchData.students) {
           totalStudents++;
+          studentSeqCounter++;
           const studentUuid = (await connection.query('SELECT UUID() as id'))[0][0].id;
+
+          // Auto-generate partner_student_id (Student ID removed from template - B3)
+          const partnerStudentId = `PSI-${String(studentSeqCounter).padStart(5, '0')}`;
 
           // Use batch start date as enrollment date if not provided
           const enrollmentDate = student.enrollment_date || batchData.batchData.batch_start_date;
@@ -261,10 +266,10 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
             `INSERT INTO uploaded_students 
             (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, 
              partner_id, partner_student_id, student_name, father_name, date_of_birth, gender, 
-             mobile_number, email, qualification, address, city, state, district,
+             mobile_number, email, qualification, address, city, state, district, country,
              enrollment_date, course_name, course_duration_months, training_status, 
              approval_status, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
             [
               studentUuid,
               dataUploadId,
@@ -272,7 +277,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
               uploadedBatchId,
               uploadedCenterId, // Use uploaded_centers.id (not centers.id)
               partnerId,
-              student.partner_student_id,
+              partnerStudentId,
               student.student_name,
               student.father_name,
               student.date_of_birth,
@@ -284,6 +289,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
               student.city,
               student.state,
               student.district,
+              student.country || 'India',
               enrollmentDate,
               student.course_name,
               student.course_duration_months,
@@ -333,12 +339,30 @@ const createNotificationForAdmin = async (dataUploadId, partnerId, partnerName, 
 /**
  * Get all uploads for partner
  */
-const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
+const getPartnerUploads = async (partnerId, page = 1, limit = 10, filters = {}) => {
   const connection = await db.getConnection();
   try {
     const offset = (page - 1) * limit;
     const validLimit = parseInt(limit);
     const validOffset = parseInt(offset);
+
+    const conditions = ['du.partner_id = ?', 'du.deleted_at IS NULL'];
+    const params = [partnerId];
+
+    if (filters.status) {
+      conditions.push('du.status = ?');
+      params.push(filters.status);
+    }
+    if (filters.dateFrom) {
+      conditions.push('DATE(du.created_at) >= ?');
+      params.push(filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      conditions.push('DATE(du.created_at) <= ?');
+      params.push(filters.dateTo);
+    }
+
+    const whereClause = conditions.join(' AND ');
 
     const [uploads] = await connection.query(
       `SELECT 
@@ -350,11 +374,10 @@ const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
       FROM data_uploads du
       LEFT JOIN users u ON du.uploaded_by = u.id
       LEFT JOIN users r ON du.reviewed_by = r.id
-      WHERE du.partner_id = ?
-        AND du.deleted_at IS NULL
+      WHERE ${whereClause}
       ORDER BY du.created_at DESC
       LIMIT ${validLimit} OFFSET ${validOffset}`,
-      [partnerId]
+      params
     );
 
     return { uploads };
@@ -439,17 +462,31 @@ const getUploadDetails = async (uploadId, partnerId) => {
 /**
  * Get all uploads for admin review
  */
-const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10) => {
+const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10, filters = {}) => {
   try {
     const offset = (page - 1) * limit;
 
-    let whereClause = '';
+    const conditions = [];
     const params = [];
 
     if (status) {
-      whereClause = 'WHERE du.status = ?';
+      conditions.push('du.status = ?');
       params.push(status);
     }
+    if (filters.dateFrom) {
+      conditions.push('DATE(du.created_at) >= ?');
+      params.push(filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      conditions.push('DATE(du.created_at) <= ?');
+      params.push(filters.dateTo);
+    }
+    if (filters.partnerId) {
+      conditions.push('du.partner_id = ?');
+      params.push(filters.partnerId);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const [uploads] = await pool.query(
       `SELECT 
@@ -470,7 +507,7 @@ const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10) => {
 
     const [countResult] = await pool.query(
       `SELECT COUNT(*) as total FROM data_uploads du ${whereClause}`,
-      status ? [status] : []
+      params
     );
 
     return {
@@ -948,10 +985,10 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
         `INSERT INTO uploaded_students 
         (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, 
          partner_id, partner_student_id, student_name, father_name, date_of_birth, gender, 
-         mobile_number, email, qualification, address, city, state, district,
+         mobile_number, email, qualification, address, city, state, district, country,
          enrollment_date, course_name, course_duration_months, training_status, 
          approval_status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
         [
           newStudentId,
           newUploadId,
@@ -971,6 +1008,7 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
           studentData.city,
           studentData.state,
           studentData.district,
+          studentData.country || 'India',
           studentData.enrollment_date,
           studentData.course_name,
           studentData.course_duration_months,
