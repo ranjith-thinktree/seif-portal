@@ -564,7 +564,7 @@ class StudentService {
         try {
           // Get student details
           const student = await db.query(
-            `SELECT s.id, s.name, s.partner_id, s.center_id, s.batch_id,
+            `SELECT s.id, s.student_name AS name, s.partner_id, s.center_id, s.batch_id,
                     c.center_name, b.batch_number
              FROM students s
              LEFT JOIN centers c ON s.center_id = c.id

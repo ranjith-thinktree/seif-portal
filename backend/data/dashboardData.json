@@ -1,0 +1,540 @@
+{
+  "all": {
+    "total_students": 162826,
+    "india": 150146,
+    "greater_india": 12680,
+    "nsi": 0,
+    "female": 24406,
+    "male": 138420,
+    "tot": 1301,
+    "employment": 2308
+  },
+  "2022": {
+    "total_students": 28817,
+    "india": 26514,
+    "greater_india": 2303,
+    "nsi": 0,
+    "female": 1410,
+    "male": 27407,
+    "tot": 290,
+    "employment": 140,
+    "monthly": {
+      "january": {
+        "total": 0,
+        "india": 0,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 25,
+        "male": 0,
+        "tot": 23,
+        "employment": 8
+      },
+      "february": {
+        "total": 0,
+        "india": 0,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 40,
+        "male": 0,
+        "tot": 20,
+        "employment": 10
+      },
+      "march": {
+        "total": 5223,
+        "india": 4616,
+        "greater_india": 607,
+        "nsi": 0,
+        "female": 50,
+        "male": 5173,
+        "tot": 29,
+        "employment": 15
+      },
+      "april": {
+        "total": 1850,
+        "india": 1650,
+        "greater_india": 200,
+        "nsi": 0,
+        "female": 150,
+        "male": 1700,
+        "tot": 16,
+        "employment": 12
+      },
+      "may": {
+        "total": 2000,
+        "india": 1800,
+        "greater_india": 200,
+        "nsi": 0,
+        "female": 125,
+        "male": 1875,
+        "tot": 24,
+        "employment": 11
+      },
+      "june": {
+        "total": 2764,
+        "india": 2510,
+        "greater_india": 254,
+        "nsi": 0,
+        "female": 200,
+        "male": 2564,
+        "tot": 17,
+        "employment": 13
+      },
+      "july": {
+        "total": 1850,
+        "india": 1850,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 55,
+        "male": 1795,
+        "tot": 35,
+        "employment": 9
+      },
+      "august": {
+        "total": 2754,
+        "india": 2754,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 105,
+        "male": 2649,
+        "tot": 15,
+        "employment": 14
+      },
+      "september": {
+        "total": 3622,
+        "india": 3198,
+        "greater_india": 424,
+        "nsi": 0,
+        "female": 250,
+        "male": 3372,
+        "tot": 32,
+        "employment": 16
+      },
+      "october": {
+        "total": 2786,
+        "india": 2786,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 210,
+        "male": 2576,
+        "tot": 34,
+        "employment": 10
+      },
+      "november": {
+        "total": 2500,
+        "india": 2500,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 75,
+        "male": 2425,
+        "tot": 31,
+        "employment": 11
+      },
+      "december": {
+        "total": 3468,
+        "india": 2850,
+        "greater_india": 618,
+        "nsi": 0,
+        "female": 125,
+        "male": 3343,
+        "tot": 14,
+        "employment": 11
+      }
+    }
+  },
+  "2023": {
+    "total_students": 37499,
+    "india": 34892,
+    "greater_india": 2607,
+    "nsi": 0,
+    "female": 4341,
+    "male": 33158,
+    "tot": 312,
+    "employment": 282,
+    "monthly": {
+      "january": {
+        "total": 1750,
+        "india": 1750,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 75,
+        "male": 1675,
+        "tot": 20,
+        "employment": 18
+      },
+      "february": {
+        "total": 2350,
+        "india": 2350,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 55,
+        "male": 2295,
+        "tot": 17,
+        "employment": 22
+      },
+      "march": {
+        "total": 3446,
+        "india": 2850,
+        "greater_india": 596,
+        "nsi": 0,
+        "female": 135,
+        "male": 3311,
+        "tot": 52,
+        "employment": 28
+      },
+      "april": {
+        "total": 1850,
+        "india": 1850,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 0,
+        "male": 1850,
+        "tot": 39,
+        "employment": 20
+      },
+      "may": {
+        "total": 2050,
+        "india": 2050,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 0,
+        "male": 2050,
+        "tot": 30,
+        "employment": 25
+      },
+      "june": {
+        "total": 650,
+        "india": 0,
+        "greater_india": 650,
+        "nsi": 0,
+        "female": 0,
+        "male": 650,
+        "tot": 34,
+        "employment": 19
+      },
+      "july": {
+        "total": 4391,
+        "india": 4242,
+        "greater_india": 149,
+        "nsi": 0,
+        "female": 2001,
+        "male": 2390,
+        "tot": 20,
+        "employment": 24
+      },
+      "august": {
+        "total": 2600,
+        "india": 2200,
+        "greater_india": 400,
+        "nsi": 0,
+        "female": 450,
+        "male": 2150,
+        "tot": 22,
+        "employment": 26
+      },
+      "september": {
+        "total": 3400,
+        "india": 3200,
+        "greater_india": 200,
+        "nsi": 0,
+        "female": 425,
+        "male": 2975,
+        "tot": 29,
+        "employment": 23
+      },
+      "october": {
+        "total": 4800,
+        "india": 4800,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 200,
+        "male": 4600,
+        "tot": 10,
+        "employment": 30
+      },
+      "november": {
+        "total": 3700,
+        "india": 3500,
+        "greater_india": 200,
+        "nsi": 0,
+        "female": 200,
+        "male": 3500,
+        "tot": 25,
+        "employment": 27
+      },
+      "december": {
+        "total": 3812,
+        "india": 3600,
+        "greater_india": 212,
+        "nsi": 0,
+        "female": 250,
+        "male": 3562,
+        "tot": 14,
+        "employment": 20
+      }
+    }
+  },
+  "2024": {
+    "total_students": 47354,
+    "india": 43800,
+    "greater_india": 3554,
+    "nsi": 0,
+    "female": 9210,
+    "male": 38144,
+    "tot": 445,
+    "employment": 304,
+    "monthly": {
+      "january": {
+        "total": 3050,
+        "india": 2500,
+        "greater_india": 0,
+        "nsi": 550,
+        "female": 550,
+        "male": 2500,
+        "tot": 19,
+        "employment": 22
+      },
+      "february": {
+        "total": 3200,
+        "india": 3200,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 150,
+        "male": 3050,
+        "tot": 29,
+        "employment": 28
+      },
+      "march": {
+        "total": 2800,
+        "india": 2800,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 300,
+        "male": 2500,
+        "tot": 46,
+        "employment": 25
+      },
+      "april": {
+        "total": 4000,
+        "india": 4000,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 2500,
+        "male": 1500,
+        "tot": 16,
+        "employment": 30
+      },
+      "may": {
+        "total": 3300,
+        "india": 3300,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 650,
+        "male": 2650,
+        "tot": 20,
+        "employment": 24
+      },
+      "june": {
+        "total": 3652,
+        "india": 2800,
+        "greater_india": 852,
+        "nsi": 0,
+        "female": 750,
+        "male": 2902,
+        "tot": 28,
+        "employment": 26
+      },
+      "july": {
+        "total": 3500,
+        "india": 3500,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 800,
+        "male": 2700,
+        "tot": 48,
+        "employment": 27
+      },
+      "august": {
+        "total": 3485,
+        "india": 3300,
+        "greater_india": 185,
+        "nsi": 0,
+        "female": 650,
+        "male": 2835,
+        "tot": 35,
+        "employment": 23
+      },
+      "september": {
+        "total": 3510,
+        "india": 3300,
+        "greater_india": 210,
+        "nsi": 0,
+        "female": 560,
+        "male": 2950,
+        "tot": 140,
+        "employment": 29
+      },
+      "october": {
+        "total": 3700,
+        "india": 3300,
+        "greater_india": 400,
+        "nsi": 0,
+        "female": 550,
+        "male": 3150,
+        "tot": 3,
+        "employment": 25
+      },
+      "november": {
+        "total": 3800,
+        "india": 3500,
+        "greater_india": 300,
+        "nsi": 0,
+        "female": 800,
+        "male": 3000,
+        "tot": 39,
+        "employment": 22
+      },
+      "december": {
+        "total": 4553,
+        "india": 3900,
+        "greater_india": 653,
+        "nsi": 0,
+        "female": 700,
+        "male": 3853,
+        "tot": 22,
+        "employment": 23
+      }
+    }
+  },
+  "2025": {
+    "total_students": 49156,
+    "india": 44940,
+    "greater_india": 4216,
+    "nsi": 0,
+    "female": 9445,
+    "male": 39711,
+    "tot": 254,
+    "employment": 522,
+    "monthly": {
+      "january": {
+        "total": 6200,
+        "india": 6200,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 1400,
+        "male": 4800,
+        "tot": 19,
+        "employment": 52
+      },
+      "february": {
+        "total": 4070,
+        "india": 3770,
+        "greater_india": 300,
+        "nsi": 0,
+        "female": 245,
+        "male": 3825,
+        "tot": 3,
+        "employment": 45
+      },
+      "march": {
+        "total": 3833,
+        "india": 3500,
+        "greater_india": 333,
+        "nsi": 0,
+        "female": 750,
+        "male": 3083,
+        "tot": 24,
+        "employment": 48
+      },
+      "april": {
+        "total": 2800,
+        "india": 2800,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 1200,
+        "male": 1600,
+        "tot": 30,
+        "employment": 40
+      },
+      "may": {
+        "total": 3800,
+        "india": 3800,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 1100,
+        "male": 2700,
+        "tot": 35,
+        "employment": 42
+      },
+      "june": {
+        "total": 4170,
+        "india": 3970,
+        "greater_india": 200,
+        "nsi": 0,
+        "female": 900,
+        "male": 3270,
+        "tot": 13,
+        "employment": 46
+      },
+      "july": {
+        "total": 3700,
+        "india": 3500,
+        "greater_india": 200,
+        "nsi": 0,
+        "female": 850,
+        "male": 2850,
+        "tot": 12,
+        "employment": 38
+      },
+      "august": {
+        "total": 5400,
+        "india": 4200,
+        "greater_india": 1200,
+        "nsi": 0,
+        "female": 600,
+        "male": 4800,
+        "tot": 64,
+        "employment": 50
+      },
+      "september": {
+        "total": 5200,
+        "india": 5200,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 500,
+        "male": 4700,
+        "tot": 24,
+        "employment": 44
+      },
+      "october": {
+        "total": 4300,
+        "india": 4300,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 700,
+        "male": 3600,
+        "tot": 30,
+        "employment": 47
+      },
+      "november": {
+        "total": 4500,
+        "india": 4500,
+        "greater_india": 0,
+        "nsi": 0,
+        "female": 0,
+        "male": 4500,
+        "tot": 0,
+        "employment": 35
+      },
+      "december": {
+        "total": 6183,
+        "india": 5400,
+        "greater_india": 783,
+        "nsi": 0,
+        "female": 0,
+        "male": 6183,
+        "tot": 0,
+        "employment": 35
+      }
+    }
+  }
+}

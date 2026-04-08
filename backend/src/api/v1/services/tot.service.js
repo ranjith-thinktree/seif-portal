@@ -111,7 +111,7 @@ class TotService {
         await connection.query(
           `INSERT INTO uploaded_tots
              (id, data_upload_id, partner_id, training_partner, training_centre_name,
-              trainer_name, course_name, qualification, date_of_joining, mobile_no, email, row_number)
+              trainer_name, course_name, qualification, date_of_joining, mobile_no, email, row_seq)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             rowId,
@@ -151,6 +151,8 @@ class TotService {
    */
   async getPartnerUploads(partnerId, page = 1, limit = 10) {
     const offset = (page - 1) * limit;
+    const safeLimit = parseInt(limit) || 10;
+    const safeOffset = parseInt(offset);
     const [rows] = await db.query(
       `SELECT tu.*, u.full_name AS uploaded_by_name, r.full_name AS reviewed_by_name
        FROM tot_uploads tu
@@ -158,8 +160,8 @@ class TotService {
        LEFT JOIN users r ON r.id = tu.reviewed_by
        WHERE tu.partner_id = ?
        ORDER BY tu.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [partnerId, limit, offset]
+       LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+      [partnerId]
     );
     const [[{ total }]] = await db.query(
       `SELECT COUNT(*) AS total FROM tot_uploads WHERE partner_id = ?`,
@@ -177,7 +179,9 @@ class TotService {
   async getAllUploads(page = 1, limit = 10, status = null) {
     const offset = (page - 1) * limit;
     const where = status ? 'WHERE tu.status = ?' : '';
-    const params = status ? [status, limit, offset] : [limit, offset];
+    const safeLimit2 = parseInt(limit) || 10;
+    const safeOffset2 = parseInt(offset);
+    const countParams = status ? [status] : [];
     const [rows] = await db.query(
       `SELECT tu.*, p.name AS partner_name, u.full_name AS uploaded_by_name, r.full_name AS reviewed_by_name
        FROM tot_uploads tu
@@ -186,10 +190,9 @@ class TotService {
        LEFT JOIN users r ON r.id = tu.reviewed_by
        ${where}
        ORDER BY tu.created_at DESC
-       LIMIT ? OFFSET ?`,
-      params
+       LIMIT ${safeLimit2} OFFSET ${safeOffset2}`,
+      status ? [status] : []
     );
-    const countParams = status ? [status] : [];
     const [[{ total }]] = await db.query(
       `SELECT COUNT(*) AS total FROM tot_uploads ${status ? 'WHERE status = ?' : ''}`,
       countParams
@@ -215,7 +218,7 @@ class TotService {
     if (!upload) return null;
 
     const [rows] = await db.query(
-      `SELECT * FROM uploaded_tots WHERE data_upload_id = ? ORDER BY row_number ASC`,
+      `SELECT * FROM uploaded_tots WHERE data_upload_id = ? ORDER BY row_seq ASC`,
       [uploadId]
     );
     upload.rows = rows;

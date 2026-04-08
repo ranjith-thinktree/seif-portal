@@ -75,6 +75,8 @@ const createCertificationUpload = async (params) => {
  */
 const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
   const offset = (page - 1) * limit;
+  const safeLimit = parseInt(limit) || 10;
+  const safeOffset = parseInt(offset);
   const [rows] = await db.query(
     `SELECT cu.*,
             c.center_name,
@@ -84,8 +86,8 @@ const getPartnerUploads = async (partnerId, page = 1, limit = 10) => {
      LEFT JOIN batches  b ON b.id = cu.batch_id
      WHERE cu.partner_id = ?
      ORDER BY cu.created_at DESC
-     LIMIT ? OFFSET ?`,
-    [partnerId, parseInt(limit), parseInt(offset)]
+     LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+    [partnerId]
   );
   const [[{ total }]] = await db.query(
     'SELECT COUNT(*) as total FROM certification_uploads WHERE partner_id = ?',
@@ -239,6 +241,8 @@ const getAllCertificationUploads = async ({ status, page = 1, limit = 20, search
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
+  const safeLimit2 = parseInt(limit) || 20;
+  const safeOffset2 = parseInt(offset);
   const [uploads] = await db.query(
     `SELECT cu.*,
             p.name      as partner_name,
@@ -250,8 +254,8 @@ const getAllCertificationUploads = async ({ status, page = 1, limit = 20, search
      LEFT JOIN batches  b ON b.id = cu.batch_id
      ${where}
      ORDER BY cu.created_at DESC
-     LIMIT ? OFFSET ?`,
-    [...params, parseInt(limit), parseInt(offset)]
+     LIMIT ${safeLimit2} OFFSET ${safeOffset2}`,
+    params
   );
 
   const [[{ total }]] = await db.query(
@@ -300,6 +304,8 @@ const getESSCIData = async ({ page = 1, limit = 20, search, filter } = {}) => {
 
   const where = `WHERE ${baseConditions.join(' AND ')}`;
 
+  const safeLimit3 = parseInt(limit) || 20;
+  const safeOffset3 = parseInt(offset);
   const [rows] = await db.query(
     `SELECT
        cu.id,
@@ -337,8 +343,8 @@ const getESSCIData = async ({ page = 1, limit = 20, search, filter } = {}) => {
      ${where}
      ${filterCondition}
      ORDER BY cu.created_at DESC
-     LIMIT ? OFFSET ?`,
-    [...params, parseInt(limit), parseInt(offset)]
+     LIMIT ${safeLimit3} OFFSET ${safeOffset3}`,
+    params
   );
 
   // Stats (always across all approved, unaffected by filter)
@@ -586,11 +592,9 @@ const rejectCertificatePDF = async (pdfId, adminId, rejectionReason, remarks = n
  */
 const getAllCertificatePDFs = async ({ status, page = 1, limit = 20 } = {}) => {
   const offset = (page - 1) * limit;
-  const where = status ? 'WHERE cp.status = ?' : '';
-  const params = status
-    ? [status, parseInt(limit), parseInt(offset)]
-    : [parseInt(limit), parseInt(offset)];
-
+  const safeLimit4 = parseInt(limit) || 20;
+  const safeOffset4 = parseInt(offset);
+  const baseParams = status ? [status] : [];
   const [pdfs] = await db.query(
     `SELECT cp.*,
             p.name      as partner_name,
@@ -604,11 +608,9 @@ const getAllCertificatePDFs = async ({ status, page = 1, limit = 20 } = {}) => {
      LEFT JOIN users    u ON u.id = cp.uploaded_by
      ${where}
      ORDER BY cp.created_at DESC
-     LIMIT ? OFFSET ?`,
-    params
+     LIMIT ${safeLimit4} OFFSET ${safeOffset4}`,
+    baseParams
   );
-
-  const baseParams = status ? [status] : [];
   const [[{ total }]] = await db.query(
     `SELECT COUNT(*) as total FROM certification_pdfs cp ${where}`,
     baseParams
@@ -623,6 +625,8 @@ const getAllCertificatePDFs = async ({ status, page = 1, limit = 20 } = {}) => {
 
 const getPartnerCertificatePDFs = async (partnerId, { page = 1, limit = 20 } = {}) => {
   const offset = (page - 1) * limit;
+  const safeLimit5 = parseInt(limit) || 20;
+  const safeOffset5 = parseInt(offset);
   const [pdfs] = await db.query(
     `SELECT cp.*,
             c.center_name,
@@ -632,8 +636,8 @@ const getPartnerCertificatePDFs = async (partnerId, { page = 1, limit = 20 } = {
      LEFT JOIN batches  b ON b.id = cp.batch_id
      WHERE cp.partner_id = ? AND cp.status = 'approved'
      ORDER BY cp.reviewed_at DESC
-     LIMIT ? OFFSET ?`,
-    [partnerId, parseInt(limit), parseInt(offset)]
+     LIMIT ${safeLimit5} OFFSET ${safeOffset5}`,
+    [partnerId]
   );
   const [[{ total }]] = await db.query(
     "SELECT COUNT(*) as total FROM certification_pdfs WHERE partner_id = ? AND status = 'approved'",

@@ -5,10 +5,10 @@ const ApiResponse = require('../../../utils/response.util');
 const path = require('path');
 const fs = require('fs').promises;
 
-// Path to the frontend static dashboard data file
+// Path to the dashboard data file (stored within backend/data)
 const DASHBOARD_DATA_PATH = path.resolve(
   __dirname,
-  '../../../../../frontend/src/data/dashboardData.json'
+  '../../../../data/dashboardData.json'
 );
 
 const VALID_YEAR_KEYS = (key) => key === 'all' || /^\d{4}$/.test(key);
