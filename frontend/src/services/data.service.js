@@ -312,6 +312,38 @@ export const getCourses = async () => {
 };
 
 /**
+ * Get all courses for admin management
+ */
+export const getCoursesCatalog = async (params = {}) => {
+  const response = await apiClient.get("/courses", { params });
+  return response.data;
+};
+
+/**
+ * Get course by ID for admin management
+ */
+export const getCourseCatalogById = async (id) => {
+  const response = await apiClient.get(`/courses/${id}`);
+  return response.data;
+};
+
+/**
+ * Create a new course in the admin catalog
+ */
+export const createCourseCatalog = async (data) => {
+  const response = await apiClient.post("/courses", data);
+  return response.data;
+};
+
+/**
+ * Update an existing course in the admin catalog
+ */
+export const updateCourseCatalog = async (id, data) => {
+  const response = await apiClient.put(`/courses/${id}`, data);
+  return response.data;
+};
+
+/**
  * Get center by ID
  */
 export const getCenterById = async (id) => {

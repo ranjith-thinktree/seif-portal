@@ -30,7 +30,8 @@ const DataManagementPage = () => {
     user?.role === "ADMIN" ||
     user?.role === "SUPER_ADMIN" ||
     user?.role === "ESSCI" ||
-    user?.role === "SEIF_READONLY";
+    user?.role === "SEIF_READONLY" ||
+    user?.role === "SEIF_READONLY_DOWNLOAD";
 
   const tabs = [
     { id: "overview", label: "Overview", visible: true },

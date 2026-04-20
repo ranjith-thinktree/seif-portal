@@ -5,6 +5,8 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import { useSelector } from "react-redux";
 import {
   ArrowUpTrayIcon,
@@ -47,12 +49,22 @@ import { getMyCenters, getBatchesByCenter } from "../../services/data.service";
 import { MainLayout } from "../../components/layout";
 import UploadPreview from "./UploadPreview";
 import UploadInstructions from "./UploadInstructions";
+import { ROUTES } from "../../constants/routes";
+
+const VALID_UPLOAD_TABS = [
+  "upload",
+  "employment",
+  "certification",
+  "tot",
+  "history",
+];
 
 /**
  * Upload Page
  * Partner page for uploading CSV files
  */
 const UploadPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   // Auth
   const user = useSelector((s) => s.auth?.user);
   const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(user?.role);
@@ -70,7 +82,10 @@ const UploadPage = () => {
   }, [partnerList, partnerSearch]);
 
   // Tab state
-  const [activeTab, setActiveTab] = useState("upload");
+  const [activeTab, setActiveTab] = useState(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    return VALID_UPLOAD_TABS.includes(requestedTab) ? requestedTab : "upload";
+  });
 
   // Upload state
   const [file, setFile] = useState(null);
@@ -139,6 +154,33 @@ const UploadPage = () => {
   const [totHistory, setTotHistory] = useState([]);
   const [totHistoryLoading, setTotHistoryLoading] = useState(false);
   const totFileInputRef = useRef(null);
+
+  const handleTabChange = useCallback(
+    (tab) => {
+      setActiveTab(tab);
+      const nextParams = new URLSearchParams(searchParams);
+
+      if (tab === "upload") {
+        nextParams.delete("tab");
+      } else {
+        nextParams.set("tab", tab);
+      }
+
+      setSearchParams(nextParams, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    const nextTab = VALID_UPLOAD_TABS.includes(requestedTab)
+      ? requestedTab
+      : "upload";
+
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [activeTab, searchParams]);
 
   /**
    * Fetch uploads for unified history tab (both student and employment)
@@ -387,6 +429,7 @@ const UploadPage = () => {
         message: errorMessage,
         errors: errors,
         totalErrors: err.response?.data?.totalErrors || 0,
+        helpText: err.response?.data?.helpText || null,
       });
     } finally {
       setIsUploading(false);
@@ -468,6 +511,10 @@ const UploadPage = () => {
       await downloadUploadFile(upload.id, upload.file_name);
     } catch (err) {
       console.error("Failed to download upload file:", err);
+      const msg =
+        err?.response?.data?.message ||
+        "File is no longer available. It may have been removed after a server update. Please re-upload if needed.";
+      toast.error(msg);
     }
   };
 
@@ -591,7 +638,7 @@ const UploadPage = () => {
 
       if (result.success) {
         setEmploymentSuccess(
-          `Successfully uploaded ${result.data.records_processed} employment records!`,
+          `Successfully uploaded ${result.processed} employment records!`,
         );
         setEmploymentFile(null);
         if (employmentFileInputRef.current) {
@@ -840,11 +887,21 @@ const UploadPage = () => {
     <MainLayout>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground">Upload Data</h1>
-          <p className="text-muted-foreground mt-2">
-            Upload your center and student data for approval
-          </p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Upload Data</h1>
+            <p className="text-muted-foreground mt-2">
+              Upload your center and student data for approval
+            </p>
+          </div>
+          {isAdmin && (
+            <Link
+              to={ROUTES.DATA_UPLOADS}
+              className="shrink-0 mt-1 text-sm font-medium text-[#009530] hover:text-[#007a2a] underline underline-offset-2 transition-colors"
+            >
+              View Admin Upload History
+            </Link>
+          )}
         </div>
 
         {/* Admin: mandatory partner selection gate */}
@@ -936,7 +993,7 @@ const UploadPage = () => {
             {/* Tabs */}
             <div className="flex gap-4 mb-6 border-b border-border">
               <button
-                onClick={() => setActiveTab("upload")}
+                onClick={() => handleTabChange("upload")}
                 className={`pb-3 px-2 font-medium transition-colors relative ${
                   activeTab === "upload"
                     ? "text-primary-600 border-b-2 border-primary-600"
@@ -946,7 +1003,7 @@ const UploadPage = () => {
                 Trainee Data
               </button>
               <button
-                onClick={() => setActiveTab("employment")}
+                onClick={() => handleTabChange("employment")}
                 className={`pb-3 px-2 font-medium transition-colors relative flex items-center gap-2 ${
                   activeTab === "employment"
                     ? "text-primary-600 border-b-2 border-primary-600"
@@ -957,7 +1014,7 @@ const UploadPage = () => {
                 Employment Data
               </button>
               <button
-                onClick={() => setActiveTab("certification")}
+                onClick={() => handleTabChange("certification")}
                 className={`pb-3 px-2 font-medium transition-colors relative flex items-center gap-2 ${
                   activeTab === "certification"
                     ? "text-primary-600 border-b-2 border-primary-600"
@@ -968,7 +1025,7 @@ const UploadPage = () => {
                 Certification Data
               </button>
               <button
-                onClick={() => setActiveTab("tot")}
+                onClick={() => handleTabChange("tot")}
                 className={`pb-3 px-2 font-medium transition-colors relative flex items-center gap-2 ${
                   activeTab === "tot"
                     ? "text-primary-600 border-b-2 border-primary-600"
@@ -979,7 +1036,7 @@ const UploadPage = () => {
                 TOT Data
               </button>
               <button
-                onClick={() => setActiveTab("history")}
+                onClick={() => handleTabChange("history")}
                 className={`pb-3 px-2 font-medium transition-colors relative ${
                   activeTab === "history"
                     ? "text-primary-600 border-b-2 border-primary-600"
@@ -1053,6 +1110,12 @@ const UploadPage = () => {
                         <p className="text-destructive/90 text-sm mt-1">
                           {error.message}
                         </p>
+
+                        {error.helpText && (
+                          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                            {error.helpText}
+                          </div>
+                        )}
 
                         {error.errors && error.errors.length > 0 && (
                           <div className="mt-3">
@@ -1276,7 +1339,7 @@ const UploadPage = () => {
                           </li>
                         </ol>
                         <button
-                          onClick={() => setActiveTab("upload")}
+                          onClick={() => handleTabChange("upload")}
                           className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
                         >
                           Go to Upload Data Tab
@@ -1314,8 +1377,8 @@ const UploadPage = () => {
                         have been approved by the admin before uploading.
                       </p>
                       <p className="text-amber-700 text-sm mt-2">
-                        👉 Student ID must match your{" "}
-                        <strong>partner_student_id</strong> records.
+                        👉 Student ID must match the SEIF-generated student ID
+                        assigned after admin approval.
                       </p>
                     </div>
                   </div>
@@ -2099,7 +2162,7 @@ const UploadPage = () => {
                     <div className="text-center py-12">
                       <p className="text-muted-foreground">No uploads yet</p>
                       <button
-                        onClick={() => setActiveTab("upload")}
+                        onClick={() => handleTabChange("upload")}
                         className="inline-block mt-4 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
                       >
                         Upload Your First File

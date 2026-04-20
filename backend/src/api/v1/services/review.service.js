@@ -1,6 +1,8 @@
 const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
 const { convertToUUID } = require('../../../utils/uuid.util');
+const { generateUniqueStudentIdentifier } = require('../../../utils/studentId.util');
+const { syncUploadLifecycle } = require('../../../utils/uploadStatus.util');
 
 /**
  * Review Service
@@ -154,13 +156,14 @@ class ReviewService {
       const [students] = await db.query(
         `SELECT 
           us.*,
+          us.partner_student_id as student_id,
           uc.center_name,
           ub.batch_number
         FROM uploaded_students us
         LEFT JOIN uploaded_centers uc ON us.uploaded_center_id = uc.id
         LEFT JOIN uploaded_batches ub ON us.uploaded_batch_id = ub.id
         WHERE ${whereClause}
-        ORDER BY us.partner_student_id
+        ORDER BY COALESCE(us.partner_student_id, us.student_name), us.student_name
         LIMIT ${validLimit} OFFSET ${validOffset}`,
         queryParams
       );
@@ -220,14 +223,12 @@ class ReviewService {
 
       // Update each edited student in uploaded_students
       for (const student of students) {
-        // Use partner_student_id for WHERE when available, otherwise fall back to id
-        const whereField = student.partner_student_id ? 'partner_student_id' : 'id';
-        const whereValue = student.partner_student_id || student.id;
+        const whereField = 'id';
+        const whereValue = student.id;
 
         // Update the student record
         const [updateResult] = await connection.query(
           `UPDATE uploaded_students SET
-            partner_student_id = ?,
             student_name = ?,
             father_name = ?,
             mother_name = ?,
@@ -239,12 +240,10 @@ class ReviewService {
             age = ?,
             course_name = ?,
             batch_number = ?,
-            training_status = ?,
             is_edited = 1,
             updated_at = NOW()
           WHERE ${whereField} = ? AND uploaded_center_id = ?`,
           [
-            student.partner_student_id,
             student.student_name,
             student.father_name,
             student.mother_name,
@@ -256,7 +255,6 @@ class ReviewService {
             student.age,
             student.course_name,
             student.batch_number,
-            student.training_status,
             whereValue,
             centerId,
           ]
@@ -484,21 +482,28 @@ class ReviewService {
       for (const student of students) {
         const approvedStudentId = uuidv4();
         const approvedBatchId = batchIdMap[student.uploaded_batch_id];
+        const partnerStudentId = await generateUniqueStudentIdentifier(
+          connection,
+          center.partner_id,
+          student,
+          { uploadedStudentId: student.id }
+        );
 
         await connection.query(
           `INSERT INTO students (
-            id, batch_id, center_id, partner_id, partner_student_id, student_name,
+            id, batch_id, center_id, partner_id, partner_student_id, student_name, father_name,
             date_of_birth, gender, mobile_number, email, address, city, state, district, country,
-            enrollment_date, course_name, course_duration_months, training_status,
+            qualification, enrollment_date, course_name, course_duration_months,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
           [
             approvedStudentId,
             approvedBatchId,
             approvedCenterId,
             center.partner_id,
-            student.partner_student_id,
+            partnerStudentId,
             student.student_name,
+            student.father_name || null,
             student.date_of_birth,
             student.gender,
             student.mobile_number,
@@ -508,19 +513,19 @@ class ReviewService {
             student.state,
             student.district || null,
             student.country || 'India',
+            student.qualification || null,
             student.enrollment_date,
             student.course_name,
             student.course_duration_months,
-            student.training_status || 'enrolled',
           ]
         );
 
         // Update uploaded_students
         await connection.query(
           `UPDATE uploaded_students 
-          SET review_status = ?, reviewed_by = ?, reviewed_at = NOW(), approved_student_id = ?
+          SET review_status = ?, reviewed_by = ?, reviewed_at = NOW(), approved_student_id = ?, partner_student_id = ?
           WHERE id = ?`,
-          ['approved', userUuid, approvedStudentId, student.id]
+          ['approved', userUuid, approvedStudentId, partnerStudentId, student.id]
         );
       }
 
@@ -590,47 +595,13 @@ class ReviewService {
             [userUuid, parentUploadId, center.csv_center_id]
           );
 
-          // Update parent upload progress counts
-          // When approving a center that was REJECTED in parent:
-          // - Increment centers_approved
-          // - Decrement centers_rejected
-          // - centers_reviewed stays the same (already counted)
-          await connection.query(
-            `UPDATE data_uploads 
-            SET centers_approved = centers_approved + 1,
-                centers_rejected = GREATEST(centers_rejected - 1, 0),
-                review_progress = CASE 
-                  WHEN centers_reviewed >= centers_total THEN 'completed'
-                  ELSE review_progress
-                END
-            WHERE id = ?`,
-            [parentUploadId]
-          );
+          await syncUploadLifecycle(connection, parentUploadId, userUuid, 'partial');
         }
         // If center was PENDING in parent, don't update parent counts at all
       }
 
-      // Update upload progress for current upload
-      // Increment both centers_reviewed and centers_approved to maintain constraint
-      await connection.query(
-        `UPDATE data_uploads 
-         SET centers_reviewed = centers_reviewed + 1,
-             centers_approved = centers_approved + 1,
-             review_progress = CASE 
-               WHEN centers_reviewed + 1 >= centers_total THEN 'completed'
-               WHEN centers_reviewed + 1 > 0 THEN 'in_progress'
-               ELSE review_progress
-             END
-         WHERE id = ?`,
-        [uploadUuid]
-      );
-
-      // Check if all centers are reviewed
-      const [uploadCheck] = await connection.query('SELECT * FROM data_uploads WHERE id = ?', [
-        uploadId,
-      ]);
-
-      const allReviewed = uploadCheck[0].centers_reviewed >= uploadCheck[0].centers_total;
+      const lifecycle = await syncUploadLifecycle(connection, uploadUuid, userUuid, 'partial');
+      const allReviewed = lifecycle.reviewProgress === 'completed';
 
       // Create notification for partner user
       if (center.actual_partner_id) {
@@ -735,18 +706,7 @@ class ReviewService {
         ['rejected', userUuid, centerUuid, uploadUuid]
       );
 
-      // Update upload progress
-      await connection.query(
-        `UPDATE data_uploads 
-         SET centers_reviewed = centers_reviewed + 1,
-             centers_rejected = centers_rejected + 1,
-             review_progress = CASE 
-               WHEN centers_reviewed + 1 >= centers_total THEN 'completed'
-               ELSE 'in_progress'
-             END
-         WHERE id = ?`,
-        [uploadId]
-      );
+      await syncUploadLifecycle(connection, uploadUuid, userUuid, 'partial');
 
       // Create notification for partner user
       if (center.actual_partner_id) {

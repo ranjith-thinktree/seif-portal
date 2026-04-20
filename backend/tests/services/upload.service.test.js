@@ -5,6 +5,10 @@ const { v4: uuidv4 } = require('uuid');
 // Mock dependencies
 jest.mock('../../src/database/connection');
 jest.mock('uuid');
+jest.mock('../../src/utils/uploadStatus.util', () => ({
+  resolveEffectiveUploadStatus: jest.fn(async (_connection, _uploadId, status) => status),
+  syncUploadLifecycle: jest.fn(async () => ({})),
+}));
 
 describe('Upload Service - Unit Tests', () => {
   let mockConnection;
@@ -40,7 +44,6 @@ describe('Upload Service - Unit Tests', () => {
           course_name: 'Web Development',
           batch_number: 'B001',
           gender: 'Male',
-          training_status: 'enrolled',
         },
       ];
 
@@ -190,36 +193,6 @@ describe('Upload Service - Unit Tests', () => {
       ).rejects.toThrow();
     });
 
-    it('should validate training_status enum values', async () => {
-      const validStatuses = ['enrolled', 'in_progress', 'completed', 'dropped'];
-
-      for (const status of validStatuses) {
-        const mockData = [
-          {
-            center_id: 'C001',
-            center_name: 'Test Center',
-            student_id: 'S001',
-            student_name: 'John Doe',
-            course_name: 'Web Development',
-            batch_number: 'B001',
-            gender: 'Male',
-            training_status: status,
-          },
-        ];
-
-        mockConnection.query
-          .mockResolvedValueOnce([{ insertId: 1 }])
-          .mockResolvedValueOnce([[]])
-          .mockResolvedValueOnce([{ insertId: 1 }])
-          .mockResolvedValueOnce([{ insertId: 1 }]);
-
-        await expect(
-          uploadService.processUpload('partner-uuid', 'upload-uuid', mockData)
-        ).resolves.not.toThrow();
-
-        jest.clearAllMocks();
-      }
-    });
   });
 
   describe('soft delete - version system', () => {

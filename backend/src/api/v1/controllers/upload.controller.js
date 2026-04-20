@@ -5,6 +5,7 @@ const notificationService = require('../services/notification.service');
 const csvParser = require('../../../utils/csvParser'); // Keep for backward compatibility
 const excelHandler = require('../../../utils/excelHandler'); // NEW: ExcelJS handler
 const { emitToRole } = require('../../../websocket/socket');
+const { uploadFileToS3 } = require('../../../utils/s3.util');
 
 /**
  * Upload Controller
@@ -211,12 +212,16 @@ const uploadCSV = async (req, res, next) => {
     // Create a map of valid center IDs for quick lookup
     const validCenterIds = new Set(partnerCenters.map((c) => c.center_id));
     const invalidCenterIds = new Set();
+    const invalidCenterErrors = [];
 
     // Step 3: Validate center IDs in file
     for (const row of rows) {
       const centerId = row.data['Center ID']?.trim();
       if (centerId && !validCenterIds.has(centerId)) {
         invalidCenterIds.add(centerId);
+        invalidCenterErrors.push(
+          `Row ${row.rowNumber}, Column: Center ID — center "${centerId}" does not exist or is not active for your account`
+        );
       }
     }
 
@@ -231,6 +236,8 @@ const uploadCSV = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: `Invalid Center IDs found in upload. The following centers do not exist or are not active: ${invalidCenters}`,
+        errors: invalidCenterErrors,
+        totalErrors: invalidCenterErrors.length,
         validCenterIds: Array.from(validCenterIds),
         invalidCenterIds: Array.from(invalidCenterIds),
         helpText: `Valid Center IDs for your account: ${validCenters}`,
@@ -284,6 +291,26 @@ const uploadCSV = async (req, res, next) => {
         errors: duplicateBatchErrors,
         totalErrors: duplicateBatchErrors.length,
         helpText: 'Please use different batch numbers or check existing data before uploading.',
+      });
+    }
+
+    const duplicateUpload = await uploadService.findDuplicateUpload(partnerId, fileName, centerMap);
+
+    if (duplicateUpload) {
+      fs.unlinkSync(filePath);
+
+      return res.status(409).json({
+        success: false,
+        code: 'DUPLICATE_UPLOAD',
+        message: duplicateUpload.message,
+        helpText: duplicateUpload.helpText,
+        duplicateUpload: {
+          id: duplicateUpload.id,
+          status: duplicateUpload.status,
+          fileName: duplicateUpload.fileName,
+          createdAt: duplicateUpload.createdAt,
+          reviewedAt: duplicateUpload.reviewedAt,
+        },
       });
     }
 
@@ -422,7 +449,29 @@ const confirmUpload = async (req, res, next) => {
 
     const centerMap = csvParser.groupRowsByCenter(validatedRows);
 
-    // Create data upload record
+    const duplicateUpload = await uploadService.findDuplicateUpload(partnerId, fileName, centerMap);
+
+    if (duplicateUpload) {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      return res.status(409).json({
+        success: false,
+        code: 'DUPLICATE_UPLOAD',
+        message: duplicateUpload.message,
+        helpText: duplicateUpload.helpText,
+        duplicateUpload: {
+          id: duplicateUpload.id,
+          status: duplicateUpload.status,
+          fileName: duplicateUpload.fileName,
+          createdAt: duplicateUpload.createdAt,
+          reviewedAt: duplicateUpload.reviewedAt,
+        },
+      });
+    }
+
+    // Create data upload record (initially with local disk path)
     const dataUploadId = await uploadService.createDataUpload({
       partnerId,
       fileName,
@@ -434,26 +483,59 @@ const confirmUpload = async (req, res, next) => {
     // Save parsed data to staging tables
     await uploadService.saveUploadedData(dataUploadId, partnerId, centerMap);
 
-    // Create notifications for all admins
-    const partnerName = req.user.full_name || req.user.userName || 'Partner';
-    const notifications = await notificationService.createUploadNotification({
-      uploadId: dataUploadId,
-      partnerId,
-      partnerName,
-      fileName,
-      totalRecords: totalRows,
-    });
+    // ── Back up the uploaded file to S3 (non-critical) ───────────────
+    // This ensures downloads work even after server restarts / redeployments.
+    try {
+      const ext = path.extname(fileName).toLowerCase().replace('.', '');
+      const mimeMap = {
+        csv: 'text/csv',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        xls: 'application/vnd.ms-excel',
+        xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+      };
+      const contentType = mimeMap[ext] || 'application/octet-stream';
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const s3Key = `uploads/${partnerId}/${Date.now()}_${safeName}`;
+      const fileBuffer = fs.readFileSync(filePath);
+      const s3Url = await uploadFileToS3(fileBuffer, s3Key, contentType);
+      if (s3Url) {
+        // Update file_url with the durable S3 URL
+        const db = require('../../../database/connection');
+        await db.pool.query('UPDATE data_uploads SET file_url = ? WHERE id = ?', [
+          s3Url,
+          dataUploadId,
+        ]);
+        console.log(`✅ Upload file backed up to S3: ${s3Key}`);
+      }
+    } catch (s3Err) {
+      console.warn('Non-critical: S3 backup failed, local path retained:', s3Err.message);
+    }
+    // ─────────────────────────────────────────────────────────────────
 
-    // Emit real-time notification to all admin users via WebSocket
-    if (notifications && notifications.length > 0) {
-      emitToRole('admin', 'notification:new', {
-        type: 'upload',
-        title: 'New Data Upload',
-        message: `${partnerName} has uploaded a new data file: ${fileName}`,
+    // Create notifications for all admins (non-critical - don't fail the upload)
+    try {
+      const partnerName = req.user.full_name || req.user.userName || 'Partner';
+      const notifications = await notificationService.createUploadNotification({
         uploadId: dataUploadId,
+        partnerId,
+        partnerName,
+        fileName,
         totalRecords: totalRows,
-        timestamp: new Date().toISOString(),
       });
+
+      // Emit real-time notification to all admin users via WebSocket
+      if (notifications && notifications.length > 0) {
+        emitToRole('admin', 'notification:new', {
+          type: 'upload',
+          title: 'New Data Upload',
+          message: `${req.user.full_name || req.user.userName || 'Partner'} has uploaded a new data file: ${fileName}`,
+          uploadId: dataUploadId,
+          totalRecords: totalRows,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (notifError) {
+      console.error('Non-critical: upload notification creation failed:', notifError.message);
     }
 
     res.status(201).json({
@@ -466,6 +548,7 @@ const confirmUpload = async (req, res, next) => {
       },
     });
   } catch (error) {
+    console.error('CONFIRM_UPLOAD_ERROR:', error.message);
     // Clean up uploaded file if it exists
     if (req.body.filePath && fs.existsSync(req.body.filePath)) {
       fs.unlinkSync(req.body.filePath);
@@ -736,7 +819,7 @@ const deleteUpload = async (req, res, next) => {
 const bulkDeleteUploads = async (req, res) => {
   try {
     const { ids } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.partner_id || req.user.id;
     const userRole = req.user.role;
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
@@ -795,7 +878,8 @@ const downloadUploadFile = async (req, res, next) => {
     const partnerId = req.user.partner_id;
 
     // Fetch upload record
-    const [rows] = await require('../../../database/connection').query(
+    const db = require('../../../database/connection');
+    const [rows] = await db.pool.query(
       `SELECT id, file_name, file_url, partner_id FROM data_uploads WHERE id = ? AND deleted_at IS NULL`,
       [uploadId]
     );
@@ -813,7 +897,11 @@ const downloadUploadFile = async (req, res, next) => {
 
     const fileUrl = upload.file_url;
     if (!fileUrl) {
-      return res.status(404).json({ success: false, message: 'No file stored for this upload' });
+      return res.status(404).json({
+        success: false,
+        message:
+          'No file stored for this upload. The file may have been uploaded before download tracking was enabled.',
+      });
     }
 
     // S3 file: generate presigned URL (valid 15 min)
@@ -840,7 +928,11 @@ const downloadUploadFile = async (req, res, next) => {
       : path.join(__dirname, '../../../../', fileUrl);
 
     if (!fs.existsSync(absPath)) {
-      return res.status(404).json({ success: false, message: 'File not found on server' });
+      return res.status(404).json({
+        success: false,
+        message:
+          'The original file is no longer available on this server. Files are only retained until the next server restart. Please re-upload if needed.',
+      });
     }
 
     res.download(absPath, upload.file_name);

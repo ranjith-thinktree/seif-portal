@@ -10,6 +10,7 @@ import { Badge } from "../../components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -27,12 +28,15 @@ import {
   Eye,
   Pencil,
   KeyRound,
+  Mail,
   CheckCircle2,
   XCircle,
   Trash2,
   Plus,
   UserCheck,
   UserX,
+  Copy,
+  CheckCheck,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -50,9 +54,11 @@ import {
   deleteUser,
   updateUserStatus,
   resetUserPassword,
+  resendUserCredentials,
 } from "../../services/user.service";
 import { toast } from "react-toastify";
 import { useAuth } from "../../hooks";
+import { ROLE_LABELS, ROLES } from "../../constants/roles";
 
 /**
  * User Management Page
@@ -101,6 +107,8 @@ const UserManagementPage = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resetPasswordResult, setResetPasswordResult] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   // Form state for create/edit
   const [formData, setFormData] = useState({
@@ -126,6 +134,11 @@ const UserManagementPage = () => {
       { id: "partners", label: "Partners", role: "PARTNER" },
       { id: "essci", label: "ESSCI", role: "ESSCI" },
       { id: "readonly", label: "SEIF Readonly", role: "SEIF_READONLY" },
+      {
+        id: "readonly-download",
+        label: "SEIF Readonly + Download",
+        role: ROLES.SEIF_READONLY_DOWNLOAD,
+      },
     ];
 
     // Only Super Admins can see the Super Admins tab
@@ -271,10 +284,6 @@ const UserManagementPage = () => {
       errors.role = "Role is required";
     }
 
-    if (data.role === "PARTNER" && !data.partner_id) {
-      errors.partner_id = "Partner is required for PARTNER role";
-    }
-
     if (data.mobile_number && !/^\+?[\d\s-()]+$/.test(data.mobile_number)) {
       errors.mobile_number = "Invalid mobile number format";
     }
@@ -299,7 +308,7 @@ const UserManagementPage = () => {
         full_name: formData.full_name.trim(),
         mobile_number: formData.mobile_number?.trim() || null,
         role: formData.role,
-        partner_id: formData.role === "PARTNER" ? formData.partner_id : null,
+        partner_id: null,
         status: formData.status,
       };
 
@@ -331,7 +340,7 @@ const UserManagementPage = () => {
         full_name: formData.full_name.trim(),
         mobile_number: formData.mobile_number?.trim() || null,
         role: formData.role,
-        partner_id: formData.role === "PARTNER" ? formData.partner_id : null,
+        partner_id: null,
         status: formData.status,
       };
 
@@ -412,20 +421,49 @@ const UserManagementPage = () => {
     setIsSubmitting(true);
     try {
       const response = await resetUserPassword(selectedUser.id);
+      // Store result to display in modal (password + email)
+      setResetPasswordResult(response.data);
       toast.success("Password reset successfully");
-
-      // Show temporary password (only in development)
-      if (response.data.temporaryPassword) {
-        toast.info(`Temporary Password: ${response.data.temporaryPassword}`, {
-          autoClose: false,
-        });
-      }
-
-      setShowResetPasswordModal(false);
-      setSelectedUser(null);
     } catch (error) {
       console.error("Error resetting password:", error);
       toast.error(error.response?.data?.message || "Failed to reset password");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Copy temp password to clipboard
+  const handleCopyPassword = () => {
+    if (!resetPasswordResult?.temporaryPassword) return;
+    navigator.clipboard
+      .writeText(resetPasswordResult.temporaryPassword)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      });
+  };
+
+  const handleResendCredentials = async (targetUser) => {
+    if (!targetUser) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await resendUserCredentials(targetUser.id);
+      const result = response.data || {};
+
+      if (result.warning && result.temporaryPassword) {
+        setSelectedUser(targetUser);
+        setResetPasswordResult({ temporaryPassword: result.temporaryPassword });
+        setShowResetPasswordModal(true);
+        toast.warning(result.warning);
+      } else {
+        toast.success(`New credentials emailed to ${targetUser.email}`);
+      }
+    } catch (error) {
+      console.error("Error resending credentials:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to resend credentials",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -515,10 +553,11 @@ const UserManagementPage = () => {
             PARTNER: "bg-green-100 text-green-800",
             ESSCI: "bg-yellow-100 text-yellow-800",
             SEIF_READONLY: "bg-gray-100 text-gray-800",
+            SEIF_READONLY_DOWNLOAD: "bg-slate-100 text-slate-800",
           };
           return (
             <Badge className={roleColors[row.original.role] || ""}>
-              {row.original.role}
+              {ROLE_LABELS[row.original.role] || row.original.role}
             </Badge>
           );
         },
@@ -578,20 +617,33 @@ const UserManagementPage = () => {
 
                 {canManageUsers && (
                   <>
-                    <DropdownMenuItem onClick={() => openEditModal(user)}>
-                      <Pencil className="w-4 h-4 mr-2" />
-                      Edit User
-                    </DropdownMenuItem>
+                    {user.role !== "PARTNER" && (
+                      <DropdownMenuItem onClick={() => openEditModal(user)}>
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit User
+                      </DropdownMenuItem>
+                    )}
 
                     <DropdownMenuItem
                       onClick={() => {
                         setSelectedUser(user);
+                        setResetPasswordResult(null);
+                        setCopied(false);
                         setShowResetPasswordModal(true);
                       }}
                     >
                       <KeyRound className="w-4 h-4 mr-2" />
                       Reset Password
                     </DropdownMenuItem>
+
+                    {user.role === "PARTNER" && (
+                      <DropdownMenuItem
+                        onClick={() => handleResendCredentials(user)}
+                      >
+                        <Mail className="w-4 h-4 mr-2" />
+                        Send New Credentials
+                      </DropdownMenuItem>
+                    )}
 
                     <DropdownMenuSeparator />
 
@@ -621,7 +673,7 @@ const UserManagementPage = () => {
                       </DropdownMenuItem>
                     )}
 
-                    {isSuperAdmin && !isSelf && (
+                    {isSuperAdmin && !isSelf && user.role !== "PARTNER" && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -797,6 +849,11 @@ const UserManagementPage = () => {
               <DialogTitle>
                 {showCreateModal ? "Create New User" : "Edit User"}
               </DialogTitle>
+              <DialogDescription>
+                {showCreateModal
+                  ? "Create a new system user and assign their access role."
+                  : "Update the selected user details and access settings."}
+              </DialogDescription>
             </DialogHeader>
 
             <div className="grid grid-cols-2 gap-4 py-4">
@@ -917,9 +974,11 @@ const UserManagementPage = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ADMIN">Admin</SelectItem>
-                    <SelectItem value="PARTNER">Partner</SelectItem>
                     <SelectItem value="ESSCI">ESSCI</SelectItem>
                     <SelectItem value="SEIF_READONLY">SEIF Readonly</SelectItem>
+                    <SelectItem value={ROLES.SEIF_READONLY_DOWNLOAD}>
+                      SEIF Readonly + Download
+                    </SelectItem>
                     {isSuperAdmin && (
                       <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                     )}
@@ -953,41 +1012,6 @@ const UserManagementPage = () => {
                   </SelectContent>
                 </Select>
               </div>
-
-              {formData.role === "PARTNER" && (
-                <div className="col-span-2">
-                  <label
-                    htmlFor="partner_id"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Partner Organization *
-                  </label>
-                  <Select
-                    value={formData.partner_id}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, partner_id: value })
-                    }
-                  >
-                    <SelectTrigger
-                      className={formErrors.partner_id ? "border-red-500" : ""}
-                    >
-                      <SelectValue placeholder="Select partner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(filterOptions?.partners || []).map((partner) => (
-                        <SelectItem key={partner.id} value={partner.id}>
-                          {partner.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {formErrors.partner_id && (
-                    <p className="text-red-500 text-sm mt-1">
-                      {formErrors.partner_id}
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
 
             <DialogFooter>
@@ -1021,6 +1045,9 @@ const UserManagementPage = () => {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>User Details</DialogTitle>
+              <DialogDescription>
+                Review the selected user account information and access details.
+              </DialogDescription>
             </DialogHeader>
             {selectedUser && (
               <div className="space-y-4">
@@ -1111,6 +1138,9 @@ const UserManagementPage = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Change User Status</DialogTitle>
+              <DialogDescription>
+                Choose a new status for the selected user account.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <p className="text-sm text-gray-600">
@@ -1147,15 +1177,143 @@ const UserManagementPage = () => {
         </Dialog>
 
         {/* Reset Password Modal */}
-        <ConfirmationModal
-          isOpen={showResetPasswordModal}
-          onClose={() => setShowResetPasswordModal(false)}
-          onConfirm={handleResetPassword}
-          title="Reset Password"
-          message={`Are you sure you want to reset the password for ${selectedUser?.full_name}? A temporary password will be generated and user will be required to change it on next login.`}
-          confirmText="Reset Password"
-          isLoading={isSubmitting}
-        />
+        <Dialog
+          open={showResetPasswordModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowResetPasswordModal(false);
+              setSelectedUser(null);
+              setResetPasswordResult(null);
+              setCopied(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reset Password</DialogTitle>
+              <DialogDescription>
+                Generate a new temporary password for the selected user.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              {/* User info — always visible */}
+              <div className="bg-gray-50 rounded-md border border-gray-200 divide-y divide-gray-200">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Username
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {selectedUser?.full_name}
+                  </span>
+                </div>
+                {selectedUser?.partner_name && (
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Partner
+                    </span>
+                    <span className="text-sm text-gray-700">
+                      {selectedUser.partner_name}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Email
+                  </span>
+                  <span className="text-sm text-gray-700">
+                    {selectedUser?.email}
+                  </span>
+                </div>
+              </div>
+
+              {!resetPasswordResult ? (
+                // Confirmation state
+                <>
+                  <p className="text-sm text-gray-500">
+                    A new temporary password will be generated. The user will be
+                    required to change it on next login.
+                  </p>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowResetPasswordModal(false);
+                        setSelectedUser(null);
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleResetPassword}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? "Resetting..." : "Reset Password"}
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                // Result state — show generated password
+                <>
+                  <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                    <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-sm font-medium">
+                      Password reset successfully
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Temporary Password
+                    </label>
+                    <div className="flex items-center gap-2 bg-gray-50 border border-gray-300 rounded-md px-3 py-2">
+                      <code className="flex-1 text-base font-mono tracking-wider text-gray-900 select-all">
+                        {resetPasswordResult.temporaryPassword}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 flex-shrink-0"
+                        onClick={handleCopyPassword}
+                        title="Copy password"
+                      >
+                        {copied ? (
+                          <CheckCheck className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    {copied && (
+                      <p className="text-xs text-green-600 mt-1">
+                        Copied to clipboard!
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    Share this password with the user securely. They will be
+                    prompted to change it on next login.
+                  </p>
+
+                  <DialogFooter>
+                    <Button
+                      onClick={() => {
+                        setShowResetPasswordModal(false);
+                        setSelectedUser(null);
+                        setResetPasswordResult(null);
+                        setCopied(false);
+                      }}
+                    >
+                      Done
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

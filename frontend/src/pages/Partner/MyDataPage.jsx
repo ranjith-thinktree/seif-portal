@@ -174,7 +174,7 @@ const MyDataPage = () => {
     {
       title: "Upload History",
       description: "Review past uploads and their approval status",
-      path: ROUTES.UPLOAD_HISTORY,
+      path: `${ROUTES.UPLOAD_DATA}?tab=history`,
       icon: DocumentTextIcon,
       color: "bg-slate-500",
     },
@@ -251,7 +251,7 @@ const MyDataPage = () => {
                 Recent Uploads
               </h2>
               <Link
-                to={ROUTES.UPLOAD_HISTORY}
+                to={`${ROUTES.UPLOAD_DATA}?tab=history`}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
                 View all <ArrowRightIcon className="h-3 w-3" />

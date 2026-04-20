@@ -76,6 +76,16 @@ const KpiSettingsPanel = () => {
     }));
   };
 
+  const handleCustomLabelChange = (key, value) => {
+    setSettings((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        customLabel: value,
+      },
+    }));
+  };
+
   const handleToggleVisibility = async (key) => {
     const current = settings[key]?.isVisible !== false;
     const newIsVisible = !current;
@@ -101,6 +111,13 @@ const KpiSettingsPanel = () => {
     const val = settings[key]?.customValue;
     await saveField(key, {
       customValue: val === "" ? 0 : parseInt(val, 10) || 0,
+    });
+  };
+
+  const saveCustomLabel = async (key) => {
+    await saveField(key, {
+      year: "all",
+      customLabel: settings[key]?.customLabel ?? "",
     });
   };
 
@@ -152,8 +169,9 @@ const KpiSettingsPanel = () => {
         <span className="text-green-600 mt-0.5">ℹ</span>
         <span>
           Drag rows to reorder KPI cards on the dashboard. Set a custom value to
-          add to the live count, or hide individual cards. Order is global —
-          custom values and visibility can be configured per financial year.
+          add to the live count, rename the dashboard title, or hide individual
+          cards. Order and titles are global — custom values and visibility can
+          be configured per financial year.
         </span>
       </div>
 
@@ -203,10 +221,12 @@ const KpiSettingsPanel = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {orderedDefs.map(({ key, label }, idx) => {
+            {orderedDefs.map((definition, idx) => {
+              const { key, label } = definition;
               const setting = settings[key] || {
                 customValue: 0,
                 isVisible: true,
+                customLabel: "",
               };
               const isVisible = setting.isVisible !== false;
               const liveCount =
@@ -245,7 +265,16 @@ const KpiSettingsPanel = () => {
 
                   {/* KPI label */}
                   <td className="px-4 py-3 font-medium text-gray-900">
-                    {label}
+                    <input
+                      type="text"
+                      value={setting.customLabel ?? ""}
+                      onChange={(e) =>
+                        handleCustomLabelChange(key, e.target.value)
+                      }
+                      onBlur={() => saveCustomLabel(key)}
+                      placeholder={label}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
                   </td>
 
                   {/* Live DB count */}
@@ -333,8 +362,8 @@ const KpiSettingsPanel = () => {
       </div>
 
       <p className="text-xs text-gray-400 text-center">
-        Drag rows to reorder · Custom values save on blur · Visibility toggles
-        instantly · Order applies across all years
+        Drag rows to reorder · Titles and order apply across all years · Custom
+        values save on blur · Visibility toggles instantly
       </p>
     </div>
   );

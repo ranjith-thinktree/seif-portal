@@ -2,6 +2,16 @@ const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
 const { convertToUUID } = require('../../../utils/uuid.util');
 
+// Point 14: "Unemployed" removed — use "NA" instead
+const VALID_EMPLOYMENT_STATUSES = [
+  'Employed',
+  'Self-Employed',
+  'Entrepreneur',
+  'Higher Study',
+  'Further Education',
+  'NA',
+];
+
 class EmploymentService {
   /**
    * Process employment upload from pre-parsed CSV data
@@ -26,7 +36,7 @@ class EmploymentService {
 
         // Find student by partner_id + partner_student_id
         const [students] = await connection.query(
-          `SELECT id FROM students WHERE partner_id = ? AND partner_student_id = ? AND deleted_at IS NULL`,
+          `SELECT id FROM students WHERE partner_id = ? AND partner_student_id = ?`,
           [partnerId, String(record.student_id).trim()]
         );
 
@@ -35,33 +45,98 @@ class EmploymentService {
           error_log.push({
             row,
             student_id: record.student_id || 'N/A',
-            error: `Student not found with ID: ${record.student_id}`,
+            error: `Row ${row}, Column: Student ID — no approved student found with ID "${record.student_id}". Check that the Student ID matches exactly what was assigned during the student upload.`,
           });
           continue;
         }
 
         const student = students[0];
 
-        // Validate required fields (graceful per-row failure — after student lookup)
-        if (!record.company_name) {
+        // Point 14: Validate employment_status against allowed list
+        const rawStatus = (record.employment_status || '').trim();
+        const employmentStatus = rawStatus || 'Employed';
+        if (rawStatus && !VALID_EMPLOYMENT_STATUSES.includes(employmentStatus)) {
           failed++;
           error_log.push({
             row,
             student_id: record.student_id || 'N/A',
-            error: 'company_name is required',
+            error: `Row ${row}, Column: Employment Status — invalid value "${employmentStatus}". Allowed: ${VALID_EMPLOYMENT_STATUSES.join(', ')}`,
           });
           continue;
         }
 
-        // Validate date format if provided (graceful per-row failure)
-        if (record.employment_date && isNaN(new Date(record.employment_date).getTime())) {
-          failed++;
-          error_log.push({
-            row,
-            student_id: record.student_id || 'N/A',
-            error: 'Invalid employment_date format',
-          });
-          continue;
+        const isNA = employmentStatus === 'NA';
+
+        // Point 15: Skip company/salary validation when status is NA
+        if (!isNA) {
+          // Validate required fields (graceful per-row failure — after student lookup)
+          if (!record.company_name) {
+            failed++;
+            error_log.push({
+              row,
+              student_id: record.student_id || 'N/A',
+              error: `Row ${row}, Column: Company Name — this field is required when status is ${employmentStatus}`,
+            });
+            continue;
+          }
+
+          // Point 13: Validate salary is numeric if provided
+          if (
+            record.salary !== undefined &&
+            record.salary !== null &&
+            String(record.salary).trim() !== ''
+          ) {
+            const salaryNum = Number(String(record.salary).trim());
+            if (isNaN(salaryNum)) {
+              failed++;
+              error_log.push({
+                row,
+                student_id: record.student_id || 'N/A',
+                error: `Row ${row}, Column: Salary — must be a number (e.g. 15000)`,
+              });
+              continue;
+            }
+          }
+        }
+
+        // Validate and parse date — supports DD-MM-YYYY (template), DD/MM/YYYY, and YYYY-MM-DD
+        let parsedDate = null;
+        if (record.employment_date) {
+          const trimmed = String(record.employment_date).trim();
+          // Match DD-MM-YYYY or DD/MM/YYYY (template format)
+          const dmyMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+          if (dmyMatch) {
+            const [, day, month, year] = dmyMatch;
+            parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          } else {
+            // Fall back to native parsing (handles ISO YYYY-MM-DD, etc.)
+            parsedDate = new Date(trimmed);
+          }
+          if (isNaN(parsedDate.getTime())) {
+            failed++;
+            error_log.push({
+              row,
+              student_id: record.student_id || 'N/A',
+              error: `Row ${row}, Column: Employment Date — invalid format. Use DD-MM-YYYY (e.g. 15-03-2025)`,
+            });
+            continue;
+          }
+        }
+
+        // Convert to MySQL DATE format YYYY-MM-DD
+        const mysqlDate = parsedDate
+          ? `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`
+          : null;
+
+        // Point 13: Parse salary to a number when present, otherwise null
+        let salaryValue = null;
+        if (
+          !isNA &&
+          record.salary !== undefined &&
+          record.salary !== null &&
+          String(record.salary).trim() !== ''
+        ) {
+          salaryValue = Number(String(record.salary).trim());
         }
 
         const employmentId = uuidv4();
@@ -79,12 +154,12 @@ class EmploymentService {
             partnerId,
             String(record.student_id).trim(),
             uploadId,
-            record.employment_status || 'Employed',
-            record.company_name,
+            employmentStatus,
+            isNA ? record.company_name || null : record.company_name,
             record.company_location || null,
             record.designation || null,
-            record.employment_date || null,
-            record.salary || null,
+            mysqlDate,
+            salaryValue,
           ]
         );
 

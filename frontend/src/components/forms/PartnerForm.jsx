@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
@@ -12,6 +12,24 @@ import {
   getRegisteredAsOptions,
   getOrganizationTypeOptions,
 } from "../../services/data.service";
+
+const formatDateInputValue = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+};
 
 /**
  * Comprehensive Partner Onboarding Form Component
@@ -68,6 +86,8 @@ const PartnerForm = ({
   const [registeredAsOptions, setRegisteredAsOptions] = useState([]);
   const [organizationTypes, setOrganizationTypes] = useState([]);
   const [allStates, setAllStates] = useState([]); // For state presence multi-select
+  const previousCountryIdRef = useRef(null);
+  const hydratedCountryIdRef = useRef(null);
 
   // Load initial data
   useEffect(() => {
@@ -77,13 +97,16 @@ const PartnerForm = ({
   // Load partner data for edit
   useEffect(() => {
     if (partner) {
+      hydratedCountryIdRef.current = partner.country_id
+        ? String(partner.country_id)
+        : null;
       setFormData({
         name: partner.name || "",
         organization_type: partner.organization_type || "",
         partner_email: partner.contact_email || "",
-        country_id: partner.country_id || "",
-        state_id: partner.state_id || "",
-        city_id: partner.city_id || "",
+        country_id: partner.country_id ? String(partner.country_id) : "",
+        state_id: partner.state_id ? String(partner.state_id) : "",
+        city_id: partner.city_id ? String(partner.city_id) : "",
         region: partner.region || "",
         address_line1: partner.address_line1 || "",
         address_line2: partner.address_line2 || "",
@@ -92,18 +115,31 @@ const PartnerForm = ({
         contact_phone: partner.contact_phone || "",
         contact_person_2_name: partner.contact_person_2_name || "",
         contact_person_2_mobile: partner.contact_person_2_mobile || "",
-        date_of_incorporation: partner.date_of_incorporation || "",
+        date_of_incorporation: formatDateInputValue(
+          partner.date_of_incorporation,
+        ),
         legal_status: partner.legal_status || "",
         registered_as: partner.registered_as || "",
         fcra_registration_number: partner.fcra_registration_number || "",
         years_of_experience: partner.years_of_experience || "",
-        state_presence: partner.state_presence || [],
+        state_presence: (partner.state_presence || []).map((stateId) =>
+          String(stateId),
+        ),
       });
     }
   }, [partner]);
 
   // Load dependent data when country changes
   useEffect(() => {
+    const previousCountryId = previousCountryIdRef.current;
+    const isHydratedCountryValue =
+      hydratedCountryIdRef.current !== null &&
+      hydratedCountryIdRef.current === formData.country_id;
+    const shouldResetLocationFields =
+      !isHydratedCountryValue &&
+      previousCountryId !== null &&
+      previousCountryId !== formData.country_id;
+
     if (formData.country_id) {
       loadStates(formData.country_id);
       loadAllStatesForPresence(formData.country_id);
@@ -112,14 +148,21 @@ const PartnerForm = ({
       setCities([]);
       setAllStates([]);
     }
-    // Reset state and city when country changes
-    setFormData((prev) => ({
-      ...prev,
-      state_id: "",
-      city_id: "",
-    }));
-    setCitySearch("");
-    setIsCityDropdownOpen(false);
+
+    if (shouldResetLocationFields) {
+      setFormData((prev) => ({
+        ...prev,
+        state_id: "",
+        city_id: "",
+      }));
+      setCitySearch("");
+      setIsCityDropdownOpen(false);
+    }
+
+    previousCountryIdRef.current = formData.country_id;
+    if (isHydratedCountryValue) {
+      hydratedCountryIdRef.current = null;
+    }
   }, [formData.country_id]);
 
   // Load cities when state changes OR when country selected (for countries without states)
@@ -165,6 +208,7 @@ const PartnerForm = ({
       if (!partner) {
         const india = (countriesRes.data || []).find((c) => c.code === "IN");
         if (india) {
+          hydratedCountryIdRef.current = india.id.toString();
           setFormData((prev) => ({ ...prev, country_id: india.id.toString() }));
         }
       }

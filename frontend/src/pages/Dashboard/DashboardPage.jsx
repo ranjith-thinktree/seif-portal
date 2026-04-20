@@ -39,7 +39,10 @@ import IndiaTrainingCard from "../../components/dashboard/IndiaTrainingCard";
 import { useNavigate } from "react-router-dom";
 import dataService from "../../services/data.service";
 import { essciGetData } from "../../services/certification.service";
-import { KPI_CARD_DEFINITIONS } from "../../services/kpi.service";
+import {
+  KPI_CARD_DEFINITIONS,
+  resolveKpiCardTitle,
+} from "../../services/kpi.service";
 import dashboardData from "../../data/dashboardData.json";
 
 /**
@@ -263,6 +266,119 @@ const StatCard = ({ title, value, trend = "up", graphData = [] }) => {
                     ? `url(#gradient-green-${cleanId})`
                     : `url(#gradient-red-${cleanId})`
                 }
+                dot={false}
+                animationDuration={1000}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-400">No data available</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const StatesUTsCard = ({ states, uts, utNames = [], graphData = [] }) => {
+  const [showUTList, setShowUTList] = useState(false);
+  return (
+    <div className="relative bg-white rounded-[16px] border border-[#A5A5A5] p-3 transition-shadow duration-300 min-h-[150px] flex flex-col">
+      <div className="flex items-start justify-between mb-2">
+        <h3 className="text-base md:text-sm text-[#1F2937] leading-relaxed">
+          States & UTs
+        </h3>
+      </div>
+
+      <div className="flex items-center gap-3 mb-2">
+        <div className="flex flex-col min-w-0">
+          <span className="text-xl md:text-xl font-bold text-[#111827] leading-none">
+            {states}
+          </span>
+          <span className="text-xs text-gray-500 mt-1">States</span>
+        </div>
+
+        <div className="h-8 w-px bg-gray-300" />
+
+        <div className="flex flex-col min-w-0">
+          <span className="text-xl md:text-xl font-bold text-[#111827] leading-none">
+            {uts}
+          </span>
+          <span className="text-xs text-gray-500 mt-1">UTs</span>
+        </div>
+
+        <div className="ml-auto flex items-center justify-center h-6 w-6 rounded-full bg-[#D1FAE5] mt-1">
+          <ArrowTrendingUpIcon className="h-4 w-4 text-[#10B981]" />
+        </div>
+      </div>
+
+      {utNames.length > 0 && (
+        <div className="mb-1">
+          <button
+            onClick={() => setShowUTList((v) => !v)}
+            className="text-[10px] text-[#009530] hover:underline focus:outline-none flex items-center gap-0.5"
+          >
+            {showUTList ? "Hide" : "Show"} UT names
+            <svg
+              className={`w-2.5 h-2.5 transition-transform ${showUTList ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+          {showUTList && (
+            <ul className="mt-1 space-y-0.5">
+              {utNames.map((name) => (
+                <li
+                  key={name}
+                  className="text-[10px] text-gray-600 flex items-center gap-1"
+                >
+                  <span className="w-1 h-1 rounded-full bg-[#009530] flex-shrink-0" />
+                  {name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div
+        className="mt-auto h-[40px] md:h-[40px] w-full"
+        style={{ minHeight: "40px" }}
+      >
+        {graphData && graphData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%" minHeight={40}>
+            <AreaChart data={graphData}>
+              <defs>
+                <linearGradient
+                  id="gradient-green-states-uts"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor="#3DCD58" stopOpacity={0.4} />
+                  <stop offset="60%" stopColor="#3DCD58" stopOpacity={0.25} />
+                  <stop offset="85%" stopColor="#3DCD58" stopOpacity={0.1} />
+                  <stop offset="100%" stopColor="#FFFFFF" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+
+              <Area
+                type="natural"
+                dataKey="value"
+                stroke="#3DCD58"
+                strokeWidth={1}
+                strokeDasharray="10"
+                fill="url(#gradient-green-states-uts)"
                 dot={false}
                 animationDuration={1000}
               />
@@ -524,6 +640,8 @@ const AdminDashboard = () => {
         apiData.totalStates || jsonData?.totalStates || 28,
         "states_uts",
       ),
+      uts: apiData.totalUTs || 0,
+      utNames: apiData.utNames || [],
       maleStudents: apiData.maleStudents || jsonData?.maleStudents || 0,
       femaleStudents: apiData.femaleStudents || jsonData?.femaleStudents || 0,
       edpCount: combined(apiData.edpCount || 0, "edp"),
@@ -615,10 +733,22 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {(() => {
           const kpiSettings = (analytics || {}).kpiSettings || {};
+          const titleFor = (key) => {
+            const definition = KPI_CARD_DEFINITIONS.find(
+              (item) => item.key === key,
+            );
+
+            if (!definition) {
+              return key;
+            }
+
+            return resolveKpiCardTitle(definition, kpiSettings[key] || {});
+          };
+
           const kpiCardData = [
             {
               key: "youth_trained",
-              title: "Youth Trained",
+              title: titleFor("youth_trained"),
               value: combinedValues.students,
               graphData: getGraphData([
                 800,
@@ -633,7 +763,7 @@ const AdminDashboard = () => {
             },
             {
               key: "trainers_trained",
-              title: "Trainers Trained (TOT)",
+              title: titleFor("trainers_trained"),
               value: combinedValues.trainersCount,
               graphData: getGraphData([
                 0,
@@ -648,7 +778,7 @@ const AdminDashboard = () => {
             },
             {
               key: "edp",
-              title: "EDP",
+              title: titleFor("edp"),
               value: combinedValues.edpCount,
               graphData: getGraphData([
                 0,
@@ -663,7 +793,7 @@ const AdminDashboard = () => {
             },
             {
               key: "youth_employed",
-              title: "Youth Employed",
+              title: titleFor("youth_employed"),
               value: combinedValues.employments,
               graphData: getGraphData([
                 600,
@@ -678,7 +808,7 @@ const AdminDashboard = () => {
             },
             {
               key: "partners",
-              title: "Partners",
+              title: titleFor("partners"),
               value: combinedValues.partners,
               graphData: getGraphData([
                 42,
@@ -693,7 +823,7 @@ const AdminDashboard = () => {
             },
             {
               key: "centers",
-              title: "Centers",
+              title: titleFor("centers"),
               value: combinedValues.centers,
               graphData: getGraphData([
                 78,
@@ -708,7 +838,7 @@ const AdminDashboard = () => {
             },
             {
               key: "states_uts",
-              title: "States & UTs",
+              title: titleFor("states_uts"),
               value: combinedValues.states,
               graphData: getGraphData([
                 12,
@@ -719,11 +849,11 @@ const AdminDashboard = () => {
                 22,
                 combinedValues.states,
               ]),
-              wrapper: null,
+              wrapper: "states_uts",
             },
             {
               key: "greater_india",
-              title: "Greater India",
+              title: titleFor("greater_india"),
               value: combinedValues.greaterIndia,
               graphData: getGraphData([
                 0,
@@ -738,14 +868,14 @@ const AdminDashboard = () => {
             },
             {
               key: "nsi",
-              title: "NSI",
+              title: titleFor("nsi"),
               value: combinedValues.nsi,
               graphData: getGraphData([0, 0, 0, 0, 0, 0, combinedValues.nsi]),
               wrapper: null,
             },
             {
               key: "alumni",
-              title: "Alumni",
+              title: titleFor("alumni"),
               value: combinedValues.alumni,
               graphData: getGraphData([
                 0,
@@ -797,6 +927,17 @@ const AdminDashboard = () => {
                   >
                     {statCard}
                   </CourseBreakdownTooltip>
+                );
+              }
+              if (card.wrapper === "states_uts") {
+                return (
+                  <StatesUTsCard
+                    key={card.key}
+                    states={combinedValues.states.toLocaleString()}
+                    uts={combinedValues.uts.toLocaleString()}
+                    utNames={combinedValues.utNames}
+                    graphData={card.graphData}
+                  />
                 );
               }
               return statCard;
@@ -1458,6 +1599,7 @@ const DashboardPage = () => {
       case ROLES.PARTNER:
         return <PartnerDashboard userName={userName} />;
       case ROLES.SEIF_READONLY:
+      case ROLES.SEIF_READONLY_DOWNLOAD:
         return <SeifReadOnlyDashboard userName={userName} />;
       case ROLES.ESSCI:
         return <EssciDashboard userName={userName} />;

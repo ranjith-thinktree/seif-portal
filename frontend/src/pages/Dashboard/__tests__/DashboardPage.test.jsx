@@ -108,7 +108,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
 
       await waitFor(() => {
         // Check if Partners count is displayed (not "0")
-        expect(screen.getByText("Total Partners")).toBeInTheDocument();
+        expect(screen.getByText("Partners")).toBeInTheDocument();
         expect(screen.getByText("50")).toBeInTheDocument();
       });
     });
@@ -230,7 +230,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
 
       await waitFor(() => {
         // Verify Total Centers card is rendered (which has the tooltip)
-        expect(screen.getByText("Total Centers")).toBeInTheDocument();
+        expect(screen.getByText("Centers")).toBeInTheDocument();
         expect(screen.getByText("85")).toBeInTheDocument();
       });
     });
@@ -247,7 +247,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
       renderWithStore(<DashboardPage />);
 
       await waitFor(() => {
-        expect(screen.getByText("Total Centers")).toBeInTheDocument();
+        expect(screen.getByText("Centers")).toBeInTheDocument();
       });
     });
   });
@@ -261,7 +261,7 @@ describe("DashboardPage - Data Fetching & Display", () => {
 
       await waitFor(() => {
         // Should show error state or fallback to dashboardData.json
-        expect(screen.getByText("Total Partners")).toBeInTheDocument();
+        expect(screen.getByText("Partners")).toBeInTheDocument();
       });
     });
 
@@ -317,7 +317,31 @@ describe("DashboardPage - Data Fetching & Display", () => {
 
       await waitFor(() => {
         // Should show 0 for missing Partners (fallback)
-        expect(screen.getByText("Total Partners")).toBeInTheDocument();
+        expect(screen.getByText("Partners")).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("KPI custom titles", () => {
+    it("should display a custom KPI title from settings on the admin dashboard", async () => {
+      dataService.getConsolidatedAnalytics.mockResolvedValue({
+        data: {
+          totalPartners: 50,
+          kpiSettings: {
+            partners: {
+              customLabel: "Organizations",
+              isVisible: true,
+              sortOrder: 5,
+            },
+          },
+        },
+      });
+
+      renderWithStore(<DashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Organizations")).toBeInTheDocument();
+        expect(screen.queryByText("Partners")).not.toBeInTheDocument();
       });
     });
   });

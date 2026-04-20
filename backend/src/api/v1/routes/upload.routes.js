@@ -72,7 +72,7 @@ router.get('/', authenticate, authorize(['PARTNER']), uploadController.getUpload
 router.get(
   '/:id/download',
   authenticate,
-  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
+  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY_DOWNLOAD']),
   uploadController.downloadUploadFile
 );
 
@@ -87,7 +87,7 @@ router.get('/:id', authenticate, authorize(['PARTNER']), uploadController.getUpl
 router.get(
   '/admin/all',
   authenticate,
-  authorize(['ADMIN', 'SUPER_ADMIN']),
+  authorize(['ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   uploadController.getAllUploadsForAdmin
 );
 
@@ -95,7 +95,7 @@ router.get(
 router.get(
   '/admin/:id',
   authenticate,
-  authorize(['ADMIN', 'SUPER_ADMIN']),
+  authorize(['ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   uploadController.getUploadDetailsForAdmin
 );
 

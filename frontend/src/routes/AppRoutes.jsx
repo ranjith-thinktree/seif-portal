@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { ROUTES } from "../constants";
+import { ROLES, ROUTES } from "../constants";
 import ProtectedRoute from "./ProtectedRoute";
 import { MainLayout } from "../components/layout";
 
@@ -35,6 +35,7 @@ import RefurbishmentDashboard from "../pages/Admin/RefurbishmentDashboard";
 import ForcedPasswordChangeGuard from "./ForcedPasswordChangeGuard";
 import UserManagementPage from "../pages/UserManagement/UserManagementPage";
 import OrganizationManagementPage from "../pages/OrganizationManagementPage";
+import CoursesManagementPage from "../pages/CoursesManagementPage";
 import EmploymentUploadPage from "../pages/EmploymentUploadPage";
 import EmploymentManagementPage from "../pages/Admin/EmploymentManagementPage";
 import MyDataPage from "../pages/Partner/MyDataPage";
@@ -58,6 +59,16 @@ const PlaceholderPage = ({ title }) => (
     </div>
   </MainLayout>
 );
+
+const ADMIN_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
+const SUPER_ADMIN_ONLY_ROLES = [ROLES.SUPER_ADMIN];
+// Admin pages that SEIF_READONLY and SEIF_READONLY_DOWNLOAD can view (read-only)
+const ADMIN_READONLY_ROLES = [
+  ROLES.ADMIN,
+  ROLES.SUPER_ADMIN,
+  ROLES.SEIF_READONLY,
+  ROLES.SEIF_READONLY_DOWNLOAD,
+];
 
 /**
  * App Routes Configuration
@@ -108,7 +119,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.USER_MANAGEMENT}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <UserManagementPage />
               </ProtectedRoute>
             }
@@ -118,8 +129,17 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.ORGANIZATION_MANAGEMENT}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_READONLY_ROLES}>
                 <OrganizationManagementPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.COURSES_MANAGEMENT}
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                <CoursesManagementPage />
               </ProtectedRoute>
             }
           />
@@ -145,7 +165,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.USERS}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <PlaceholderPage title="User Management" />
               </ProtectedRoute>
             }
@@ -217,8 +237,8 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.DATA_UPLOADS}
             element={
-              <ProtectedRoute>
-                <PlaceholderPage title="Data Uploads" />
+              <ProtectedRoute allowedRoles={ADMIN_READONLY_ROLES}>
+                <UploadHistoryPage />
               </ProtectedRoute>
             }
           />
@@ -263,7 +283,7 @@ const AppRoutes = () => {
             path={ROUTES.UPLOAD_HISTORY}
             element={
               <ProtectedRoute>
-                <UploadHistoryPage />
+                <Navigate to={`${ROUTES.UPLOAD_DATA}?tab=history`} replace />
               </ProtectedRoute>
             }
           />
@@ -280,7 +300,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.EMPLOYMENT_MANAGEMENT}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <EmploymentManagementPage />
               </ProtectedRoute>
             }
@@ -406,7 +426,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.SETTINGS}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <SettingsPage />
               </ProtectedRoute>
             }
@@ -415,7 +435,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.DATABASE_MANAGEMENT}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={SUPER_ADMIN_ONLY_ROLES}>
                 <DatabaseManagement />
               </ProtectedRoute>
             }
@@ -424,7 +444,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.ADMIN_TERMINAL}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={SUPER_ADMIN_ONLY_ROLES}>
                 <AdminTerminalPageV2 />
               </ProtectedRoute>
             }
@@ -433,7 +453,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.REFURBISHMENT}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <RefurbishmentDashboard />
               </ProtectedRoute>
             }

@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   render,
@@ -19,6 +20,7 @@ vi.mock("../../services/user.service", () => ({
   deleteUser: vi.fn(),
   updateUserStatus: vi.fn(),
   resetUserPassword: vi.fn(),
+  resendUserCredentials: vi.fn(),
 }));
 vi.mock("../../hooks", () => ({
   useAuth: vi.fn(),
@@ -26,6 +28,43 @@ vi.mock("../../hooks", () => ({
 vi.mock("../../components/layout", () => ({
   MainLayout: ({ children }) => <div data-testid="main-layout">{children}</div>,
 }));
+vi.mock("../../components/ui/dropdown-menu", () => {
+  const DropdownContext = React.createContext(null);
+
+  return {
+    DropdownMenu: ({ children }) => {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <DropdownContext.Provider value={{ open, setOpen }}>
+          <div>{children}</div>
+        </DropdownContext.Provider>
+      );
+    },
+    DropdownMenuTrigger: ({ children, asChild }) => {
+      const context = React.useContext(DropdownContext);
+      const handleClick = () => context.setOpen((value) => !value);
+
+      if (asChild && React.isValidElement(children)) {
+        return React.cloneElement(children, {
+          onClick: handleClick,
+        });
+      }
+
+      return <button onClick={handleClick}>{children}</button>;
+    },
+    DropdownMenuContent: ({ children }) => {
+      const context = React.useContext(DropdownContext);
+      return context.open ? <div>{children}</div> : null;
+    },
+    DropdownMenuItem: ({ children, onClick, className }) => (
+      <button onClick={onClick} className={className} type="button">
+        {children}
+      </button>
+    ),
+    DropdownMenuLabel: ({ children }) => <div>{children}</div>,
+    DropdownMenuSeparator: () => <hr />,
+  };
+});
 vi.mock("../../components/common/EnhancedDataTable", () => ({
   default: ({ columns, data, isLoading }) => (
     <div data-testid="data-table">
@@ -83,9 +122,19 @@ import {
   deleteUser,
   updateUserStatus,
   resetUserPassword,
+  resendUserCredentials,
 } from "../../services/user.service";
 import { useAuth } from "../../hooks";
 import UserManagementPage from "../../pages/UserManagement/UserManagementPage";
+
+const openRowMenu = async (rowIndex) => {
+  const actionCell = screen.getByTestId(`actions-${rowIndex}`);
+  const menuButton = within(actionCell).getByRole("button", {
+    name: /open menu/i,
+  });
+  fireEvent.click(menuButton);
+  return actionCell;
+};
 
 const mockUsers = [
   {
@@ -193,13 +242,12 @@ describe("UserManagementPage", () => {
   });
 
   describe("View User modal", () => {
-    it("opens view modal when Eye button clicked", async () => {
+    it("opens view modal from the row actions menu", async () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      const eyeBtn = actionCell.querySelector("button");
-      fireEvent.click(eyeBtn);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() => {
         expect(screen.getByText("User Details")).toBeInTheDocument();
@@ -214,10 +262,8 @@ describe("UserManagementPage", () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      // Open view for user-2 (partner user, never logged in)
-      const actionCell = screen.getByTestId("actions-1");
-      const eyeBtn = actionCell.querySelector("button");
-      fireEvent.click(eyeBtn);
+      const actionCell = await openRowMenu(1);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() => {
         expect(screen.getByText("User Details")).toBeInTheDocument();
@@ -229,9 +275,8 @@ describe("UserManagementPage", () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-1");
-      const eyeBtn = actionCell.querySelector("button");
-      fireEvent.click(eyeBtn);
+      const actionCell = await openRowMenu(1);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() => {
         expect(screen.getByText("TechSkills Academy")).toBeInTheDocument();
@@ -242,13 +287,11 @@ describe("UserManagementPage", () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0"); // admin user, no partner
-      const eyeBtn = actionCell.querySelector("button");
-      fireEvent.click(eyeBtn);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() => {
         expect(screen.getByText("User Details")).toBeInTheDocument();
-        // "-" for partner field
         const dashes = screen.getAllByText("-");
         expect(dashes.length).toBeGreaterThan(0);
       });
@@ -258,19 +301,18 @@ describe("UserManagementPage", () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      fireEvent.click(actionCell.querySelector("button"));
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() =>
         expect(screen.getByText("User Details")).toBeInTheDocument(),
       );
 
       const dialog = screen.getByRole("dialog");
-      // The dialog footer has a Close button; X icon also has aria-label Close
-      const closeBtns = within(dialog).getAllByRole("button", {
-        name: /close/i,
+      const closeButtons = within(dialog).getAllByRole("button", {
+        name: /^close$/i,
       });
-      fireEvent.click(closeBtns[closeBtns.length - 1]); // Click the footer Close button
+      fireEvent.click(closeButtons[0]);
 
       await waitFor(() =>
         expect(screen.queryByText("User Details")).not.toBeInTheDocument(),
@@ -284,14 +326,10 @@ describe("UserManagementPage", () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      // ADMIN cannot delete — no trash button visible
-      const actionCell = screen.getByTestId("actions-1"); // non-self user
-      const buttons = actionCell.querySelectorAll("button");
-      // TrashIcon button should NOT be rendered for ADMIN
-      const trashTitles = Array.from(buttons).map(
-        (b) => b.getAttribute("title") || "",
-      );
-      expect(trashTitles).not.toContain("Delete User");
+      const actionCell = await openRowMenu(0);
+      expect(
+        within(actionCell).queryByText("Delete User"),
+      ).not.toBeInTheDocument();
     });
 
     it("shows Delete button for SUPER_ADMIN", async () => {
@@ -299,12 +337,8 @@ describe("UserManagementPage", () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      const buttons = actionCell.querySelectorAll("button");
-      const titles = Array.from(buttons).map(
-        (b) => b.getAttribute("title") || "",
-      );
-      expect(titles).toContain("Delete User");
+      const actionCell = await openRowMenu(0);
+      expect(within(actionCell).getByText("Delete User")).toBeInTheDocument();
     });
 
     it("calls deleteUser on confirmation", async () => {
@@ -313,12 +347,8 @@ describe("UserManagementPage", () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      // Click Delete User for first user (user-1)
-      const actionCell = screen.getByTestId("actions-0");
-      const deleteBtn = Array.from(actionCell.querySelectorAll("button")).find(
-        (b) => b.getAttribute("title") === "Delete User",
-      );
-      fireEvent.click(deleteBtn);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("Delete User"));
 
       await waitFor(() =>
         expect(screen.getByTestId("modal-title")).toHaveTextContent(
@@ -332,41 +362,56 @@ describe("UserManagementPage", () => {
   });
 
   describe("Reset Password", () => {
-    it("opens reset password confirmation modal", async () => {
+    it("opens reset password dialog from the row actions menu", async () => {
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      const keyBtn = Array.from(actionCell.querySelectorAll("button")).find(
-        (b) => b.getAttribute("title") === "Reset Password",
-      );
-      fireEvent.click(keyBtn);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("Reset Password"));
 
       await waitFor(() =>
-        expect(screen.getByTestId("modal-title")).toHaveTextContent(
-          "Reset Password",
-        ),
+        expect(screen.getByRole("dialog")).toBeInTheDocument(),
       );
     });
 
     it("calls resetUserPassword with correct user ID", async () => {
-      resetUserPassword.mockResolvedValue({ success: true, data: {} });
+      resetUserPassword.mockResolvedValue({
+        success: true,
+        data: { temporaryPassword: "Temp1234" },
+      });
       render(<UserManagementPage />);
       await waitFor(() => expect(getUsers).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      const keyBtn = Array.from(actionCell.querySelectorAll("button")).find(
-        (b) => b.getAttribute("title") === "Reset Password",
-      );
-      fireEvent.click(keyBtn);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("Reset Password"));
 
       await waitFor(() =>
-        expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument(),
+        expect(
+          screen.getByRole("button", { name: /reset password/i }),
+        ).toBeInTheDocument(),
       );
 
-      fireEvent.click(screen.getByTestId("confirm-btn"));
+      fireEvent.click(
+        screen.getByRole("button", { name: /^reset password$/i }),
+      );
       await waitFor(() =>
         expect(resetUserPassword).toHaveBeenCalledWith("user-1"),
+      );
+    });
+
+    it("shows Send New Credentials only for partner users and calls resendUserCredentials", async () => {
+      resendUserCredentials.mockResolvedValue({ success: true, data: {} });
+      render(<UserManagementPage />);
+      await waitFor(() => expect(getUsers).toHaveBeenCalled());
+
+      const actionCell = await openRowMenu(1);
+      const resendItem = within(actionCell).getByText("Send New Credentials");
+      expect(resendItem).toBeInTheDocument();
+
+      fireEvent.click(resendItem);
+
+      await waitFor(() =>
+        expect(resendUserCredentials).toHaveBeenCalledWith("user-2"),
       );
     });
   });

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSelector } from "react-redux";
 import MainLayout from "../../components/layout/MainLayout";
 import EnhancedDataTable from "../../components/common/EnhancedDataTable";
 import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
+import PartnerForm from "../../components/forms/PartnerForm";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import {
@@ -14,7 +16,6 @@ import {
   Mail,
   Phone,
   Building2,
-  Key,
   AlertCircle,
   MoreHorizontal,
 } from "lucide-react";
@@ -36,52 +37,58 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
-import { getPartners, deletePartner } from "../../services/data.service";
-import { resetUserPassword } from "../../services/user.service";
+import {
+  getPartners,
+  getPartnerById,
+  createPartner,
+  updatePartner,
+  deletePartner,
+} from "../../services/data.service";
 
-/**
- * Organization Partners Page
- * Shows approved partners with detailed contact and address information
- * Different from Data Partners Page which shows pending approvals
- */
 const OrganizationPartnersPage = ({ embedded = false }) => {
-  // State Management
+  const { user } = useSelector((state) => state.auth);
+  const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(user?.role);
   const [partners, setPartners] = useState([]);
   const [filteredPartners, setFilteredPartners] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeFilters, setActiveFilters] = useState({
+    type: [],
+    city: [],
+    state: [],
+    status: [],
+  });
   const [selectedPartner, setSelectedPartner] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingPartner, setEditingPartner] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [resettingPassword, setResettingPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingPartnerDetails, setLoadingPartnerDetails] = useState(false);
   const [showBlockedDeleteDialog, setShowBlockedDeleteDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
-
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Fetch Partners
   const fetchPartners = useCallback(async () => {
     try {
       setLoading(true);
-      // Request all partners with a large limit for client-side pagination
       const response = await getPartners({
         limit: 1000,
         approval_status: "approved",
       });
 
-      if (response.success) {
-        // Filter only approved partners (status = 'active' or 'inactive')
-        const approvedPartners = response.data.filter(
-          (partner) =>
-            partner.status === "active" || partner.status === "inactive",
-        );
-        setPartners(approvedPartners);
-        setFilteredPartners(approvedPartners);
-      } else {
+      if (!response.success) {
         throw new Error(response.message);
       }
+
+      const approvedPartners = response.data.filter(
+        (partner) =>
+          partner.status === "active" || partner.status === "inactive",
+      );
+
+      setPartners(approvedPartners);
+      setFilteredPartners(approvedPartners);
     } catch (error) {
       console.error("Error fetching partners:", error);
       toast.error(
@@ -98,7 +105,40 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     fetchPartners();
   }, [fetchPartners]);
 
-  // Handle Delete
+  const handleCreatePartner = async (formData) => {
+    try {
+      setSubmitting(true);
+      await createPartner(formData);
+      toast.success("Partner created successfully");
+      setShowForm(false);
+      setEditingPartner(null);
+      fetchPartners();
+    } catch (error) {
+      console.error("Error creating partner:", error);
+      toast.error(error.response?.data?.message || "Failed to create partner");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdatePartner = async (formData) => {
+    if (!editingPartner?.id) return;
+
+    try {
+      setSubmitting(true);
+      await updatePartner(editingPartner.id, formData);
+      toast.success("Partner updated successfully");
+      setShowForm(false);
+      setEditingPartner(null);
+      fetchPartners();
+    } catch (error) {
+      console.error("Error updating partner:", error);
+      toast.error(error.response?.data?.message || "Failed to update partner");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!selectedPartner) return;
 
@@ -106,14 +146,14 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       setDeleting(true);
       const response = await deletePartner(selectedPartner.id);
 
-      if (response.success) {
-        toast.success("Partner deleted successfully");
-        fetchPartners();
-        setShowDeleteDialog(false);
-        setSelectedPartner(null);
-      } else {
+      if (!response.success) {
         throw new Error(response.message);
       }
+
+      toast.success("Partner deleted successfully");
+      setShowDeleteDialog(false);
+      setSelectedPartner(null);
+      fetchPartners();
     } catch (error) {
       console.error("Error deleting partner:", error);
       toast.error(
@@ -124,53 +164,13 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     }
   };
 
-  // Handle Reset Password
-  const handleResetPassword = async () => {
-    if (!selectedPartner) return;
-
-    // Use the linked user_id (not the partner table id)
-    const targetUserId = selectedPartner.user_id;
-    if (!targetUserId) {
-      toast.error(
-        "No user account linked to this partner. Cannot reset password.",
-      );
-      setShowResetPasswordDialog(false);
-      setSelectedPartner(null);
-      return;
-    }
-
-    try {
-      setResettingPassword(true);
-      const response = await resetUserPassword(targetUserId);
-
-      if (response.success) {
-        toast.success(
-          "Password reset link sent to partner's email successfully",
-        );
-        setShowResetPasswordDialog(false);
-        setSelectedPartner(null);
-      } else {
-        throw new Error(response.message);
-      }
-    } catch (error) {
-      console.error("Error resetting password:", error);
-      toast.error(
-        error.message ||
-          "Failed to send password reset link. Please try again.",
-      );
-    } finally {
-      setResettingPassword(false);
-    }
-  };
-
-  // Handle Export
   const handleExport = useCallback(() => {
     try {
       if (filteredPartners.length === 0) {
         toast.warn("No data to export.");
         return;
       }
-      // Prepare CSV data
+
       const csvData = filteredPartners.map((partner) => ({
         "Partner Name": partner.name,
         "Partner ID": partner.partner_id || "",
@@ -187,12 +187,10 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         Status: partner.status,
       }));
 
-      // Convert to CSV
       const headers = Object.keys(csvData[0]).join(",");
       const rows = csvData.map((row) => Object.values(row).join(","));
       const csv = [headers, ...rows].join("\n");
 
-      // Create blob and download
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
@@ -212,7 +210,75 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     }
   }, [filteredPartners]);
 
-  // Table Columns Definition
+  useEffect(() => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+    const nextFilteredPartners = partners.filter((partner) => {
+      const matchesSearch =
+        !normalizedSearchTerm ||
+        [partner.name, partner.partner_id, partner.organization_type]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(normalizedSearchTerm));
+
+      const matchesType =
+        activeFilters.type.length === 0 ||
+        activeFilters.type.includes(partner.organization_type);
+      const matchesCity =
+        activeFilters.city.length === 0 ||
+        activeFilters.city.includes(partner.city);
+      const matchesState =
+        activeFilters.state.length === 0 ||
+        activeFilters.state.includes(partner.state);
+      const matchesStatus =
+        activeFilters.status.length === 0 ||
+        activeFilters.status.includes(partner.status);
+
+      return (
+        matchesSearch &&
+        matchesType &&
+        matchesCity &&
+        matchesState &&
+        matchesStatus
+      );
+    });
+
+    setFilteredPartners(nextFilteredPartners);
+  }, [partners, searchTerm, activeFilters]);
+
+  const paginatedPartners = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredPartners.slice(startIndex, endIndex);
+  }, [filteredPartners, currentPage, pageSize]);
+
+  const paginationConfig = useMemo(() => {
+    const totalPages = Math.ceil(filteredPartners.length / pageSize);
+    return {
+      page: currentPage,
+      limit: pageSize,
+      total: filteredPartners.length,
+      totalPages: totalPages || 1,
+    };
+  }, [filteredPartners.length, currentPage, pageSize]);
+
+  const handleViewPartner = useCallback((partner) => {
+    setSelectedPartner(partner);
+    setShowViewDialog(true);
+  }, []);
+
+  const handleEdit = useCallback(async (partner) => {
+    try {
+      setLoadingPartnerDetails(true);
+      const response = await getPartnerById(partner.id);
+      setEditingPartner(response.data);
+      setShowForm(true);
+    } catch (error) {
+      console.error("Error loading partner details:", error);
+      toast.error(error.response?.data?.message || "Failed to load partner");
+    } finally {
+      setLoadingPartnerDetails(false);
+    }
+  }, []);
+
   const columns = useMemo(
     () => [
       {
@@ -317,223 +383,203 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() => handleViewCenters(row.original)}
-              >
+              <DropdownMenuItem onClick={() => handleViewPartner(row.original)}>
                 <Eye className="w-4 h-4 mr-2" />
                 View Details
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleEdit(row.original)}
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSelectedPartner(row.original);
-                  setShowResetPasswordDialog(true);
-                }}
-              >
-                <Key className="w-4 h-4 mr-2" />
-                Reset Password
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-red-600 focus:text-red-600"
-                onClick={() => {
-                  setSelectedPartner(row.original);
-                  if (row.original.total_centers > 0) {
-                    setShowBlockedDeleteDialog(true);
-                  } else {
-                    setShowDeleteDialog(true);
-                  }
-                }}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
+              {!isReadOnly && (
+                <DropdownMenuItem onClick={() => handleEdit(row.original)}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {!isReadOnly && <DropdownMenuSeparator />}
+              {!isReadOnly && (
+                <DropdownMenuItem
+                  className="text-red-600 focus:text-red-600"
+                  onClick={() => {
+                    setSelectedPartner(row.original);
+                    if (row.original.total_centers > 0) {
+                      setShowBlockedDeleteDialog(true);
+                    } else {
+                      setShowDeleteDialog(true);
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       },
     ],
-    [],
+    [handleEdit, handleViewPartner],
   );
 
-  // Search Configuration
-  const searchConfig = useMemo(
-    () => ({
-      searchableFields: ["name", "partner_id", "organization_type"],
-      filterGroups: [
-        {
-          id: "type",
-          label: "Organization Type",
-          options: [
-            ...new Set(
-              partners.map((p) => p.organization_type).filter(Boolean),
-            ),
-          ].map((type) => ({
-            value: type,
-            label: type,
-          })),
-          filterFn: (partner, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(partner.organization_type),
-        },
-        {
-          id: "city",
-          label: "City",
-          options: [
-            ...new Set(partners.map((p) => p.city).filter(Boolean)),
-          ].map((city) => ({
-            value: city,
-            label: city,
-          })),
-          filterFn: (partner, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(partner.city),
-        },
-        {
-          id: "state",
-          label: "State",
-          options: [
-            ...new Set(partners.map((p) => p.state).filter(Boolean)),
-          ].map((state) => ({
-            value: state,
-            label: state,
-          })),
-          filterFn: (partner, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(partner.state),
-        },
-        {
-          id: "status",
-          label: "Status",
-          options: [
-            { value: "active", label: "Active" },
-            { value: "inactive", label: "Inactive" },
-          ],
-          filterFn: (partner, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(partner.status),
-        },
-      ],
-    }),
+  const filterGroups = useMemo(
+    () => [
+      {
+        key: "type",
+        label: "Organization Type",
+        multi: true,
+        options: [
+          ...new Set(
+            partners
+              .map((partner) => partner.organization_type)
+              .filter(Boolean),
+          ),
+        ].map((type) => ({ value: type, label: type })),
+      },
+      {
+        key: "city",
+        label: "City",
+        multi: true,
+        options: [
+          ...new Set(partners.map((partner) => partner.city).filter(Boolean)),
+        ].map((city) => ({ value: city, label: city })),
+      },
+      {
+        key: "state",
+        label: "State",
+        multi: true,
+        options: [
+          ...new Set(partners.map((partner) => partner.state).filter(Boolean)),
+        ].map((state) => ({ value: state, label: state })),
+      },
+      {
+        key: "status",
+        label: "Status",
+        multi: true,
+        options: [
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+        ],
+      },
+    ],
     [partners],
   );
 
-  // Handle Search
-  const handleSearch = useCallback((searchResults) => {
-    setFilteredPartners(searchResults);
-    setCurrentPage(1);
-  }, []);
-
-  // Paginated Data - slice data for current page
-  const paginatedPartners = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    return filteredPartners.slice(startIndex, endIndex);
-  }, [filteredPartners, currentPage, pageSize]);
-
-  // Pagination Object
-  const paginationConfig = useMemo(() => {
-    const totalPages = Math.ceil(filteredPartners.length / pageSize);
-    return {
-      page: currentPage,
-      limit: pageSize,
-      total: filteredPartners.length,
-      totalPages: totalPages || 1,
-    };
-  }, [filteredPartners.length, currentPage, pageSize]);
-
-  // Handle View Partner Details
-  const handleViewCenters = (partner) => {
-    setSelectedPartner(partner);
-    setShowViewDialog(true);
-  };
-
-  // Handle Edit
-  const handleEdit = (partner) => {
-    toast.info("Edit functionality coming soon.");
-  };
-
-  // Render Content
   const content = (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Partners</h1>
           <p className="text-gray-600 mt-1">
-            Manage partner organizations and their contact information
+            Manage approved partner organizations and their master data
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={handleExport} variant="outline">
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={() => console.log("Add Partner")}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Partner
-          </Button>
-        </div>
+        {!showForm && (
+          <div className="flex items-center gap-2">
+            <Button onClick={handleExport} variant="outline">
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
+            {!isReadOnly && (
+              <Button
+                onClick={() => {
+                  setEditingPartner(null);
+                  setShowForm(true);
+                }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Partner
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Total Partners</div>
-          <div className="text-2xl font-bold">{partners.length}</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Active Partners</div>
-          <div className="text-2xl font-bold text-green-600">
-            {partners.filter((p) => p.status === "active").length}
+      {showForm ? (
+        <PartnerForm
+          partner={editingPartner}
+          onSubmit={editingPartner ? handleUpdatePartner : handleCreatePartner}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingPartner(null);
+          }}
+          isLoading={submitting || loadingPartnerDetails}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Total Partners</div>
+              <div className="text-2xl font-bold">{partners.length}</div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Active Partners</div>
+              <div className="text-2xl font-bold text-green-600">
+                {
+                  partners.filter((partner) => partner.status === "active")
+                    .length
+                }
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Total Centers</div>
+              <div className="text-2xl font-bold">
+                {partners.reduce(
+                  (sum, partner) => sum + (partner.total_centers || 0),
+                  0,
+                )}
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Organization Types</div>
+              <div className="text-2xl font-bold">
+                {
+                  new Set(
+                    partners
+                      .map((partner) => partner.organization_type)
+                      .filter(Boolean),
+                  ).size
+                }
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Total Centers</div>
-          <div className="text-2xl font-bold">
-            {partners.reduce((sum, p) => sum + (p.total_centers || 0), 0)}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Organization Types</div>
-          <div className="text-2xl font-bold">
-            {
-              new Set(partners.map((p) => p.organization_type).filter(Boolean))
-                .size
-            }
-          </div>
-        </div>
-      </div>
 
-      {/* Search Bar */}
-      <AdvancedSearchBar
-        data={partners}
-        searchConfig={searchConfig}
-        onSearch={handleSearch}
-        placeholder="Search partners by name, ID, or type..."
-      />
+          <AdvancedSearchBar
+            value={searchTerm}
+            onChange={(value) => {
+              setSearchTerm(value);
+              setCurrentPage(1);
+            }}
+            activeFilters={activeFilters}
+            onFilterChange={(key, value) => {
+              setActiveFilters((prev) => ({ ...prev, [key]: value }));
+              setCurrentPage(1);
+            }}
+            onClearFilters={() => {
+              setActiveFilters({
+                type: [],
+                city: [],
+                state: [],
+                status: [],
+              });
+              setCurrentPage(1);
+            }}
+            filterGroups={filterGroups}
+            placeholder="Search partners by name, ID, or type..."
+          />
 
-      {/* Data Table */}
-      <EnhancedDataTable
-        columns={columns}
-        data={paginatedPartners}
-        pagination={paginationConfig}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setCurrentPage(1);
-        }}
-        isLoading={loading}
-        emptyMessage="No partners found"
-        storageKey="organization-partners-table"
-      />
+          <EnhancedDataTable
+            columns={columns}
+            data={paginatedPartners}
+            pagination={paginationConfig}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            isLoading={loading}
+            emptyMessage="No partners found"
+            storageKey="organization-partners-table"
+          />
+        </>
+      )}
 
-      {/* Delete Confirmation Dialog */}
       <ConfirmationModal
         open={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
@@ -546,7 +592,6 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         itemType="partners"
       />
 
-      {/* Blocked Delete Dialog — shown when partner still has centers */}
       <Dialog
         open={showBlockedDeleteDialog}
         onOpenChange={setShowBlockedDeleteDialog}
@@ -557,6 +602,10 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
               <AlertCircle className="h-5 w-5" />
               Cannot Delete Partner
             </DialogTitle>
+            <DialogDescription>
+              This partner still has linked centers and must be cleaned up
+              before deletion.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-4">
             <p className="text-sm text-gray-700">
@@ -574,10 +623,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
               </p>
               <ol className="list-decimal list-inside text-sm text-amber-700 space-y-1">
                 <li>Go to the Centers section</li>
-                <li>
-                  Delete all centers belonging to{" "}
-                  <span className="font-medium">{selectedPartner?.name}</span>
-                </li>
+                <li>Delete all centers belonging to {selectedPartner?.name}</li>
                 <li>Return here and delete the partner</li>
               </ol>
             </div>
@@ -590,7 +636,6 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         </DialogContent>
       </Dialog>
 
-      {/* View Partner Details Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -605,7 +650,6 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
 
           {selectedPartner && (
             <div className="space-y-4 py-2">
-              {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
@@ -620,7 +664,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                     Partner ID
                   </p>
                   <p className="text-gray-700">
-                    {selectedPartner.partner_id || "—"}
+                    {selectedPartner.partner_id || "-"}
                   </p>
                 </div>
                 <div>
@@ -628,7 +672,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                     Organization Type
                   </p>
                   <p className="text-gray-700">
-                    {selectedPartner.organization_type || "—"}
+                    {selectedPartner.organization_type || "-"}
                   </p>
                 </div>
                 <div>
@@ -645,9 +689,18 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                     {selectedPartner.status}
                   </Badge>
                 </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Account Access
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedPartner.user_id
+                      ? "Linked partner account exists"
+                      : "No linked account found"}
+                  </p>
+                </div>
               </div>
 
-              {/* Contact Info */}
               <div className="border-t pt-4">
                 <p className="text-sm font-semibold text-gray-700 mb-3">
                   Contact Information
@@ -658,7 +711,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                       Contact Person
                     </p>
                     <p className="text-gray-700">
-                      {selectedPartner.contact_person || "—"}
+                      {selectedPartner.contact_person || "-"}
                     </p>
                   </div>
                   <div>
@@ -668,7 +721,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                     <div className="flex items-center gap-1">
                       <Mail className="w-3 h-3 text-gray-400" />
                       <p className="text-gray-700 text-sm">
-                        {selectedPartner.contact_email || "—"}
+                        {selectedPartner.contact_email || "-"}
                       </p>
                     </div>
                   </div>
@@ -679,7 +732,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                     <div className="flex items-center gap-1">
                       <Phone className="w-3 h-3 text-gray-400" />
                       <p className="text-gray-700 text-sm">
-                        {selectedPartner.contact_phone || "—"}
+                        {selectedPartner.contact_phone || "-"}
                       </p>
                     </div>
                   </div>
@@ -694,7 +747,6 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                 </div>
               </div>
 
-              {/* Address */}
               <div className="border-t pt-4">
                 <p className="text-sm font-semibold text-gray-700 mb-3">
                   Address
@@ -712,7 +764,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                           selectedPartner.address_line2,
                         ]
                           .filter(Boolean)
-                          .join(", ") || "—"}
+                          .join(", ") || "-"}
                       </p>
                     </div>
                   </div>
@@ -721,7 +773,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                       City
                     </p>
                     <p className="text-gray-700">
-                      {selectedPartner.city || "—"}
+                      {selectedPartner.city || "-"}
                     </p>
                   </div>
                   <div>
@@ -729,7 +781,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                       State
                     </p>
                     <p className="text-gray-700">
-                      {selectedPartner.state || "—"}
+                      {selectedPartner.state || "-"}
                     </p>
                   </div>
                   <div>
@@ -737,10 +789,17 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
                       Postal Code
                     </p>
                     <p className="text-gray-700">
-                      {selectedPartner.postal_code || "—"}
+                      {selectedPartner.postal_code || "-"}
                     </p>
                   </div>
                 </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  Login credentials for partner users are managed from User
+                  Management.
+                </p>
               </div>
             </div>
           )}
@@ -750,42 +809,9 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Reset Password Dialog */}
-      <Dialog
-        open={showResetPasswordDialog}
-        onOpenChange={setShowResetPasswordDialog}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
-            <DialogDescription>
-              Send password reset link to{" "}
-              <span className="font-semibold">{selectedPartner?.name}</span>?
-              <br />
-              <span className="text-xs text-gray-500 mt-2 block">
-                Email will be sent to: {selectedPartner?.contact_email}
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowResetPasswordDialog(false)}
-              disabled={resettingPassword}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleResetPassword} disabled={resettingPassword}>
-              {resettingPassword ? "Sending..." : "Send Reset Link"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 
-  // Return with or without MainLayout based on embedded prop
   if (embedded) {
     return content;
   }

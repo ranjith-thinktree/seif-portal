@@ -6,15 +6,43 @@ const path = require('path');
 const fs = require('fs').promises;
 
 // Path to the dashboard data file (stored within backend/data)
-const DASHBOARD_DATA_PATH = path.resolve(
-  __dirname,
-  '../../../../data/dashboardData.json'
-);
+const DASHBOARD_DATA_PATH = path.resolve(__dirname, '../../../../data/dashboardData.json');
 
 const VALID_YEAR_KEYS = (key) => key === 'all' || /^\d{4}$/.test(key);
-const YEAR_TOTAL_FIELDS = ['total_students', 'india', 'greater_india', 'nsi', 'female', 'male', 'tot', 'employment'];
-const MONTH_FIELDS = ['total', 'india', 'greater_india', 'nsi', 'female', 'male', 'tot', 'employment'];
-const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const YEAR_TOTAL_FIELDS = [
+  'total_students',
+  'india',
+  'greater_india',
+  'nsi',
+  'female',
+  'male',
+  'tot',
+  'employment',
+];
+const MONTH_FIELDS = [
+  'total',
+  'india',
+  'greater_india',
+  'nsi',
+  'female',
+  'male',
+  'tot',
+  'employment',
+];
+const MONTHS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+];
 
 const toFileUrl = (filePath) => {
   if (!filePath) return null;
@@ -109,7 +137,11 @@ exports.updateDashboardData = async (req, res) => {
     // Validate each year key and its values
     for (const [yearKey, yearVal] of Object.entries(data)) {
       if (!VALID_YEAR_KEYS(yearKey)) {
-        return ApiResponse.error(res, `Invalid year key: "${yearKey}". Must be "all" or a 4-digit year.`, 400);
+        return ApiResponse.error(
+          res,
+          `Invalid year key: "${yearKey}". Must be "all" or a 4-digit year.`,
+          400
+        );
       }
       if (!yearVal || typeof yearVal !== 'object') {
         return ApiResponse.error(res, `Year "${yearKey}" must be an object`, 400);
@@ -119,7 +151,11 @@ exports.updateDashboardData = async (req, res) => {
       for (const field of YEAR_TOTAL_FIELDS) {
         const val = yearVal[field];
         if (val !== undefined && (typeof val !== 'number' || val < 0 || !Number.isFinite(val))) {
-          return ApiResponse.error(res, `Year "${yearKey}", field "${field}" must be a non-negative number`, 400);
+          return ApiResponse.error(
+            res,
+            `Year "${yearKey}", field "${field}" must be a non-negative number`,
+            400
+          );
         }
       }
 
@@ -130,12 +166,23 @@ exports.updateDashboardData = async (req, res) => {
         }
         for (const [monthKey, monthVal] of Object.entries(yearVal.monthly)) {
           if (!MONTHS.includes(monthKey)) {
-            return ApiResponse.error(res, `Invalid month key: "${monthKey}" in year "${yearKey}"`, 400);
+            return ApiResponse.error(
+              res,
+              `Invalid month key: "${monthKey}" in year "${yearKey}"`,
+              400
+            );
           }
           for (const field of MONTH_FIELDS) {
             const val = monthVal[field];
-            if (val !== undefined && (typeof val !== 'number' || val < 0 || !Number.isFinite(val))) {
-              return ApiResponse.error(res, `Year "${yearKey}", month "${monthKey}", field "${field}" must be a non-negative number`, 400);
+            if (
+              val !== undefined &&
+              (typeof val !== 'number' || val < 0 || !Number.isFinite(val))
+            ) {
+              return ApiResponse.error(
+                res,
+                `Year "${yearKey}", month "${monthKey}", field "${field}" must be a non-negative number`,
+                400
+              );
             }
           }
         }
@@ -153,4 +200,3 @@ exports.updateDashboardData = async (req, res) => {
     return ApiResponse.error(res, 'Failed to save dashboard data', 500);
   }
 };
-

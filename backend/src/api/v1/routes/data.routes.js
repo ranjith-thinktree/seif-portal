@@ -12,7 +12,7 @@ const { checkRole } = require('../../../middleware/role.middleware');
 router.get(
   '/overview-stats',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   dataController.getOverviewStats
 );
 

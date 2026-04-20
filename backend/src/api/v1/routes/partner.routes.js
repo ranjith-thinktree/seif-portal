@@ -38,7 +38,7 @@ const upload = multer({
 router.get(
   '/',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   listPartnersValidator,
   validate(),
   partnerController.getAllPartners
@@ -52,7 +52,7 @@ router.get(
 router.get(
   '/filter-options',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   partnerController.getFilterOptions
 );
 
@@ -101,7 +101,7 @@ router.get(
 router.get(
   '/export',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY_DOWNLOAD']),
   partnerController.exportPartners
 );
 
@@ -125,7 +125,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   partnerIdValidator,
   validate(),
   partnerController.getPartnerById

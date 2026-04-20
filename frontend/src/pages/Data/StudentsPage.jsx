@@ -53,7 +53,6 @@ const StudentsPage = ({ embedded = false }) => {
     city: "",
     state: "",
     course_name: "",
-    training_status: "",
   });
   const [filterOptions, setFilterOptions] = useState({
     partners: [],
@@ -232,7 +231,6 @@ const StudentsPage = ({ embedded = false }) => {
       city: "",
       state: "",
       course_name: "",
-      training_status: "",
     });
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
@@ -414,15 +412,6 @@ const StudentsPage = ({ embedded = false }) => {
           : "-",
       size: 140,
     },
-    {
-      id: "training_status",
-      accessorKey: "training_status",
-      header: "Training Status",
-      cell: ({ row }) => (
-        <Badge variant="outline">{row.original.training_status || "-"}</Badge>
-      ),
-      size: 140,
-    },
   ];
 
   const content = (
@@ -539,11 +528,6 @@ const StudentsPage = ({ embedded = false }) => {
                     key: "course_name",
                     options: filterOptions.courses,
                   },
-                  {
-                    label: "Training Status",
-                    key: "training_status",
-                    options: filterOptions.trainings,
-                  },
                 ]}
                 activeFilters={
                   centerId || batchId
@@ -566,7 +550,6 @@ const StudentsPage = ({ embedded = false }) => {
                   { label: "Gender", value: "gender" },
                   { label: "City", value: "city" },
                   { label: "Course", value: "course_name" },
-                  { label: "Training Status", value: "training_status" },
                   { label: "Created Date", value: "created_at" },
                 ]}
                 sortBy={sortBy}

@@ -93,6 +93,7 @@ const NotificationItem = ({
   onDelete,
   onSelect,
   isSelected,
+  canDelete = true,
 }) => {
   const handleMarkAsRead = async (e) => {
     e.stopPropagation();
@@ -230,14 +231,16 @@ const NotificationItem = ({
                   Mark as read
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDelete}
-                className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-              >
-                <TrashIcon className="h-3 w-3" />
-              </Button>
+              {canDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDelete}
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <TrashIcon className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -252,6 +255,9 @@ const NotificationItem = ({
 const InboxPage = () => {
   const { user } = useSelector((state) => state.auth);
   const isPartner = user?.role === "PARTNER";
+  const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(
+    user?.role,
+  );
 
   const {
     socket,
@@ -267,7 +273,7 @@ const InboxPage = () => {
   // partner has already responded to — those requests now live in Past Requests.
   const displayedNotifications = isPartner
     ? notifications.filter(
-        (n) => !(n.alert_type === "refurbishment" && n.partner_responded)
+        (n) => !(n.alert_type === "refurbishment" && n.partner_responded),
       )
     : notifications;
   const [loading, setLoading] = useState(false);
@@ -613,6 +619,7 @@ const InboxPage = () => {
                           isSelected={
                             selectedNotification?.id === notification.id
                           }
+                          canDelete={!isReadOnly}
                         />
                       ))}
                     </>

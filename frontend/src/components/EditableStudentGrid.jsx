@@ -45,10 +45,6 @@ const EditableStudentGrid = ({
 
   // Validation options - memoized to prevent re-renders
   const genderOptions = useMemo(() => ["Male", "Female", "Other"], []);
-  const trainingStatusOptions = useMemo(
-    () => ["enrolled", "in_progress", "completed", "dropped"],
-    []
-  );
   const courseOptions = useMemo(
     () => [
       "Computer Hardware & Networking",
@@ -193,15 +189,6 @@ const EditableStudentGrid = ({
             errors.push(`Gender must be one of: ${genderOptions.join(", ")}`);
           }
           break;
-        case "training_status":
-          if (value && !trainingStatusOptions.includes(value)) {
-            errors.push(
-              `Training status must be one of: ${trainingStatusOptions.join(
-                ", "
-              )}`
-            );
-          }
-          break;
         case "course_name":
           if (!value || value.trim() === "") {
             errors.push("Course name is required");
@@ -211,7 +198,7 @@ const EditableStudentGrid = ({
 
       return errors;
     },
-    [genderOptions, trainingStatusOptions]
+    [genderOptions]
   );
 
   // Handle cell value change - Feature 1: Real-time validation
@@ -429,16 +416,6 @@ const EditableStudentGrid = ({
         cellStyle: getCellStyle,
       },
       {
-        headerName: "Training Status",
-        field: "training_status",
-        width: 150,
-        editable: !readOnly,
-        cellEditor: (props) => (
-          <DropdownEditor {...props} options={trainingStatusOptions} />
-        ),
-        cellStyle: getCellStyle,
-      },
-      {
         headerName: "City",
         field: "city",
         width: 150,
@@ -471,7 +448,6 @@ const EditableStudentGrid = ({
       readOnly,
       getCellStyle,
       genderOptions,
-      trainingStatusOptions,
       courseOptions,
       DateEditor,
       handleShowHistory,

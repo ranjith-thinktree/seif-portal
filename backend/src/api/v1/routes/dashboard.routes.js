@@ -44,7 +44,13 @@ router.get(
 router.get(
   '/seif',
   authenticate,
-  checkRole([USER_ROLES.SEIF_READONLY, USER_ROLES.ESSCI, USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]),
+  checkRole([
+    USER_ROLES.SEIF_READONLY,
+    USER_ROLES.SEIF_READONLY_DOWNLOAD,
+    USER_ROLES.ESSCI,
+    USER_ROLES.ADMIN,
+    USER_ROLES.SUPER_ADMIN,
+  ]),
   validate(dashboardValidator.seifDashboardFilters),
   DashboardController.getSEIFDashboard
 );

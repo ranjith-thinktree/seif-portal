@@ -70,7 +70,6 @@ const ReviewStudentsPage = () => {
     city: "",
     state: "",
     course_name: "",
-    training_status: "",
   });
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
@@ -80,6 +79,11 @@ const ReviewStudentsPage = () => {
   const [comments, setComments] = useState([]);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [currentCommentData, setCurrentCommentData] = useState(null);
+  const GRID_ROW_HEIGHT = 52;
+  const GRID_HEADER_HEIGHT = 56;
+  const GRID_PAGINATION_HEIGHT = 56;
+  const GRID_MIN_VISIBLE_ROWS = 3;
+  const GRID_MAX_VISIBLE_ROWS = 8;
 
   // Breadcrumb items
   const breadcrumbItems = [
@@ -448,7 +452,6 @@ const ReviewStudentsPage = () => {
       course_duration_months: "",
       batch_number: "",
       enrollment_date: "",
-      training_status: "",
       edited_fields: {},
     };
 
@@ -477,7 +480,6 @@ const ReviewStudentsPage = () => {
       course_duration_months: "",
       batch_number: "",
       enrollment_date: "",
-      training_status: "",
       edited_fields: {},
     };
 
@@ -580,12 +582,31 @@ const ReviewStudentsPage = () => {
             alignItems: "center",
             justifyContent: "space-between",
             width: "100%",
+            minWidth: 0,
+            gap: "8px",
           }}
           title={tooltip}
         >
-          <span>{value}</span>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {value}
+          </span>
           {(hasComment || hasNote) && (
-            <div style={{ display: "flex", gap: "4px", marginLeft: "8px" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "4px",
+                marginLeft: "8px",
+                flexShrink: 0,
+              }}
+            >
               {hasComment && (
                 <span
                   style={{
@@ -632,7 +653,7 @@ const ReviewStudentsPage = () => {
               maxWidth: 52,
               pinned: "left",
               editable: false,
-              suppressMenu: true,
+              suppressHeaderMenuButton: true,
               lockPosition: true,
               resizable: false,
               headerClass: "ag-checkbox-header",
@@ -654,15 +675,14 @@ const ReviewStudentsPage = () => {
         headerName: "Student ID",
         field: "student_id",
         width: 220,
-        editable: isEditMode,
+        editable: false,
         pinned: "left",
         cellClass: "text-sm font-medium text-gray-900",
-        valueFormatter: (params) => params.value || "-",
+        valueFormatter: (params) => params.value || "Generated after approval",
         cellRenderer: cellRendererWithIndicator,
-        cellStyle: (params) => ({
-          backgroundColor: params.data.edited_fields?.student_id
-            ? "#fef3c7"
-            : "#ffffff",
+        cellStyle: () => ({
+          backgroundColor: "#f3f4f6",
+          color: "#6b7280",
         }),
       },
       {
@@ -862,106 +882,6 @@ const ReviewStudentsPage = () => {
             : "#ffffff",
         }),
       },
-      {
-        headerName: "Training Status",
-        field: "training_status",
-        width: 200,
-        editable: isEditMode,
-        cellClass: "text-sm text-gray-600",
-        cellEditor: "agSelectCellEditor",
-        cellEditorParams: {
-          values: ["enrolled", "in_progress", "completed", "dropped"],
-        },
-        cellRenderer: (params) => {
-          const status = params.value;
-          const colorMap = {
-            enrolled: { bg: "#dbeafe", text: "#1e40af" },
-            in_progress: { bg: "#fef3c7", text: "#92400e" },
-            completed: { bg: "#d1fae5", text: "#065f46" },
-            dropped: { bg: "#fee2e2", text: "#991b1b" },
-          };
-          const colors = colorMap[status] || { bg: "#f3f4f6", text: "#1f2937" };
-
-          // Check for comments/notes
-          const cellComments = getCellComments(
-            params.data.id,
-            "training_status",
-          );
-          const hasComment = cellComments.some((c) => c.type === "comment");
-          const hasNote = cellComments.some((c) => c.type === "note");
-
-          // Build tooltip
-          const tooltip =
-            cellComments.length > 0
-              ? cellComments
-                  .map(
-                    (c) =>
-                      `${c.type === "comment" ? "💬 Comment" : "📝 Note"}: ${
-                        c.content
-                      }`,
-                  )
-                  .join("\n")
-              : "";
-
-          return (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                width: "100%",
-              }}
-              title={tooltip}
-            >
-              <span
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: "9999px",
-                  fontSize: "12px",
-                  fontWeight: "500",
-                  backgroundColor: colors.bg,
-                  color: colors.text,
-                }}
-              >
-                {status || "-"}
-              </span>
-              {(hasComment || hasNote) && (
-                <div style={{ display: "flex", gap: "4px", marginLeft: "8px" }}>
-                  {hasComment && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: "8px",
-                        height: "8px",
-                        backgroundColor: "#ef4444",
-                        borderRadius: "50%",
-                      }}
-                      title="Has comment"
-                    />
-                  )}
-                  {hasNote && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: "8px",
-                        height: "8px",
-                        backgroundColor: "#f97316",
-                        borderRadius: "50%",
-                      }}
-                      title="Has note"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        },
-        cellStyle: (params) => ({
-          backgroundColor: params.data.edited_fields?.training_status
-            ? "#fef3c7"
-            : "#ffffff",
-        }),
-      },
     ],
     [isEditMode, cellRendererWithIndicator, getCellComments],
   );
@@ -1131,7 +1051,6 @@ const ReviewStudentsPage = () => {
       city: "",
       state: "",
       course_name: "",
-      training_status: "",
     });
   };
 
@@ -1148,16 +1067,12 @@ const ReviewStudentsPage = () => {
     const courses = [
       ...new Set(students.map((s) => s.course_name).filter(Boolean)),
     ];
-    const statuses = [
-      ...new Set(students.map((s) => s.training_status).filter(Boolean)),
-    ];
 
     return {
       genders: genders.sort(),
       cities: cities.sort(),
       states: states.sort(),
       courses: courses.sort(),
-      statuses: statuses.sort(),
     };
   }, [students]);
 
@@ -1202,6 +1117,15 @@ const ReviewStudentsPage = () => {
 
     return filtered;
   }, [students, searchTerm, activeFilters, sortBy, sortOrder]);
+
+  const gridHeight = useMemo(() => {
+    const visibleRows = Math.min(
+      Math.max(filteredAndSortedStudents.length, GRID_MIN_VISIBLE_ROWS),
+      GRID_MAX_VISIBLE_ROWS,
+    );
+
+    return GRID_HEADER_HEIGHT + GRID_PAGINATION_HEIGHT + visibleRows * GRID_ROW_HEIGHT + 2;
+  }, [filteredAndSortedStudents.length]);
 
   if (loading) {
     return (
@@ -1425,7 +1349,6 @@ const ReviewStudentsPage = () => {
             <span className="text-sm text-gray-500 font-medium">Filters:</span>
             <select
               value={
-                activeFilters.training_status ||
                 activeFilters.gender ||
                 activeFilters.city ||
                 activeFilters.state ||
@@ -1433,7 +1356,6 @@ const ReviewStudentsPage = () => {
                 ""
               }
               onChange={(e) => {
-                // Simple shortcut: clear all then set training_status if that field
                 e.preventDefault();
 
                 handleClearFilters();
@@ -1441,11 +1363,6 @@ const ReviewStudentsPage = () => {
               className="text-sm border border-gray-200 rounded-lg pl-3 pr-8 py-2.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="">All Data</option>
-              {filterOptions.statuses.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
             </select>
             <button
               onClick={() => {
@@ -1500,11 +1417,6 @@ const ReviewStudentsPage = () => {
                 key: "course_name",
                 options: filterOptions.courses,
               },
-              {
-                label: "Training Status",
-                key: "training_status",
-                options: filterOptions.statuses,
-              },
             ]}
             activeFilters={activeFilters}
             onFilterChange={handleFilterChange}
@@ -1530,7 +1442,7 @@ const ReviewStudentsPage = () => {
               <div className="text-gray-500">No students in this center</div>
             </div>
           ) : (
-            <div style={{ height: 600, width: "100%" }}>
+            <div style={{ height: gridHeight, width: "100%" }}>
               <AgGridReact
                 ref={gridRef}
                 theme={themeQuartz}
@@ -1543,15 +1455,20 @@ const ReviewStudentsPage = () => {
                   filter: false,
                   resizable: true,
                   suppressMovable: true,
-                  wrapText: true,
-                  autoHeight: true,
+                  wrapText: false,
+                  autoHeight: false,
                   wrapHeaderText: false,
                   autoHeaderHeight: false,
                   cellEditor: "agTextCellEditor",
                   cellEditorParams: {
                     maxLength: 500,
                   },
-                  suppressMenu: true,
+                  suppressHeaderMenuButton: true,
+                  cellStyle: {
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  },
                 }}
                 undoRedoCellEditing={true}
                 undoRedoCellEditingLimit={20}
@@ -1577,16 +1494,14 @@ const ReviewStudentsPage = () => {
                 pagination={true}
                 paginationPageSize={50}
                 paginationPageSizeSelector={[20, 50, 100]}
-                onGridReady={() => {
-                  gridRef.current?.api?.sizeColumnsToFit();
-                }}
                 onCellValueChanged={onCellValueChanged}
                 singleClickEdit={false}
                 stopEditingWhenCellsLoseFocus={true}
                 suppressClickEdit={!isEditMode}
                 suppressRowTransform={true}
-                rowHeight={52}
-                headerHeight={60}
+                rowHeight={GRID_ROW_HEIGHT}
+                headerHeight={GRID_HEADER_HEIGHT}
+                alwaysShowHorizontalScroll={true}
                 suppressHorizontalScroll={false}
                 domLayout="normal"
               />

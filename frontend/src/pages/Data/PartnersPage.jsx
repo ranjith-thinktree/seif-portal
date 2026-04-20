@@ -4,38 +4,29 @@ import { MainLayout } from "../../components/layout";
 import EnhancedDataTable, {
   StatusBadge,
 } from "../../components/common/EnhancedDataTable";
-import PartnerForm from "../../components/forms/PartnerForm";
 import BulkPartnerUpload from "../../components/forms/BulkPartnerUpload";
 import {
   SuccessModal,
   RejectionModal,
   ActionDropdown,
 } from "../../components/common";
-import ResetPartnerPasswordModal from "../../components/modals/ResetPartnerPasswordModal";
 import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
 import BulkDeleteButton from "../../components/common/BulkDeleteButton";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import {
-  PlusIcon,
   CheckIcon,
   XMarkIcon,
-  PencilIcon,
   TrashIcon,
   ArrowDownTrayIcon,
-  EnvelopeIcon,
-  KeyIcon,
 } from "@heroicons/react/24/outline";
 import {
   getPartners,
-  createPartner,
-  updatePartner,
   deletePartner,
   bulkDeletePartners,
   approvePartner,
   rejectPartner,
-  resendPartnerWelcomeEmail,
   exportPartners,
   downloadCSV,
   getPartnerFilterOptions,
@@ -78,14 +69,10 @@ const PartnersPage = ({ embedded = false }) => {
   const [sortOrder, setSortOrder] = useState("desc");
   const [columnVisibility, setColumnVisibility] = useState({});
   const [table, setTable] = useState(null); // Store table instance from EnhancedDataTable
-  const [showForm, setShowForm] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
-  const [editingPartner, setEditingPartner] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -173,39 +160,6 @@ const PartnersPage = ({ embedded = false }) => {
   // Handle page size change
   const handlePageSizeChange = (newPageSize) => {
     setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
-  };
-
-  // Handle create partner
-  const handleCreatePartner = async (formData) => {
-    setIsSubmitting(true);
-    try {
-      await createPartner(formData);
-      toast.success("Partner created successfully");
-      setShowForm(false);
-      fetchPartners();
-    } catch (error) {
-      console.error("Error creating partner:", error);
-      toast.error(error.response?.data?.message || "Failed to create partner");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Handle update partner
-  const handleUpdatePartner = async (formData) => {
-    setIsSubmitting(true);
-    try {
-      await updatePartner(editingPartner.id, formData);
-      toast.success("Partner updated successfully");
-      setShowForm(false);
-      setEditingPartner(null);
-      fetchPartners();
-    } catch (error) {
-      console.error("Error updating partner:", error);
-      toast.error(error.response?.data?.message || "Failed to update partner");
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   // Handle delete partner
@@ -313,25 +267,6 @@ const PartnersPage = ({ embedded = false }) => {
     }
   };
 
-  // Handle resend welcome email
-  const handleResendWelcomeEmail = async (partnerId) => {
-    try {
-      await resendPartnerWelcomeEmail(partnerId);
-      toast.success("Welcome email sent successfully with new credentials");
-    } catch (error) {
-      console.error("Error resending welcome email:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to send welcome email",
-      );
-    }
-  };
-
-  // Handle reset password
-  const handleResetPassword = (partner) => {
-    setSelectedPartner(partner);
-    setShowResetPasswordModal(true);
-  };
-
   // Handle filter change
   const handleFilterChange = (key, value) => {
     setActiveFilters((prev) => ({
@@ -386,12 +321,6 @@ const PartnersPage = ({ embedded = false }) => {
   // Handle row click - navigate to partner's centers
   const handleRowClick = (partner) => {
     navigate(`/data/partners/${partner.id}/centers`);
-  };
-
-  // Handle edit click
-  const handleEditClick = (partner) => {
-    setEditingPartner(partner);
-    setShowForm(true);
   };
 
   // Table columns - TanStack Table format
@@ -525,31 +454,6 @@ const PartnersPage = ({ embedded = false }) => {
             show: isAdmin && isPending,
             divider: true,
           },
-          // Edit action
-          {
-            label: "Edit Partner",
-            icon: PencilIcon,
-            onClick: () => handleEditClick(partner),
-            variant: "default",
-            show: isAdmin,
-          },
-          // Reset Password action
-          {
-            label: "Reset Password",
-            icon: KeyIcon,
-            onClick: () => handleResetPassword(partner),
-            variant: "warning",
-            show: isAdmin,
-          },
-          // Resend Welcome Email action
-          {
-            label: "Resend Welcome Email",
-            icon: EnvelopeIcon,
-            onClick: () => handleResendWelcomeEmail(partner.id),
-            variant: "default",
-            show: isAdmin,
-            divider: true,
-          },
           // Delete action
           {
             label: "Delete Partner",
@@ -585,10 +489,10 @@ const PartnersPage = ({ embedded = false }) => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Partners</h1>
             <p className="text-gray-600 mt-1">
-              Manage and view all partner organizations
+              Review partner intake, approvals, and bulk onboarding workflow
             </p>
           </div>
-          {isAdmin && !showForm && !showBulkUpload && (
+          {isAdmin && !showBulkUpload && (
             <div className="flex gap-3">
               {isSuperAdmin && (
                 <button
@@ -599,31 +503,9 @@ const PartnersPage = ({ embedded = false }) => {
                   <span>📤 Bulk Upload</span>
                 </button>
               )}
-              <button
-                onClick={() => setShowForm(true)}
-                className="px-8 py-3 bg-primary-500 text-white rounded-full font-semibold hover:bg-primary-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-              >
-                <PlusIcon className="h-5 w-5" />
-                Create Partner
-              </button>
             </div>
           )}
         </div>
-
-        {/* Form */}
-        {showForm && (
-          <PartnerForm
-            partner={editingPartner}
-            onSubmit={
-              editingPartner ? handleUpdatePartner : handleCreatePartner
-            }
-            onCancel={() => {
-              setShowForm(false);
-              setEditingPartner(null);
-            }}
-            isLoading={isSubmitting}
-          />
-        )}
 
         {/* Bulk Upload */}
         {showBulkUpload && (
@@ -637,7 +519,7 @@ const PartnersPage = ({ embedded = false }) => {
         )}
 
         {/* Search with Filters and Export */}
-        {!showForm && !showBulkUpload && (
+        {!showBulkUpload && (
           <div className="space-y-4">
             {/* Bulk Delete Button */}
             {isAdmin && selectedRows.length > 0 && (
@@ -722,7 +604,7 @@ const PartnersPage = ({ embedded = false }) => {
         )}
 
         {/* Table */}
-        {!showForm && (
+        {!showBulkUpload && (
           <EnhancedDataTable
             columns={columns}
             data={partners}
@@ -797,16 +679,6 @@ const PartnersPage = ({ embedded = false }) => {
         reasonPlaceholder="Enter the reason for rejection (10-500 characters)"
         remarksPlaceholder="Any additional comments..."
         minReasonLength={10}
-      />
-
-      {/* Reset Password Modal */}
-      <ResetPartnerPasswordModal
-        isOpen={showResetPasswordModal}
-        onClose={() => {
-          setShowResetPasswordModal(false);
-          setSelectedPartner(null);
-        }}
-        partner={selectedPartner}
       />
 
       {/* Bulk Delete Confirmation Modal */}

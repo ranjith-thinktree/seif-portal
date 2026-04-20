@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
+import { ArrowPathIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import {
-  ArrowPathIcon,
-  CheckCircleIcon,
-} from "@heroicons/react/24/outline";
-import { Plus, Trash2, Save, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+  Plus,
+  Trash2,
+  Save,
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
@@ -13,15 +17,33 @@ import {
 } from "../../services/certification.service";
 
 const MONTHS = [
-  "january", "february", "march", "april", "may", "june",
-  "july", "august", "september", "october", "november", "december",
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
 ];
 
 const MONTH_LABELS = {
-  january: "January", february: "February", march: "March",
-  april: "April", may: "May", june: "June", july: "July",
-  august: "August", september: "September", october: "October",
-  november: "November", december: "December",
+  january: "January",
+  february: "February",
+  march: "March",
+  april: "April",
+  may: "May",
+  june: "June",
+  july: "July",
+  august: "August",
+  september: "September",
+  october: "October",
+  november: "November",
+  december: "December",
 };
 
 const YEAR_TOTAL_FIELDS = [
@@ -50,16 +72,28 @@ const emptyMonthly = () => {
   const monthly = {};
   MONTHS.forEach((m) => {
     monthly[m] = {
-      total: 0, india: 0, greater_india: 0, nsi: 0,
-      female: 0, male: 0, tot: 0, employment: 0,
+      total: 0,
+      india: 0,
+      greater_india: 0,
+      nsi: 0,
+      female: 0,
+      male: 0,
+      tot: 0,
+      employment: 0,
     };
   });
   return monthly;
 };
 
 const emptyYearData = () => ({
-  total_students: 0, india: 0, greater_india: 0, nsi: 0,
-  female: 0, male: 0, tot: 0, employment: 0,
+  total_students: 0,
+  india: 0,
+  greater_india: 0,
+  nsi: 0,
+  female: 0,
+  male: 0,
+  tot: 0,
+  employment: 0,
   monthly: emptyMonthly(),
 });
 
@@ -96,7 +130,12 @@ const DashboardDataEditor = () => {
   }, [fetchData]);
 
   const sortedYears = data
-    ? ["all", ...Object.keys(data).filter((y) => y !== "all").sort()]
+    ? [
+        "all",
+        ...Object.keys(data)
+          .filter((y) => y !== "all")
+          .sort(),
+      ]
     : ["all"];
 
   const handleYearTotalChange = (field, value) => {
@@ -305,7 +344,9 @@ const DashboardDataEditor = () => {
         {selectedYear !== "all" && (
           <button
             onClick={() =>
-              setDeleteConfirm(deleteConfirm === selectedYear ? null : selectedYear)
+              setDeleteConfirm(
+                deleteConfirm === selectedYear ? null : selectedYear,
+              )
             }
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
           >

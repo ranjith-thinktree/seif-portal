@@ -4,6 +4,7 @@ export const ROLES = {
   ADMIN: "ADMIN",
   PARTNER: "PARTNER",
   SEIF_READONLY: "SEIF_READONLY",
+  SEIF_READONLY_DOWNLOAD: "SEIF_READONLY_DOWNLOAD",
   ESSCI: "ESSCI",
 };
 
@@ -13,6 +14,7 @@ export const ROLE_LABELS = {
   [ROLES.ADMIN]: "Admin",
   [ROLES.PARTNER]: "Partner",
   [ROLES.SEIF_READONLY]: "SEIF Read-Only",
+  [ROLES.SEIF_READONLY_DOWNLOAD]: "SEIF Read-Only + Download",
   [ROLES.ESSCI]: "ESSCI",
 };
 

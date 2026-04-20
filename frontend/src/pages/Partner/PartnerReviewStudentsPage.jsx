@@ -61,7 +61,6 @@ const PartnerReviewStudentsPage = () => {
     city: "",
     state: "",
     course_name: "",
-    training_status: "",
   });
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
@@ -80,7 +79,7 @@ const PartnerReviewStudentsPage = () => {
     setIsLoading(true);
     try {
       const response = await apiClient.get(
-        `/partners/uploads/${uploadId}/centers/${centerId}/students`
+        `/partners/uploads/${uploadId}/centers/${centerId}/students`,
       );
       const centerData = response.data.data.center;
       setCenter(centerData);
@@ -88,10 +87,10 @@ const PartnerReviewStudentsPage = () => {
       // Check if center is rejected - only rejected centers can be edited
       if (centerData.review_status !== "rejected") {
         toast.error(
-          `This center is currently ${centerData.review_status}. Only rejected centers can be edited.`
+          `This center is currently ${centerData.review_status}. Only rejected centers can be edited.`,
         );
         navigate(
-          ROUTES.PARTNER_REJECTED_CENTERS.replace(":uploadId", uploadId)
+          ROUTES.PARTNER_REJECTED_CENTERS.replace(":uploadId", uploadId),
         );
         return;
       }
@@ -193,7 +192,7 @@ const PartnerReviewStudentsPage = () => {
         cellValue,
       });
     },
-    [isEditMode]
+    [isEditMode],
   );
 
   // Close context menu when clicking elsewhere
@@ -346,7 +345,7 @@ const PartnerReviewStudentsPage = () => {
     if (contextMenu?.rowNode && gridRef.current) {
       const newRow = {
         id: `new_${Date.now()}`,
-        student_id: `NEW_${Date.now()}`,
+        student_id: "",
         student_name: "",
         date_of_birth: null,
         gender: "",
@@ -359,7 +358,6 @@ const PartnerReviewStudentsPage = () => {
         course_duration_months: null,
         batch_number: "",
         enrollment_date: null,
-        training_status: "",
         is_edited: true,
       };
 
@@ -380,7 +378,7 @@ const PartnerReviewStudentsPage = () => {
     if (contextMenu?.rowNode && gridRef.current) {
       const newRow = {
         id: `new_${Date.now()}`,
-        student_id: `NEW_${Date.now()}`,
+        student_id: "",
         student_name: "",
         date_of_birth: null,
         gender: "",
@@ -393,7 +391,6 @@ const PartnerReviewStudentsPage = () => {
         course_duration_months: null,
         batch_number: "",
         enrollment_date: null,
-        training_status: "",
         is_edited: true,
       };
 
@@ -412,14 +409,14 @@ const PartnerReviewStudentsPage = () => {
 
   const handleInsertColumnLeft = useCallback(() => {
     toast.info(
-      "Column insertion requires schema update - contact administrator"
+      "Column insertion requires schema update - contact administrator",
     );
     setContextMenu(null);
   }, []);
 
   const handleInsertColumnRight = useCallback(() => {
     toast.info(
-      "Column insertion requires schema update - contact administrator"
+      "Column insertion requires schema update - contact administrator",
     );
     setContextMenu(null);
   }, []);
@@ -431,7 +428,7 @@ const PartnerReviewStudentsPage = () => {
 
       if (
         window.confirm(
-          `Are you sure you want to delete the row for "${studentName}"?`
+          `Are you sure you want to delete the row for "${studentName}"?`,
         )
       ) {
         setStudents((prev) => {
@@ -449,7 +446,7 @@ const PartnerReviewStudentsPage = () => {
 
   const handleDeleteColumn = useCallback(() => {
     toast.info(
-      "Column deletion requires schema update - contact administrator"
+      "Column deletion requires schema update - contact administrator",
     );
     setContextMenu(null);
   }, []);
@@ -514,7 +511,7 @@ const PartnerReviewStudentsPage = () => {
         editable: false,
         pinned: "left",
         cellClass: "text-sm font-medium text-gray-900",
-        valueFormatter: (params) => params.value || "-",
+        valueFormatter: (params) => params.value || "Generated after approval",
       },
       {
         headerName: "Student Name",
@@ -700,43 +697,8 @@ const PartnerReviewStudentsPage = () => {
             : "#ffffff",
         }),
       },
-      {
-        headerName: "Training Status",
-        field: "training_status",
-        width: 170,
-        editable: isEditMode,
-        cellClass: "text-sm text-gray-600",
-        cellEditor: "agSelectCellEditor",
-        cellEditorParams: {
-          values: ["enrolled", "in_progress", "completed", "dropped"],
-        },
-        cellRenderer: (params) => {
-          const status = params.value || "enrolled";
-          const statusColors = {
-            enrolled: "bg-blue-100 text-blue-800",
-            in_progress: "bg-yellow-100 text-yellow-800",
-            completed: "bg-green-100 text-green-800",
-            dropped: "bg-red-100 text-red-800",
-          };
-          const colorClass =
-            statusColors[status] || "bg-gray-100 text-gray-800";
-
-          return (
-            <span
-              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${colorClass}`}
-            >
-              {status}
-            </span>
-          );
-        },
-        cellStyle: (params) => ({
-          backgroundColor: params.data.edited_fields?.training_status
-            ? "#fef3c7"
-            : "#ffffff",
-        }),
-      },
     ],
-    [isEditMode]
+    [isEditMode],
   );
 
   const onCellValueChanged = useCallback((event) => {
@@ -798,7 +760,7 @@ const PartnerReviewStudentsPage = () => {
     if (gridRef.current?.api) {
       setTimeout(() => {
         gridRef.current.api.setRowData(
-          JSON.parse(JSON.stringify(originalStudents))
+          JSON.parse(JSON.stringify(originalStudents)),
         );
       }, 0);
     }
@@ -826,7 +788,6 @@ const PartnerReviewStudentsPage = () => {
           city: s.city,
           state: s.state,
           enrollment_date: s.enrollment_date,
-          training_status: s.training_status,
           course_name: s.course_name,
           course_duration_months: s.course_duration_months,
           batch_number: s.batch_number,
@@ -834,7 +795,7 @@ const PartnerReviewStudentsPage = () => {
 
       await apiClient.post(
         `/partners/uploads/${uploadId}/centers/${centerId}/save-edits`,
-        { students: editedStudents }
+        { students: editedStudents },
       );
 
       toast.success("Changes saved successfully. You can now resubmit.");
@@ -847,7 +808,7 @@ const PartnerReviewStudentsPage = () => {
 
       // Reload to get fresh data from server but keep originalStudents
       const response = await apiClient.get(
-        `/partners/uploads/${uploadId}/centers/${centerId}/students`
+        `/partners/uploads/${uploadId}/centers/${centerId}/students`,
       );
       const studentsData = response.data.data.students || [];
       setStudents(studentsData);
@@ -880,7 +841,7 @@ const PartnerReviewStudentsPage = () => {
 
           const response = await apiClient.post(
             `/partners/uploads/${uploadId}/centers/${centerId}/upload-csv`,
-            { students: results.data }
+            { students: results.data },
           );
 
           toast.success(response.data.message || "CSV uploaded successfully");
@@ -922,7 +883,7 @@ const PartnerReviewStudentsPage = () => {
     setShowResubmitModal(false);
     try {
       const response = await apiClient.post(
-        `/partners/uploads/${uploadId}/resubmit`
+        `/partners/uploads/${uploadId}/resubmit`,
       );
       toast.success(response.data.data.message);
 
@@ -932,7 +893,7 @@ const PartnerReviewStudentsPage = () => {
 
       setTimeout(() => {
         navigate(
-          ROUTES.PARTNER_REJECTED_CENTERS.replace(":uploadId", uploadId)
+          ROUTES.PARTNER_REJECTED_CENTERS.replace(":uploadId", uploadId),
         );
       }, 2000);
     } catch (error) {
@@ -956,7 +917,6 @@ const PartnerReviewStudentsPage = () => {
       city: "",
       state: "",
       course_name: "",
-      training_status: "",
     });
   };
 
@@ -973,16 +933,12 @@ const PartnerReviewStudentsPage = () => {
     const courses = [
       ...new Set(students.map((s) => s.course_name).filter(Boolean)),
     ];
-    const statuses = [
-      ...new Set(students.map((s) => s.training_status).filter(Boolean)),
-    ];
 
     return {
       genders: genders.map((g) => ({ label: g, value: g })),
       cities: cities.map((c) => ({ label: c, value: c })),
       states: states.map((s) => ({ label: s, value: s })),
       courses: courses.map((c) => ({ label: c, value: c })),
-      statuses: statuses.map((s) => ({ label: s, value: s })),
     };
   }, [students]);
 
@@ -1000,7 +956,7 @@ const PartnerReviewStudentsPage = () => {
           s.email?.toLowerCase().includes(search) ||
           s.mobile_number?.toLowerCase().includes(search) ||
           s.city?.toLowerCase().includes(search) ||
-          s.state?.toLowerCase().includes(search)
+          s.state?.toLowerCase().includes(search),
       );
     }
 
@@ -1016,15 +972,9 @@ const PartnerReviewStudentsPage = () => {
     }
     if (activeFilters.course_name) {
       result = result.filter(
-        (s) => s.course_name === activeFilters.course_name
+        (s) => s.course_name === activeFilters.course_name,
       );
     }
-    if (activeFilters.training_status) {
-      result = result.filter(
-        (s) => s.training_status === activeFilters.training_status
-      );
-    }
-
     // Apply sort
     if (sortBy) {
       result.sort((a, b) => {
@@ -1185,11 +1135,6 @@ const PartnerReviewStudentsPage = () => {
                   label: "Course",
                   key: "course_name",
                   options: filterOptions.courses,
-                },
-                {
-                  label: "Training Status",
-                  key: "training_status",
-                  options: filterOptions.statuses,
                 },
               ]}
               activeFilters={activeFilters}

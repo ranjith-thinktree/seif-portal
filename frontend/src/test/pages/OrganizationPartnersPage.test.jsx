@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   render,
@@ -6,7 +7,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 
 // --- Mocks ---
 vi.mock("react-toastify", () => ({
@@ -14,14 +14,59 @@ vi.mock("react-toastify", () => ({
 }));
 vi.mock("../../services/data.service", () => ({
   getPartners: vi.fn(),
+  getPartnerById: vi.fn(),
+  createPartner: vi.fn(),
+  updatePartner: vi.fn(),
   deletePartner: vi.fn(),
 }));
-vi.mock("../../services/user.service", () => ({
-  resetUserPassword: vi.fn(),
+vi.mock("../../components/forms/PartnerForm", () => ({
+  default: ({ partner, onCancel }) => (
+    <div data-testid="partner-form">
+      <span>{partner ? "Edit Partner" : "Create New Partner"}</span>
+      <button onClick={onCancel}>Cancel</button>
+    </div>
+  ),
 }));
 vi.mock("../../components/layout/MainLayout", () => ({
   default: ({ children }) => <div data-testid="main-layout">{children}</div>,
 }));
+vi.mock("../../components/ui/dropdown-menu", () => {
+  const DropdownContext = React.createContext(null);
+
+  return {
+    DropdownMenu: ({ children }) => {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <DropdownContext.Provider value={{ open, setOpen }}>
+          <div>{children}</div>
+        </DropdownContext.Provider>
+      );
+    },
+    DropdownMenuTrigger: ({ children, asChild }) => {
+      const context = React.useContext(DropdownContext);
+      const handleClick = () => context.setOpen((value) => !value);
+
+      if (asChild && React.isValidElement(children)) {
+        return React.cloneElement(children, {
+          onClick: handleClick,
+        });
+      }
+
+      return <button onClick={handleClick}>{children}</button>;
+    },
+    DropdownMenuContent: ({ children }) => {
+      const context = React.useContext(DropdownContext);
+      return context.open ? <div>{children}</div> : null;
+    },
+    DropdownMenuItem: ({ children, onClick, className }) => (
+      <button onClick={onClick} className={className} type="button">
+        {children}
+      </button>
+    ),
+    DropdownMenuLabel: ({ children }) => <div>{children}</div>,
+    DropdownMenuSeparator: () => <hr />,
+  };
+});
 vi.mock("../../components/common/EnhancedDataTable", () => ({
   default: ({ columns, data, isLoading }) => (
     <div data-testid="data-table">
@@ -73,8 +118,16 @@ vi.mock("../../components/common/ConfirmationModal", () => ({
 }));
 
 import { getPartners, deletePartner } from "../../services/data.service";
-import { resetUserPassword } from "../../services/user.service";
 import OrganizationPartnersPage from "../../pages/OrganizationManagement/OrganizationPartnersPage";
+
+const openRowMenu = async (rowIndex) => {
+  const actionCell = screen.getByTestId(`actions-${rowIndex}`);
+  const menuButton = within(actionCell).getByRole("button", {
+    name: /open menu/i,
+  });
+  fireEvent.click(menuButton);
+  return actionCell;
+};
 
 const mockPartners = [
   {
@@ -145,10 +198,8 @@ describe("OrganizationPartnersPage", () => {
       render(<OrganizationPartnersPage />);
       await waitFor(() => expect(getPartners).toHaveBeenCalled());
 
-      // Click the first Eye button (actions-0)
-      const actionCell = screen.getByTestId("actions-0");
-      const buttons = actionCell.querySelectorAll("button");
-      fireEvent.click(buttons[0]); // Eye button is first
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() => {
         expect(screen.getByText("Partner Details")).toBeInTheDocument();
@@ -164,15 +215,13 @@ describe("OrganizationPartnersPage", () => {
       render(<OrganizationPartnersPage />);
       await waitFor(() => expect(getPartners).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      const buttons = actionCell.querySelectorAll("button");
-      fireEvent.click(buttons[0]);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() => {
         expect(screen.getByText("Partner Details")).toBeInTheDocument();
         const dialog = screen.getByRole("dialog");
         const d = within(dialog);
-        // 3 centers shown in the detail
         expect(d.getByText("3")).toBeInTheDocument();
       });
     });
@@ -181,19 +230,18 @@ describe("OrganizationPartnersPage", () => {
       render(<OrganizationPartnersPage />);
       await waitFor(() => expect(getPartners).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      fireEvent.click(actionCell.querySelectorAll("button")[0]);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("View Details"));
 
       await waitFor(() =>
         expect(screen.getByText("Partner Details")).toBeInTheDocument(),
       );
 
       const dialog = screen.getByRole("dialog");
-      // The dialog footer has a Close button; X icon also has aria-label Close
-      const closeBtns = within(dialog).getAllByRole("button", {
-        name: /close/i,
+      const closeButtons = within(dialog).getAllByRole("button", {
+        name: /^close$/i,
       });
-      fireEvent.click(closeBtns[closeBtns.length - 1]); // Click the footer Close button
+      fireEvent.click(closeButtons[0]);
 
       await waitFor(() =>
         expect(screen.queryByText("Partner Details")).not.toBeInTheDocument(),
@@ -206,10 +254,8 @@ describe("OrganizationPartnersPage", () => {
       render(<OrganizationPartnersPage />);
       await waitFor(() => expect(getPartners).toHaveBeenCalled());
 
-      // partner-1 has total_centers=3 → blocked dialog
-      const actionCell = screen.getByTestId("actions-0");
-      const trashBtn = actionCell.querySelectorAll("button")[3]; // trash is 4th button
-      fireEvent.click(trashBtn);
+      const actionCell = await openRowMenu(0);
+      fireEvent.click(within(actionCell).getByText("Delete"));
 
       await waitFor(() => {
         expect(screen.getByText("Cannot Delete Partner")).toBeInTheDocument();
@@ -220,10 +266,8 @@ describe("OrganizationPartnersPage", () => {
       render(<OrganizationPartnersPage />);
       await waitFor(() => expect(getPartners).toHaveBeenCalled());
 
-      // partner-2 has total_centers=0 → normal delete
-      const actionCell = screen.getByTestId("actions-1");
-      const trashBtn = actionCell.querySelectorAll("button")[3];
-      fireEvent.click(trashBtn);
+      const actionCell = await openRowMenu(1);
+      fireEvent.click(within(actionCell).getByText("Delete"));
 
       await waitFor(() => {
         expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument();
@@ -236,9 +280,8 @@ describe("OrganizationPartnersPage", () => {
       render(<OrganizationPartnersPage />);
       await waitFor(() => expect(getPartners).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-1"); // partner with 0 centers
-      const trashBtn = actionCell.querySelectorAll("button")[3];
-      fireEvent.click(trashBtn);
+      const actionCell = await openRowMenu(1);
+      fireEvent.click(within(actionCell).getByText("Delete"));
 
       await waitFor(() =>
         expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument(),
@@ -252,26 +295,19 @@ describe("OrganizationPartnersPage", () => {
     });
   });
 
-  describe("Reset Password", () => {
-    it("calls resetUserPassword with user_id (not partner.id)", async () => {
-      resetUserPassword.mockResolvedValue({ success: true });
+  describe("Ownership flow", () => {
+    it("shows only view, edit, and delete in the partner row actions", async () => {
       render(<OrganizationPartnersPage />);
       await waitFor(() => expect(getPartners).toHaveBeenCalled());
 
-      const actionCell = screen.getByTestId("actions-0");
-      const keyBtn = actionCell.querySelectorAll("button")[2]; // Key is 3rd button
-      fireEvent.click(keyBtn);
+      const actionCell = await openRowMenu(0);
 
-      await waitFor(() =>
-        expect(screen.getByText("Reset Password")).toBeInTheDocument(),
-      );
-
-      const sendBtn = screen.getByRole("button", { name: /send reset link/i });
-      fireEvent.click(sendBtn);
-
-      await waitFor(
-        () => expect(resetUserPassword).toHaveBeenCalledWith("user-1"), // user_id, not "partner-1"
-      );
+      expect(within(actionCell).getByText("View Details")).toBeInTheDocument();
+      expect(within(actionCell).getByText("Edit")).toBeInTheDocument();
+      expect(within(actionCell).getByText("Delete")).toBeInTheDocument();
+      expect(
+        within(actionCell).queryByText("Reset Password"),
+      ).not.toBeInTheDocument();
     });
   });
 

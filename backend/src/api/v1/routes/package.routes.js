@@ -27,7 +27,7 @@ const {
 router.get(
   '/',
   authenticate,
-  checkRole(['SUPER_ADMIN', 'ADMIN', 'SEIF_READONLY']),
+  checkRole(['SUPER_ADMIN', 'ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   validate(packageValidators.listPackages),
   PackageController.getAllPackages
 );
@@ -41,7 +41,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  checkRole(['SUPER_ADMIN', 'ADMIN', 'SEIF_READONLY']),
+  checkRole(['SUPER_ADMIN', 'ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   validate(packageValidators.packageId),
   PackageController.getPackageById
 );

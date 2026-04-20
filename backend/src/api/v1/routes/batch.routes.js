@@ -20,7 +20,7 @@ const { checkRole } = require('../../../middleware/role.middleware');
 router.get(
   '/',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   listBatchesValidator,
   validate,
   batchController.getAllBatches
@@ -34,7 +34,7 @@ router.get(
 router.get(
   '/filter-options',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   batchController.getBatchFilterOptions
 );
 
@@ -46,7 +46,7 @@ router.get(
 router.get(
   '/export',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   batchController.exportBatches
 );
 
@@ -58,7 +58,7 @@ router.get(
 router.get(
   '/by-center/:centerId',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   centerIdValidator,
   validate,
   batchController.getBatchesByCenter
@@ -72,7 +72,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   batchIdValidator,
   validate,
   batchController.getBatchById

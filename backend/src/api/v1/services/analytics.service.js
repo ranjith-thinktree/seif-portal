@@ -57,12 +57,12 @@ class AnalyticsService {
           COALESCE((SELECT SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) FROM uploaded_students s ${whereClause}), 0) as female_students,
           (SELECT COUNT(*) FROM partners WHERE status = 'active') as total_partners,
           (SELECT COUNT(*) FROM centers WHERE status = 'active') as total_centers,
-          COALESCE((SELECT SUM(CASE WHEN s.training_status = 'completed' THEN 1 ELSE 0 END) FROM uploaded_students s ${whereClause}), 0) as total_completed_training
+          0 as total_completed_training
         FROM dual`;
 
       const [summaryStats] = await db.query(
         summaryQuery,
-        queryParams.concat(queryParams, queryParams, queryParams)
+        queryParams.concat(queryParams, queryParams)
       );
 
       // 2. Get Partner-wise Breakdown (Top 10 partners only for performance)

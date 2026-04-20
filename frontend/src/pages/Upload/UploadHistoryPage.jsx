@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
-import axios from "axios";
+import { Link, Navigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
   ArrowPathIcon,
@@ -12,20 +12,28 @@ import {
   ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 import {
-  getUploads,
+  getAllUploadsForAdmin,
   deleteUpload,
   bulkDeleteUploads,
+  downloadUploadFile,
 } from "../../services/upload.service";
 import { MainLayout } from "../../components/layout";
-import DataTable from "../../components/common/DataTable";
 import BulkDeleteButton from "../../components/common/BulkDeleteButton";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
+import { ROUTES } from "../../constants";
 
 /**
  * Upload History Page
- * Shows partner's past uploads with status
+ * Shows admin upload history across partners
  */
 const UploadHistoryPage = () => {
+  const user = useSelector((state) => state.auth?.user);
+  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(user?.role);
+  const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(
+    user?.role,
+  );
+  const canDownload = user?.role !== "SEIF_READONLY"; // SEIF_READONLY_DOWNLOAD and admins can download
+  const canDelete = !isReadOnly; // only true admins can delete
   const [uploads, setUploads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -56,6 +64,10 @@ const UploadHistoryPage = () => {
    * Fetch uploads
    */
   const fetchUploads = useCallback(async () => {
+    if (!isAdmin && !isReadOnly) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -65,7 +77,8 @@ const UploadHistoryPage = () => {
       if (dateFrom) filters.dateFrom = dateFrom;
       if (dateTo) filters.dateTo = dateTo;
 
-      const result = await getUploads(
+      const result = await getAllUploadsForAdmin(
+        statusFilter || null,
         pagination.page,
         pagination.limit,
         filters,
@@ -74,13 +87,13 @@ const UploadHistoryPage = () => {
       // Apply client-side filtering and sorting
       let filteredData = result.data || [];
 
-      // Search filter (client-side only — file name / uploader name)
+      // Search filter (client-side only — file name / partner / reviewer)
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
         filteredData = filteredData.filter(
           (upload) =>
             upload.file_name?.toLowerCase().includes(search) ||
-            upload.uploaded_by_name?.toLowerCase().includes(search) ||
+            upload.partner_name?.toLowerCase().includes(search) ||
             upload.reviewed_by_name?.toLowerCase().includes(search),
         );
       }
@@ -104,11 +117,7 @@ const UploadHistoryPage = () => {
       });
 
       setUploads(filteredData);
-      setPagination((prev) => ({
-        ...prev,
-        total: filteredData.length,
-        totalPages: Math.ceil(filteredData.length / prev.limit),
-      }));
+      setPagination((prev) => result.pagination || prev);
     } catch (err) {
       console.error("Failed to fetch uploads:", err);
       setError("Failed to load upload history. Please try again.");
@@ -116,6 +125,7 @@ const UploadHistoryPage = () => {
       setLoading(false);
     }
   }, [
+    isAdmin,
     pagination.page,
     pagination.limit,
     searchTerm,
@@ -127,8 +137,14 @@ const UploadHistoryPage = () => {
   ]);
 
   useEffect(() => {
-    fetchUploads();
-  }, [fetchUploads]);
+    if (isAdmin || isReadOnly) {
+      fetchUploads();
+    }
+  }, [fetchUploads, isAdmin, isReadOnly]);
+
+  if (!isAdmin && !isReadOnly) {
+    return <Navigate to={`${ROUTES.UPLOAD_DATA}?tab=history`} replace />;
+  }
 
   /**
    * Handle bulk delete
@@ -180,39 +196,13 @@ const UploadHistoryPage = () => {
    */
   const handleDownloadFile = async (upload) => {
     try {
-      const res = await axios.get(`/api/v1/uploads/${upload.id}/download`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (res.data.success && res.data.data.downloadUrl) {
-        // S3 presigned URL
-        const link = document.createElement("a");
-        link.href = res.data.data.downloadUrl;
-        link.setAttribute(
-          "download",
-          res.data.data.fileName || upload.file_name,
-        );
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      }
-    } catch (error) {
-      // Local file: axios blob download fallback
-      try {
-        const res = await axios.get(`/api/v1/uploads/${upload.id}/download`, {
-          responseType: "blob",
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const url = window.URL.createObjectURL(new Blob([res.data]));
-        const link = document.createElement("a");
-        link.href = url;
-        link.setAttribute("download", upload.file_name);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
-      } catch (_) {
-        toast.error("Failed to download file");
-      }
+      await downloadUploadFile(upload.id, upload.file_name);
+    } catch (err) {
+      console.error("Failed to download upload file:", err);
+      const msg =
+        err?.response?.data?.message ||
+        "File is no longer available. It may have been removed after a server update.";
+      toast.error(msg);
     }
   };
 
@@ -250,6 +240,8 @@ const UploadHistoryPage = () => {
       pending: "bg-secondary-100 text-secondary-700",
       approved: "bg-primary-100 text-primary-700",
       rejected: "bg-destructive/10 text-destructive",
+      partial: "bg-blue-100 text-blue-700",
+      completed: "bg-green-100 text-green-700",
     };
 
     return (
@@ -270,18 +262,18 @@ const UploadHistoryPage = () => {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
-              Upload History
+              Data Upload History
             </h1>
             <p className="text-muted-foreground mt-1">
-              View your past data uploads and their status
+              View when each partner uploaded data and how it was reviewed
             </p>
           </div>
           <Link
-            to="/upload"
+            to={ROUTES.INBOX}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
             <PlusIcon className="h-5 w-5" />
-            New Upload
+            Review Pending Uploads
           </Link>
         </div>
 
@@ -293,7 +285,7 @@ const UploadHistoryPage = () => {
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search by file name, uploader, or reviewer..."
+                placeholder="Search by file name, partner, or reviewer..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -464,7 +456,7 @@ const UploadHistoryPage = () => {
           ) : (
             <>
               {/* Bulk Delete Button */}
-              {selectedRows.length > 0 && (
+              {canDelete && selectedRows.length > 0 && (
                 <div className="flex justify-end mb-4">
                   <BulkDeleteButton
                     selectedCount={selectedRows.length}
@@ -480,24 +472,29 @@ const UploadHistoryPage = () => {
                   <thead>
                     <tr className="bg-muted">
                       <th className="px-6 py-3 text-left w-12">
-                        <input
-                          type="checkbox"
-                          checked={
-                            selectedRows.length === uploads.length &&
-                            uploads.length > 0
-                          }
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedRows(uploads.map((u) => u.id));
-                            } else {
-                              setSelectedRows([]);
+                        {canDelete && (
+                          <input
+                            type="checkbox"
+                            checked={
+                              selectedRows.length === uploads.length &&
+                              uploads.length > 0
                             }
-                          }}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedRows(uploads.map((u) => u.id));
+                              } else {
+                                setSelectedRows([]);
+                              }
+                            }}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                        )}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         File Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Partner
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Students
@@ -523,20 +520,24 @@ const UploadHistoryPage = () => {
                         className="hover:bg-background-secondary"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            checked={selectedRows.includes(upload.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedRows([...selectedRows, upload.id]);
-                              } else {
-                                setSelectedRows(
-                                  selectedRows.filter((id) => id !== upload.id),
-                                );
-                              }
-                            }}
-                            className="h-4 w-4 rounded border-gray-300"
-                          />
+                          {canDelete && (
+                            <input
+                              type="checkbox"
+                              checked={selectedRows.includes(upload.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedRows([...selectedRows, upload.id]);
+                                } else {
+                                  setSelectedRows(
+                                    selectedRows.filter(
+                                      (id) => id !== upload.id,
+                                    ),
+                                  );
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-foreground">
@@ -544,8 +545,13 @@ const UploadHistoryPage = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-foreground">
+                            {upload.partner_name || "-"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-foreground">
-                            {upload.total_records}
+                            {upload.total_records ?? upload.total_students ?? 0}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -554,9 +560,6 @@ const UploadHistoryPage = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-muted-foreground">
                             {formatDate(upload.created_at)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            by {upload.uploaded_by_name}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -580,23 +583,26 @@ const UploadHistoryPage = () => {
                             <button className="text-primary-600 hover:text-primary-700 font-medium">
                               View
                             </button>
-                            <button
-                              onClick={() => handleDownloadFile(upload)}
-                              className="text-gray-500 hover:text-[#009530] transition-colors"
-                              title="Download original file"
-                            >
-                              <ArrowDownTrayIcon className="h-5 w-5" />
-                            </button>
-                            {(upload.status === "pending" ||
-                              upload.status === "rejected") && (
+                            {canDownload && (
                               <button
-                                onClick={() => setUploadToDelete(upload)}
-                                className="text-destructive hover:text-destructive/80 font-medium"
-                                title="Delete upload"
+                                onClick={() => handleDownloadFile(upload)}
+                                className="text-gray-500 hover:text-[#009530] transition-colors"
+                                title="Download original file"
                               >
-                                <TrashIcon className="h-5 w-5" />
+                                <ArrowDownTrayIcon className="h-5 w-5" />
                               </button>
                             )}
+                            {canDelete &&
+                              (upload.status === "pending" ||
+                                upload.status === "rejected") && (
+                                <button
+                                  onClick={() => setUploadToDelete(upload)}
+                                  className="text-destructive hover:text-destructive/80 font-medium"
+                                  title="Delete upload"
+                                >
+                                  <TrashIcon className="h-5 w-5" />
+                                </button>
+                              )}
                           </div>
                         </td>
                       </tr>

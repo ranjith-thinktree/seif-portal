@@ -3,6 +3,11 @@ const db = require('../../src/database/connection');
 const { v4: uuidv4 } = require('uuid');
 
 jest.mock('../../src/database/connection');
+jest.mock('../../src/utils/studentId.util', () => ({
+  generateUniqueStudentIdentifier: jest.fn(async (_connection, _partnerId, student) => {
+    return student.partner_student_id || `AUTO-${student.id || 'STUDENT'}`;
+  }),
+}));
 
 describe('Review Service - Admin Editing Tests', () => {
   let mockConnection;
@@ -38,7 +43,6 @@ describe('Review Service - Admin Editing Tests', () => {
           gender: 'Male',
           course_name: 'Web Development',
           batch_number: 'B001',
-          training_status: 'enrolled',
         },
       ];
       const mockChanges = [

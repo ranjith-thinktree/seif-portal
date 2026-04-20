@@ -292,6 +292,36 @@ const generatePutPresignedUrl = async (key, contentType, expiresIn = 300) => {
 };
 
 /**
+ * Upload a generic file buffer to S3 (for data upload backups, etc.)
+ * @param {Buffer} buffer - File buffer
+ * @param {string} key - S3 key (path including filename)
+ * @param {string} contentType - MIME type
+ * @returns {Promise<string|null>} S3 URL, or null if S3 is not configured
+ */
+const uploadFileToS3 = async (buffer, key, contentType) => {
+  try {
+    const s3 = initializeS3Client();
+    if (!s3) return null; // S3 not configured — caller uses local path as fallback
+
+    const params = {
+      Bucket: config.aws.s3BucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+      ServerSideEncryption: 'AES256',
+    };
+
+    console.log(`📤 Uploading file to S3: ${key}`);
+    const result = await s3.upload(params).promise();
+    console.log(`✅ File uploaded to S3: ${result.Location}`);
+    return result.Location; // Full S3 URL
+  } catch (error) {
+    console.error('❌ S3 file upload failed:', error.message);
+    return null; // Non-critical — caller falls back to local path
+  }
+};
+
+/**
  * Check if S3 is configured and accessible
  * @returns {Promise<boolean>} True if S3 is configured and accessible
  */
@@ -316,6 +346,7 @@ const checkS3Configuration = async () => {
 module.exports = {
   uploadImageToS3,
   uploadMultipleImagesToS3,
+  uploadFileToS3,
   deleteImageFromS3,
   deleteMultipleImagesFromS3,
   generatePresignedUrl,

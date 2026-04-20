@@ -26,7 +26,6 @@ class StudentService {
     city = '',
     state = '',
     course_name = '',
-    training_status = '',
     sort_by = 'created_at',
     sort_order = 'desc',
   }) {
@@ -92,16 +91,10 @@ class StudentService {
         queryParams.push(course_name);
       }
 
-      // Training status filter
-      if (training_status) {
-        whereConditions.push('s.training_status = ?');
-        queryParams.push(training_status);
-      }
-
       // Search filter
       if (search) {
         whereConditions.push(
-          '(s.student_id LIKE ? OR s.student_name LIKE ? OR s.email LIKE ? OR s.mobile_number LIKE ?)'
+          '(s.partner_student_id LIKE ? OR s.student_name LIKE ? OR s.email LIKE ? OR s.mobile_number LIKE ?)'
         );
         const searchPattern = `%${search}%`;
         queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
@@ -119,10 +112,13 @@ class StudentService {
         'city',
         'state',
         'course_name',
-        'training_status',
         'created_at',
       ];
-      const sortField = allowedSortFields.includes(sort_by) ? `s.${sort_by}` : 's.created_at';
+      const sortField = allowedSortFields.includes(sort_by)
+        ? sort_by === 'student_id'
+          ? 's.partner_student_id'
+          : `s.${sort_by}`
+        : 's.created_at';
       const sortDirection = sort_order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
       // Get total count
@@ -140,6 +136,7 @@ class StudentService {
       const [studentRows] = await db.query(
         `SELECT 
           s.*,
+          s.partner_student_id as student_id,
           b.batch_number,
           c.center_name,
           p.name as partner_name
@@ -180,6 +177,7 @@ class StudentService {
       const students = await db.query(
         `SELECT 
           s.*,
+          s.partner_student_id as student_id,
           b.batch_number,
           b.batch_start_date,
           b.batch_complete_date,
@@ -425,7 +423,7 @@ class StudentService {
         [cities],
         [states],
         [courses],
-        [placements],
+        [],
       ] = await Promise.all([
         // Partners - get ALL partners (not just those with students)
         role !== 'PARTNER'
@@ -506,16 +504,7 @@ class StudentService {
            ORDER BY course_name ASC`,
           queryParams
         ),
-        // Training Status
-        db.query(
-          `SELECT DISTINCT s.training_status as value, 
-           CONCAT(UPPER(SUBSTRING(s.training_status, 1, 1)), SUBSTRING(s.training_status, 2)) as label 
-           FROM students s 
-           ${whereCondition}
-           ${whereCondition ? 'AND' : 'WHERE'} s.training_status IS NOT NULL AND s.training_status != ''
-           ORDER BY s.training_status ASC`,
-          queryParams
-        ),
+        Promise.resolve([[]]),
       ]);
 
       return {
@@ -526,10 +515,7 @@ class StudentService {
         cities: (cities || []).map((c) => ({ value: c.value, label: c.label })),
         states: (states || []).map((s) => ({ value: s.value, label: s.label })),
         courses: (courses || []).map((c) => ({ value: c.value, label: c.label })),
-        trainings: (placements || []).map((p) => ({
-          value: p.value,
-          label: p.label,
-        })),
+        trainings: [],
       };
     } catch (error) {
       console.error('Error in getFilterOptions:', error);

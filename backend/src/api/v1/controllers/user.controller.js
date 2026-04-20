@@ -22,6 +22,8 @@ class UserController {
         status: req.query.status,
         partner_id: req.query.partner_id,
         search: req.query.search,
+        sort_by: req.query.sort_by,
+        sort_order: req.query.sort_order,
       };
 
       // Remove undefined filters
@@ -90,14 +92,9 @@ class UserController {
       }
 
       // Validate role
-      const validRoles = ['SUPER_ADMIN', 'ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY'];
+      const validRoles = ['SUPER_ADMIN', 'ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD'];
       if (!validRoles.includes(role)) {
         throw new ValidationError('Invalid role');
-      }
-
-      // If role is PARTNER, partner_id is required
-      if (role === 'PARTNER' && !partner_id) {
-        throw new ValidationError('Partner ID is required for PARTNER role');
       }
 
       const userData = {
@@ -106,7 +103,7 @@ class UserController {
         full_name,
         mobile_number,
         role,
-        partner_id: role === 'PARTNER' ? partner_id : null,
+        partner_id: null,
         status: status || 'active',
       };
 
@@ -131,7 +128,7 @@ class UserController {
       if (full_name) updateData.full_name = full_name;
       if (mobile_number) updateData.mobile_number = mobile_number;
       if (role) {
-        const validRoles = ['SUPER_ADMIN', 'ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY'];
+        const validRoles = ['SUPER_ADMIN', 'ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD'];
         if (!validRoles.includes(role)) {
           throw new ValidationError('Invalid role');
         }
@@ -212,6 +209,26 @@ class UserController {
           note: 'In production, this password should be sent via email',
         },
         'Password reset successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Resend credentials for a partner user.
+   * POST /api/v1/users/:id/resend-credentials
+   */
+  static async resendCredentials(req, res, next) {
+    try {
+      const result = await UserService.resendCredentials(req.params.id, req.user.id);
+
+      return ApiResponse.success(
+        res,
+        result,
+        result.temporaryPassword
+          ? 'Credentials regenerated but email failed to send'
+          : 'New credentials generated and emailed successfully'
       );
     } catch (error) {
       next(error);

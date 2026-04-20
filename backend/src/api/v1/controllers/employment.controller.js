@@ -172,18 +172,25 @@ exports.downloadTemplate = async (req, res) => {
     const period = req.query.period || 'all';
 
     // Calculate cutoff date based on period
+    // Accepts: 'all' or any '<N>m' where N is a positive integer (e.g. 1m, 2m, 3m ... 24m)
     let cutoffDate = null;
     if (period !== 'all') {
-      const now = new Date();
-      if (period === '1m') now.setMonth(now.getMonth() - 1);
-      else if (period === '6m') now.setMonth(now.getMonth() - 6);
-      else if (period === '1y') now.setFullYear(now.getFullYear() - 1);
-      else {
+      const monthMatch = /^(\d+)m$/.exec(period);
+      if (!monthMatch) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid period. Use 1m, 6m, 1y, or all.',
+          message: 'Invalid period. Use a number of months like 1m, 2m, 3m ... or \'all\'.',
         });
       }
+      const months = parseInt(monthMatch[1], 10);
+      if (months < 1 || months > 24) {
+        return res.status(400).json({
+          success: false,
+          message: 'Period must be between 1m and 24m, or \'all\'.',
+        });
+      }
+      const now = new Date();
+      now.setMonth(now.getMonth() - months);
       cutoffDate = now;
     }
 
@@ -203,7 +210,6 @@ exports.downloadTemplate = async (req, res) => {
       LEFT JOIN batches b ON b.id = s.batch_id
       LEFT JOIN centers c ON c.id = s.center_id
       WHERE s.partner_id = ?
-        AND s.deleted_at IS NULL
     `;
     const params = [partnerId];
 
@@ -217,7 +223,10 @@ exports.downloadTemplate = async (req, res) => {
     const [students] = await db.query(query, params);
 
     if (students.length === 0) {
-      const periodLabel = period === 'all' ? '' : ` approved in the last ${period}`;
+      const monthMatch = /^(\d+)m$/.exec(period);
+      const periodLabel = period === 'all'
+        ? ''
+        : ` approved in the last ${monthMatch ? monthMatch[1] + (monthMatch[1] === '1' ? ' month' : ' months') : period}`;
       return res.status(400).json({
         success: false,
         message: `No approved students found${periodLabel}. Please upload and get student data approved first.`,

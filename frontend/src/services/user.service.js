@@ -87,6 +87,14 @@ export const resetUserPassword = async (id) => {
 };
 
 /**
+ * Generate a new temporary password and email it to a partner user.
+ */
+export const resendUserCredentials = async (id) => {
+  const response = await apiClient.post(`/users/${id}/resend-credentials`);
+  return response.data;
+};
+
+/**
  * Export users as CSV
  */
 export const exportUsers = async (params = {}) => {

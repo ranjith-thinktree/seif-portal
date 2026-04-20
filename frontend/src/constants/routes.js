@@ -12,6 +12,7 @@ export const ROUTES = {
   USERS: "/users",
   USER_MANAGEMENT: "/user-management",
   ORGANIZATION_MANAGEMENT: "/organization-management",
+  COURSES_MANAGEMENT: "/courses-management",
   ORGANIZATION_PARTNERS: "/organization/partners",
   ORGANIZATION_CENTERS: "/organization/centers",
   DATA_MANAGEMENT: "/data-management",

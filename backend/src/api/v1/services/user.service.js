@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { ValidationError, NotFoundError } = require('../../../utils/error.util');
 const db = require('../../../database/connection');
+const emailService = require('../../../utils/email.util');
 
 /**
  * User Service
@@ -53,6 +54,12 @@ class UserService {
    * Create new user
    */
   static async create(userData) {
+    if (userData.role === 'PARTNER') {
+      throw new ValidationError(
+        'PARTNER users are created automatically when a partner is created'
+      );
+    }
+
     // Check if email already exists
     const emailExists = await UserModel.emailExists(userData.email);
     if (emailExists) {
@@ -88,6 +95,25 @@ class UserService {
       throw new NotFoundError('User not found');
     }
 
+    if (updateData.role === 'PARTNER' && user.role !== 'PARTNER') {
+      throw new ValidationError(
+        'PARTNER users are created automatically when a partner is created'
+      );
+    }
+
+    if (user.role === 'PARTNER') {
+      const partnerManagedFields = ['email', 'full_name', 'mobile_number', 'partner_id', 'role'];
+      const isUpdatingPartnerManagedField = partnerManagedFields.some((field) =>
+        Object.prototype.hasOwnProperty.call(updateData, field)
+      );
+
+      if (isUpdatingPartnerManagedField) {
+        throw new ValidationError(
+          'PARTNER user profile fields are managed from Organization Management'
+        );
+      }
+    }
+
     // If updating email, check if it's already taken
     if (updateData.email && updateData.email !== user.email) {
       const emailExists = await UserModel.emailExists(updateData.email, id);
@@ -121,6 +147,12 @@ class UserService {
       throw new NotFoundError('User not found');
     }
 
+    if (user.role === 'PARTNER') {
+      throw new ValidationError(
+        'PARTNER login accounts cannot be deleted independently. Delete or deactivate the partner instead.'
+      );
+    }
+
     await UserModel.softDelete(id);
     return { message: 'User deleted successfully' };
   }
@@ -133,6 +165,12 @@ class UserService {
     const user = await UserModel.findById(id);
     if (!user) {
       throw new NotFoundError('User not found');
+    }
+
+    if (user.role === 'PARTNER') {
+      throw new ValidationError(
+        'PARTNER login accounts cannot be deleted independently. Delete or deactivate the partner instead.'
+      );
     }
 
     await UserModel.hardDelete(id);
@@ -181,6 +219,66 @@ class UserService {
     await UserModel.setMustChangePassword(id, true);
 
     return { message: 'Password reset successfully. User must change password on next login.' };
+  }
+
+  /**
+   * Resend credentials for a linked partner user.
+   * Generates a new temporary password every time and emails it to the partner.
+   */
+  static async resendCredentials(id, adminId) {
+    const user = await UserModel.findById(id);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    if (user.role !== 'PARTNER') {
+      throw new ValidationError('Resend credentials is only available for PARTNER users');
+    }
+
+    if (!user.partner_id) {
+      throw new ValidationError('PARTNER user is not linked to a partner');
+    }
+
+    const [partners] = await db.query(
+      `SELECT id, partner_id, name, contact_email
+       FROM partners
+       WHERE id = ?`,
+      [user.partner_id]
+    );
+
+    if (!partners.length) {
+      throw new NotFoundError('Linked partner not found');
+    }
+
+    const partner = partners[0];
+    const tempPassword = this.generateTempPassword();
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(tempPassword, salt);
+
+    await UserModel.updatePassword(id, passwordHash);
+    await UserModel.setMustChangePassword(id, true);
+
+    try {
+      await emailService.sendPartnerWelcomeEmail({
+        email: user.email || partner.contact_email,
+        name: partner.name,
+        partnerId: partner.partner_id,
+        tempPassword,
+      });
+
+      return {
+        email: user.email || partner.contact_email,
+        partnerId: partner.partner_id,
+      };
+    } catch (error) {
+      console.error('[UserService] resendCredentials email failure:', error);
+      return {
+        email: user.email || partner.contact_email,
+        partnerId: partner.partner_id,
+        temporaryPassword: tempPassword,
+        warning: 'Email service failed. Share the generated temporary password manually.',
+      };
+    }
   }
 
   /**
@@ -306,6 +404,16 @@ class UserService {
     const total = countResult[0].total;
 
     // Get paginated data with partner details
+    const validSortFields = {
+      full_name: 'u.full_name',
+      email: 'u.email',
+      role: 'u.role',
+      status: 'u.status',
+      created_at: 'u.created_at',
+    };
+    const orderField = validSortFields[filters.sort_by] || 'u.created_at';
+    const orderDir = filters.sort_order === 'asc' ? 'ASC' : 'DESC';
+
     const dataSQL = `
       SELECT 
         u.id, 
@@ -322,7 +430,7 @@ class UserService {
       FROM users u
       LEFT JOIN partners p ON u.partner_id = p.id
       ${whereSQL}
-      ORDER BY u.created_at DESC
+      ORDER BY ${orderField} ${orderDir}
       LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
     `;
     const [users] = await db.query(dataSQL, params);

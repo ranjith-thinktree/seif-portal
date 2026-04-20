@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { MainLayout } from "../../components/layout";
 import reviewService from "../../services/review.service";
 import Breadcrumb from "../../components/common/Breadcrumb";
 import SearchBar from "../../components/common/SearchBar";
 import Pagination from "../../components/common/Pagination";
+import SuccessModal from "../../components/common/SuccessModal";
+import RejectionModal from "../../components/common/RejectionModal";
 import { showToast } from "../../utils/toast.util";
 import { ROUTES } from "../../constants/routes";
 import {
@@ -24,6 +27,10 @@ const ReviewCentersPage = () => {
   const { uploadId } = useParams();
   const navigate = useNavigate();
   const scrollContainerRef = useRef(null);
+  const { user } = useSelector((state) => state.auth);
+  const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(
+    user?.role,
+  );
 
   const [upload, setUpload] = useState(null);
   const [centers, setCenters] = useState([]);
@@ -38,6 +45,10 @@ const ReviewCentersPage = () => {
   ]);
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
+  const [selectedCenterIds, setSelectedCenterIds] = useState([]);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const itemsPerPage = 10;
 
   // Breadcrumb items
@@ -46,48 +57,56 @@ const ReviewCentersPage = () => {
     { label: "Review Upload", path: "#" },
   ];
 
+  const fetchUploadDetails = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await reviewService.getUploadForReview(uploadId);
+      setUpload(response.data);
+    } catch (error) {
+      console.error("Error fetching upload details:", error);
+      showToast.error("Failed to load upload details");
+      navigate(ROUTES.INBOX);
+    } finally {
+      setLoading(false);
+    }
+  }, [uploadId, navigate]);
+
+  const fetchCenters = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await reviewService.getPendingCenters(uploadId, {
+        page: currentPage,
+        limit: itemsPerPage,
+        search: searchTerm,
+      });
+
+      const nextCenters = response.data.data || [];
+      setCenters(nextCenters);
+      setTotalPages(response.data.pagination?.totalPages || 1);
+      setSelectedCenterIds((prev) =>
+        prev.filter((id) =>
+          nextCenters.some(
+            (center) => center.id === id && center.review_status === "pending",
+          ),
+        ),
+      );
+    } catch (error) {
+      console.error("Error fetching centers:", error);
+      showToast.error("Failed to load centers");
+    } finally {
+      setLoading(false);
+    }
+  }, [uploadId, currentPage, searchTerm]);
+
   // Fetch upload details
   useEffect(() => {
-    const fetchUploadDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await reviewService.getUploadForReview(uploadId);
-        setUpload(response.data);
-      } catch (error) {
-        console.error("Error fetching upload details:", error);
-        showToast.error("Failed to load upload details");
-        navigate(ROUTES.INBOX);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchUploadDetails();
-  }, [uploadId, navigate]);
+  }, [fetchUploadDetails]);
 
   // Fetch centers
   useEffect(() => {
-    const fetchCenters = async () => {
-      try {
-        setLoading(true);
-        const response = await reviewService.getPendingCenters(uploadId, {
-          page: currentPage,
-          limit: itemsPerPage,
-          search: searchTerm,
-        });
-
-        setCenters(response.data.data || []);
-        setTotalPages(response.data.pagination?.totalPages || 1);
-      } catch (error) {
-        console.error("Error fetching centers:", error);
-        showToast.error("Failed to load centers");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchCenters();
-  }, [uploadId, currentPage, searchTerm]);
+  }, [fetchCenters]);
 
   // Handle search
   const handleSearch = (value) => {
@@ -162,6 +181,24 @@ const ReviewCentersPage = () => {
 
   const displayCenters = getFilteredAndSortedCenters();
 
+  const selectableCenterIds = useMemo(
+    () =>
+      displayCenters
+        .filter((center) => center.review_status === "pending")
+        .map((center) => center.id),
+    [displayCenters],
+  );
+
+  const allSelectableChecked =
+    selectableCenterIds.length > 0 &&
+    selectableCenterIds.every((id) => selectedCenterIds.includes(id));
+
+  const selectedCenters = useMemo(
+    () =>
+      displayCenters.filter((center) => selectedCenterIds.includes(center.id)),
+    [displayCenters, selectedCenterIds],
+  );
+
   // Drag-to-scroll functionality
   useEffect(() => {
     const ele = scrollContainerRef.current;
@@ -233,6 +270,105 @@ const ReviewCentersPage = () => {
       center.id,
     );
     navigate(path);
+  };
+
+  const handleCenterCheckboxChange = (centerId, checked) => {
+    setSelectedCenterIds((prev) => {
+      if (checked) {
+        return prev.includes(centerId) ? prev : [...prev, centerId];
+      }
+
+      return prev.filter((id) => id !== centerId);
+    });
+  };
+
+  const handleSelectAllChange = (checked) => {
+    if (checked) {
+      setSelectedCenterIds(selectableCenterIds);
+      return;
+    }
+
+    setSelectedCenterIds([]);
+  };
+
+  const resetBulkActionState = () => {
+    setShowApproveModal(false);
+    setShowRejectModal(false);
+    setIsProcessing(false);
+  };
+
+  const refreshReviewData = async () => {
+    await Promise.all([fetchUploadDetails(), fetchCenters()]);
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedCenterIds.length === 0) {
+      return;
+    }
+
+    setIsProcessing(true);
+
+    const results = await Promise.allSettled(
+      selectedCenterIds.map((centerId) =>
+        reviewService.approveCenter(uploadId, centerId),
+      ),
+    );
+
+    const successful = results.filter(
+      (result) => result.status === "fulfilled",
+    ).length;
+    const failed = results.length - successful;
+
+    if (successful > 0) {
+      showToast.success(
+        `${successful} center${successful > 1 ? "s" : ""} approved successfully`,
+      );
+    }
+
+    if (failed > 0) {
+      showToast.error(
+        `${failed} center${failed > 1 ? "s" : ""} could not be approved`,
+      );
+    }
+
+    setSelectedCenterIds([]);
+    resetBulkActionState();
+    await refreshReviewData();
+  };
+
+  const handleBulkReject = async ({ reason, remarks }) => {
+    if (selectedCenterIds.length === 0) {
+      return;
+    }
+
+    setIsProcessing(true);
+
+    const results = await Promise.allSettled(
+      selectedCenterIds.map((centerId) =>
+        reviewService.rejectCenter(uploadId, centerId, reason, remarks),
+      ),
+    );
+
+    const successful = results.filter(
+      (result) => result.status === "fulfilled",
+    ).length;
+    const failed = results.length - successful;
+
+    if (successful > 0) {
+      showToast.success(
+        `${successful} center${successful > 1 ? "s" : ""} rejected successfully`,
+      );
+    }
+
+    if (failed > 0) {
+      showToast.error(
+        `${failed} center${failed > 1 ? "s" : ""} could not be rejected`,
+      );
+    }
+
+    setSelectedCenterIds([]);
+    resetBulkActionState();
+    await refreshReviewData();
   };
 
   // Get status badge color
@@ -388,6 +524,36 @@ const ReviewCentersPage = () => {
           onSortChange={handleSortChange}
         />
 
+        {!isReadOnly && selectableCenterIds.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-gray-600">
+              <span className="font-semibold text-gray-900">
+                {selectedCenterIds.length}
+              </span>{" "}
+              center{selectedCenterIds.length === 1 ? "" : "s"} selected on this
+              page
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowApproveModal(true)}
+                disabled={selectedCenterIds.length === 0 || isProcessing}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircleIcon className="h-4 w-4" />
+                Approve Selected
+              </button>
+              <button
+                onClick={() => setShowRejectModal(true)}
+                disabled={selectedCenterIds.length === 0 || isProcessing}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <XCircleIcon className="h-4 w-4" />
+                Reject Selected
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Centers Table */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           {loading ? (
@@ -410,29 +576,41 @@ const ReviewCentersPage = () => {
                 ref={scrollContainerRef}
                 className="overflow-x-auto custom-scrollbar"
               >
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 table-fixed">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      <th className="w-12 px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        <input
+                          type="checkbox"
+                          checked={allSelectableChecked}
+                          onChange={(event) =>
+                            handleSelectAllChange(event.target.checked)
+                          }
+                          disabled={selectableCenterIds.length === 0}
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+                          aria-label="Select all pending centers on this page"
+                        />
+                      </th>
+                      <th className="w-16 px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                         S.NO
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      <th className="w-[26%] min-w-[220px] px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                         Center Name
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      <th className="w-[16%] min-w-[120px] px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                         City
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      <th className="w-[16%] min-w-[140px] px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                         State
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      <th className="w-[10%] min-w-[88px] px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                         Students
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      <th className="w-[12%] min-w-[110px] px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                         Status
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Reviewed By
+                      <th className="w-[14%] min-w-[112px] px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Actions
                       </th>
                     </tr>
                   </thead>
@@ -450,42 +628,89 @@ const ReviewCentersPage = () => {
                             : "opacity-70 bg-gray-50/50",
                         ].join(" ")}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td
+                          className="px-4 py-4 whitespace-nowrap"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedCenterIds.includes(center.id)}
+                            onChange={(event) =>
+                              handleCenterCheckboxChange(
+                                center.id,
+                                event.target.checked,
+                              )
+                            }
+                            disabled={center.review_status !== "pending"}
+                            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+                            aria-label={`Select ${center.center_name}`}
+                          />
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
                             {(currentPage - 1) * itemsPerPage + index + 1}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          <div className="flex items-center gap-2">
-                            {center.center_name}
+                        <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="truncate">
+                              {center.center_name}
+                            </span>
                             {center.review_status === "pending" && (
                               <ChevronRightIcon className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        <td className="px-4 py-4 text-sm text-gray-600 truncate">
                           {center.city}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        <td className="px-4 py-4 text-sm text-gray-600 truncate">
                           {center.state}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
                           {center.student_count}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-4 py-4 whitespace-nowrap">
                           <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(
+                            className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(
                               center.review_status,
                             )}`}
                           >
-                            {center.review_status === "pending" &&
-                              "Pending Approval"}
+                            {center.review_status === "pending" && "Pending"}
                             {center.review_status === "approved" && "Approved"}
                             {center.review_status === "rejected" && "Rejected"}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {center.reviewed_by_name || "-"}
+                        <td
+                          className="px-4 py-4 whitespace-nowrap"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedCenterIds([center.id]);
+                                setShowApproveModal(true);
+                              }}
+                              disabled={center.review_status !== "pending"}
+                              title={`Approve ${center.center_name}`}
+                              aria-label={`Approve ${center.center_name}`}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <CheckCircleIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedCenterIds([center.id]);
+                                setShowRejectModal(true);
+                              }}
+                              disabled={center.review_status !== "pending"}
+                              title={`Reject ${center.center_name}`}
+                              aria-label={`Reject ${center.center_name}`}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <XCircleIcon className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -505,6 +730,61 @@ const ReviewCentersPage = () => {
             </>
           )}
         </div>
+
+        <SuccessModal
+          isOpen={showApproveModal}
+          onClose={() => setShowApproveModal(false)}
+          title={
+            selectedCenterIds.length === 1
+              ? "Approve Center"
+              : "Approve Selected Centers"
+          }
+          description={
+            selectedCenterIds.length === 1
+              ? "This action will move all data from this center to the main system. Do you want to proceed?"
+              : `This action will approve ${selectedCenterIds.length} selected centers and move their data to the main system. Do you want to proceed?`
+          }
+          partnerName={
+            selectedCenters.length === 1
+              ? selectedCenters[0]?.partner_name || ""
+              : ""
+          }
+          centerName={
+            selectedCenters.length === 1
+              ? selectedCenters[0]?.center_name || ""
+              : `${selectedCenterIds.length} centers selected`
+          }
+          onConfirm={handleBulkApprove}
+          isLoading={isProcessing}
+          showCancel={true}
+          buttonText={
+            selectedCenterIds.length === 1
+              ? "Confirm Approval"
+              : "Confirm Bulk Approval"
+          }
+        />
+
+        <RejectionModal
+          isOpen={showRejectModal}
+          onClose={() => setShowRejectModal(false)}
+          title={
+            selectedCenterIds.length === 1
+              ? `Reject Center: ${selectedCenters[0]?.center_name || ""}`
+              : `Reject ${selectedCenterIds.length} Selected Centers`
+          }
+          description={
+            selectedCenterIds.length === 1
+              ? "Please provide a reason for rejecting this center. This will be sent to the partner for review."
+              : "Please provide a reason for rejecting the selected centers. This same rejection reason will be applied to all selected centers and sent to the partner for review."
+          }
+          onSubmit={handleBulkReject}
+          isLoading={isProcessing}
+          reasonLabel="Reason for Rejection"
+          remarksLabel="Remarks"
+          reasonPlaceholder="Enter reason for rejection (minimum 10 characters)"
+          remarksPlaceholder="Enter additional remarks or comments"
+          minReasonLength={10}
+        />
       </div>
     </MainLayout>
   );

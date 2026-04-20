@@ -28,13 +28,13 @@ class KpiService {
    * otherwise the 'all' row is returned.
    *
    * @param {string} year - 'all' or 'YYYY-YY'
-   * @returns {Object} Map of kpiKey → { customValue, isVisible, financialYear }
+   * @returns {Object} Map of kpiKey → { customValue, isVisible, sortOrder, customLabel, financialYear }
    */
   static async getSettings(year = 'all') {
     try {
       // Fetch default 'all' settings and per-year settings together
       const [rows] = await db.query(
-        `SELECT kpi_key, financial_year, custom_value, is_visible, sort_order
+        `SELECT kpi_key, financial_year, custom_value, is_visible, sort_order, custom_label
          FROM kpi_settings
          WHERE financial_year IN (?, 'all')
          ORDER BY financial_year ASC`,
@@ -51,6 +51,7 @@ class KpiService {
             customValue: row.custom_value,
             isVisible: row.is_visible === 1,
             sortOrder: row.sort_order ?? 99,
+            customLabel: row.custom_label || null,
             financialYear: 'all',
           };
         }
@@ -64,6 +65,7 @@ class KpiService {
               customValue: row.custom_value,
               isVisible: row.is_visible === 1,
               sortOrder: map[row.kpi_key]?.sortOrder ?? row.sort_order ?? 99,
+              customLabel: map[row.kpi_key]?.customLabel ?? row.custom_label ?? null,
               financialYear: year,
             };
           }
@@ -73,7 +75,13 @@ class KpiService {
       // Ensure all known KPI keys are present (in case seeds missing)
       VALID_KPI_KEYS.forEach((key, idx) => {
         if (!map[key]) {
-          map[key] = { customValue: 0, isVisible: true, sortOrder: idx + 1, financialYear: 'all' };
+          map[key] = {
+            customValue: 0,
+            isVisible: true,
+            sortOrder: idx + 1,
+            customLabel: null,
+            financialYear: 'all',
+          };
         }
       });
 
@@ -90,12 +98,16 @@ class KpiService {
    * @param {string} year       - 'all' or 'YYYY-YY'
    * @param {number|null} customValue
    * @param {boolean|null} isVisible
+   * @param {string|null} customLabel
    * @param {string} userId
    */
-  static async upsertSetting(kpiKey, year = 'all', customValue, isVisible, userId) {
+  static async upsertSetting(kpiKey, year = 'all', customValue, isVisible, customLabel, userId) {
     if (!VALID_KPI_KEYS.includes(kpiKey)) {
       throw new Error(`Invalid KPI key: ${kpiKey}`);
     }
+
+    const normalizedCustomLabel =
+      customLabel === undefined ? undefined : String(customLabel || '').trim() || null;
 
     try {
       // Check if row exists
@@ -116,20 +128,25 @@ class KpiService {
           updates.push('is_visible = ?');
           params.push(isVisible ? 1 : 0);
         }
+        if (normalizedCustomLabel !== undefined) {
+          updates.push('custom_label = ?');
+          params.push(normalizedCustomLabel);
+        }
         updates.push('updated_by = ?', 'updated_at = NOW()');
         params.push(userId, existing[0].id);
 
         await db.query(`UPDATE kpi_settings SET ${updates.join(', ')} WHERE id = ?`, params);
       } else {
         await db.query(
-          `INSERT INTO kpi_settings (id, kpi_key, financial_year, custom_value, is_visible, updated_by, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+          `INSERT INTO kpi_settings (id, kpi_key, financial_year, custom_value, is_visible, custom_label, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
           [
             uuidv4(),
             kpiKey,
             year,
             customValue !== undefined && customValue !== null ? parseInt(customValue, 10) : 0,
             isVisible !== undefined && isVisible !== null ? (isVisible ? 1 : 0) : 1,
+            normalizedCustomLabel === undefined ? null : normalizedCustomLabel,
             userId,
           ]
         );

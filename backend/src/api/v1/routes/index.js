@@ -24,8 +24,10 @@ const templateRoutes = require('./templates.routes');
 const certificationRoutes = require('./certification.routes');
 const settingsRoutes = require('./settings.routes');
 const kpiRoutes = require('./kpi.routes');
+const courseRoutes = require('./course.routes');
 const tutorialRoutes = require('./tutorial.routes');
 const totRoutes = require('./tot.routes');
+const supportRoutes = require('./support.routes');
 
 /**
  * API v1 Routes Index
@@ -55,8 +57,10 @@ router.use('/templates', templateRoutes);
 router.use('/certification', certificationRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/kpi', kpiRoutes);
+router.use('/courses', courseRoutes);
 router.use('/tutorials', tutorialRoutes);
 router.use('/tot', totRoutes);
+router.use('/support-contacts', supportRoutes);
 
 // Future routes will be added here:
 // router.use('/requests', requestRoutes);

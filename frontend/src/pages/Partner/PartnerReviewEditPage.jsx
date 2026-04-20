@@ -134,7 +134,7 @@ const PartnerReviewEditPage = () => {
     try {
       await partnerService.resubmitUpload(uploadId);
       showToast.success("Data resubmitted successfully! New version created.");
-      navigate(ROUTES.UPLOAD_HISTORY);
+      navigate(`${ROUTES.UPLOAD_DATA}?tab=history`);
     } catch (error) {
       console.error("Error resubmitting data:", error);
       showToast.error(

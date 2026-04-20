@@ -3,9 +3,10 @@ import apiClient from "../api/client";
 const BASE = "/kpi";
 
 /**
- * Fetch KPI settings (custom values + visibility) for a given financial year.
+ * Fetch KPI settings (custom values, visibility, sort order, and custom titles)
+ * for a given financial year.
  * @param {string} year - 'all' or 'YYYY-YY'
- * @returns {Object} Map of kpiKey → { customValue, isVisible }
+ * @returns {Object} Map of kpiKey → { customValue, isVisible, sortOrder, customLabel }
  */
 export const getKpiSettings = async (year = "all") => {
   const response = await apiClient.get(`${BASE}/settings`, {
@@ -17,11 +18,16 @@ export const getKpiSettings = async (year = "all") => {
 /**
  * Update a single KPI setting (admin only).
  * @param {string} key - KPI key (e.g. 'youth_trained')
- * @param {Object} payload - { year, customValue, isVisible }
+ * @param {Object} payload - { year, customValue, isVisible, customLabel }
  */
 export const updateKpiSetting = async (key, payload) => {
   const response = await apiClient.put(`${BASE}/settings/${key}`, payload);
   return response.data;
+};
+
+export const resolveKpiCardTitle = (definition, setting = {}) => {
+  const customLabel = setting.customLabel?.trim();
+  return customLabel || definition.label;
 };
 
 /**

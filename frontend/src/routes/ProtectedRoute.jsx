@@ -8,8 +8,8 @@ import { PageLoader } from "../components/common";
  * Protected Route Component
  * Redirects to login if user is not authenticated
  */
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const { isAuthenticated, isLoading, role } = useAuth();
 
   // Show loader while checking authentication
   if (isLoading) {
@@ -19,6 +19,10 @@ const ProtectedRoute = ({ children }) => {
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  if (allowedRoles?.length && (!role || !allowedRoles.includes(role))) {
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
   }
 
   // Render children if authenticated

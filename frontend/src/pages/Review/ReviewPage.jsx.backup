@@ -427,22 +427,6 @@ const ReviewPage = () => {
                                                     : "N/A"}
                                                 </td>
                                                 <td className="px-3 py-2">
-                                                  <span
-                                                    className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                                                      student.training_status ===
-                                                      "in_progress"
-                                                        ? "bg-blue-100 text-blue-700"
-                                                        : student.training_status ===
-                                                          "completed"
-                                                        ? "bg-primary-100 text-primary-700"
-                                                        : student.training_status ===
-                                                          "enrolled"
-                                                        ? "bg-secondary-100 text-secondary-700"
-                                                        : "bg-muted text-muted-foreground"
-                                                    }`}
-                                                  >
-                                                    {student.training_status}
-                                                  </span>
                                                 </td>
                                                 <td className="px-3 py-2 text-muted-foreground text-xs">
                                                   {student.mobile_number ||

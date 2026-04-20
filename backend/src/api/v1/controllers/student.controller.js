@@ -23,7 +23,6 @@ class StudentController {
         city = '',
         state = '',
         course_name = '',
-        training_status = '',
         sort_by = 'created_at',
         sort_order = 'desc',
       } = req.query;
@@ -50,7 +49,6 @@ class StudentController {
         city,
         state,
         course_name,
-        training_status,
         sort_by,
         sort_order,
         role,

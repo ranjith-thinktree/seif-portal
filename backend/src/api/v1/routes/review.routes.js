@@ -20,7 +20,7 @@ const {
 router.get(
   '/:uploadId',
   authenticate,
-  authorize(['ADMIN', 'SUPER_ADMIN']),
+  authorize(['ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   uploadIdValidator,
   validate,
   reviewController.getUploadForReview
@@ -30,7 +30,7 @@ router.get(
 router.get(
   '/:uploadId/centers',
   authenticate,
-  authorize(['ADMIN', 'SUPER_ADMIN']),
+  authorize(['ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   uploadIdValidator,
   validate,
   reviewController.getPendingCenters
@@ -40,7 +40,7 @@ router.get(
 router.get(
   '/:uploadId/centers/:centerId/students',
   authenticate,
-  authorize(['ADMIN', 'SUPER_ADMIN']),
+  authorize(['ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   [...uploadIdValidator, ...centerIdValidator],
   validate,
   reviewController.getCenterStudentsForReview

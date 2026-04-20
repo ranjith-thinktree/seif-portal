@@ -78,6 +78,13 @@ router.patch('/:id/status', UserController.updateStatus);
 router.post('/:id/reset-password', UserController.resetPassword);
 
 /**
+ * @route   POST /api/v1/users/:id/resend-credentials
+ * @desc    Generate a new temporary password and email it to a partner user
+ * @access  Admin, Super Admin
+ */
+router.post('/:id/resend-credentials', UserController.resendCredentials);
+
+/**
  * @route   DELETE /api/v1/users/:id
  * @desc    Delete user (soft delete by default, hard delete if ?hard=true)
  * @access  Admin, Super Admin

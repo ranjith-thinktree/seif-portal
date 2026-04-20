@@ -78,7 +78,8 @@ const BulkCenterUpload = ({ onClose, onSuccess }) => {
    */
   const handleDownloadTemplate = async () => {
     try {
-      await dataService.downloadCenterTemplate();
+      const response = await dataService.downloadCenterTemplate();
+      dataService.downloadCSV(response.data, "center_bulk_upload_template.csv");
       toast.success("Template downloaded successfully");
     } catch (error) {
       console.error("Failed to download template:", error);
@@ -98,20 +99,19 @@ const BulkCenterUpload = ({ onClose, onSuccess }) => {
     setUploading(true);
     try {
       const response = await dataService.bulkUploadCenters(file);
+      const uploadData = response.data.data;
 
-      setResults(response.data);
+      setResults(uploadData);
 
-      if (response.data.failed === 0) {
-        toast.success(
-          `Successfully uploaded ${response.data.successful} centers`
-        );
+      if (uploadData.failed === 0) {
+        toast.success(`Successfully uploaded ${uploadData.successful} centers`);
         setTimeout(() => {
           if (onSuccess) onSuccess();
           onClose();
         }, 2000);
       } else {
         toast.warning(
-          `Uploaded ${response.data.successful} centers, ${response.data.failed} failed`
+          `Uploaded ${uploadData.successful} centers, ${uploadData.failed} failed`,
         );
       }
     } catch (error) {

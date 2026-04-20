@@ -192,7 +192,7 @@ const EmploymentUploadPage = () => {
       const link = document.createElement("a");
       link.href = url;
       const periodLabel =
-        templatePeriod === "all" ? "All" : templatePeriod.toUpperCase();
+        templatePeriod === "all" ? "All" : `${templatePeriod.replace("m", "")}M`;
       link.setAttribute(
         "download",
         `Employment_Template_${periodLabel}_${Date.now()}.xlsx`,
@@ -243,10 +243,11 @@ const EmploymentUploadPage = () => {
   };
 
   const PERIOD_OPTIONS = [
-    { value: "1m", label: "Last 1 Month" },
-    { value: "6m", label: "Last 6 Months" },
-    { value: "1y", label: "Last 1 Year" },
     { value: "all", label: "All Time" },
+    ...Array.from({ length: 12 }, (_, i) => ({
+      value: `${i + 1}m`,
+      label: `${i + 1} ${i + 1 === 1 ? "Month" : "Months"}`,
+    })),
   ];
 
   const tabs = [
@@ -317,23 +318,36 @@ const EmploymentUploadPage = () => {
                 </div>
               </div>
               <div className="p-5">
-                <p className="text-sm text-gray-600 mb-4">
-                  Students approved in:
+                <p className="text-sm text-gray-600 mb-3">
+                  Students approved in the last:
                 </p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {PERIOD_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setTemplatePeriod(opt.value)}
-                      className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                        templatePeriod === opt.value
-                          ? "bg-[#009530] border-[#009530] text-white"
-                          : "bg-white border-gray-300 text-gray-600 hover:border-[#009530] hover:text-[#009530]"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                  <select
+                    value={templatePeriod}
+                    onChange={(e) => setTemplatePeriod(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#009530] focus:border-[#009530] bg-white min-w-[160px]"
+                  >
+                    {PERIOD_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  {templatePeriod !== "all" && (
+                    <span className="text-xs text-gray-400">
+                      Template will include students approved in the last{" "}
+                      <span className="font-medium text-gray-600">
+                        {templatePeriod.replace("m", "")}{" "}
+                        {templatePeriod === "1m" ? "month" : "months"}
+                      </span>
+                    </span>
+                  )}
+                  {templatePeriod === "all" && (
+                    <span className="text-xs text-gray-400">
+                      Template will include{" "}
+                      <span className="font-medium text-gray-600">all approved students</span>
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={handleDownloadTemplate}
@@ -536,14 +550,19 @@ const EmploymentUploadPage = () => {
                   Only approved students can have employment data uploaded
                 </li>
                 <li>
-                  Student ID must match the partner_student_id in your records
+                  Student ID must match the SEIF-generated student ID in your
+                  approved student records
                 </li>
                 <li>
                   If a student is not found, the record will be logged as failed
                 </li>
                 <li>
                   Employment Status: Employed, Self-Employed, Entrepreneur,
-                  Higher Study, NA, Unemployed, Further Education
+                  Higher Study, NA, Further Education
+                </li>
+                <li>
+                  If status is <strong>NA</strong>, Company Name, Salary, and
+                  other details are optional
                 </li>
                 <li>Date format: YYYY-MM-DD (e.g., 2024-01-15)</li>
               </ul>

@@ -20,19 +20,23 @@ exports.getSettings = async (req, res) => {
 
 /**
  * PUT /api/v1/kpi/settings/:key
- * Body: { year, customValue, isVisible }
+ * Body: { year, customValue, isVisible, customLabel }
  * Admin only.
  */
 exports.updateSetting = async (req, res) => {
   try {
     const { key } = req.params;
-    const { year = 'all', customValue, isVisible } = req.body;
+    const { year = 'all', customValue, isVisible, customLabel } = req.body;
 
-    if (customValue === undefined && isVisible === undefined) {
-      return ApiResponse.error(res, 'Provide customValue or isVisible to update', 400);
+    if (customValue === undefined && isVisible === undefined && customLabel === undefined) {
+      return ApiResponse.error(
+        res,
+        'Provide customValue, isVisible, or customLabel to update',
+        400
+      );
     }
 
-    await KpiService.upsertSetting(key, year, customValue, isVisible, req.user.id);
+    await KpiService.upsertSetting(key, year, customValue, isVisible, customLabel, req.user.id);
     return ApiResponse.success(res, null, 'KPI setting updated');
   } catch (error) {
     console.error('[kpiController] updateSetting error:', error);

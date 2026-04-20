@@ -9,6 +9,7 @@ const USER_ROLES = {
   ADMIN: 'ADMIN',
   PARTNER: 'PARTNER',
   SEIF_READONLY: 'SEIF_READONLY',
+  SEIF_READONLY_DOWNLOAD: 'SEIF_READONLY_DOWNLOAD',
   ESSCI: 'ESSCI',
 };
 
@@ -130,14 +131,6 @@ const ALERT_TYPES = {
   DATA_REJECT: 'data_reject',
   UPLOAD_REQUEST: 'upload_request',
   SYSTEM_ALERT: 'system_alert',
-};
-
-// Training Status
-const TRAINING_STATUS = {
-  ENROLLED: 'enrolled',
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed',
-  DROPPED: 'dropped',
 };
 
 // Gender
@@ -314,7 +307,6 @@ module.exports = {
   PACKAGE_CATEGORIES,
   NOTIFICATION_TYPES,
   ALERT_TYPES,
-  TRAINING_STATUS,
   GENDER,
   PASSWORD_RESET_STATUS,
   AUDIT_ACTIONS,

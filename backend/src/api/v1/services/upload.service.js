@@ -1,6 +1,12 @@
 const pool = require('../../../database/connection').pool;
 const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const { generateUniqueStudentIdentifier } = require('../../../utils/studentId.util');
+const {
+  resolveEffectiveUploadStatus,
+  syncUploadLifecycle,
+} = require('../../../utils/uploadStatus.util');
 
 /**
  * Upload Service
@@ -105,6 +111,197 @@ const checkDuplicateBatches = async (partnerId, centerMap) => {
   }
 };
 
+const normalizeText = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase();
+
+const normalizeDate = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  const text = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    return text.slice(0, 10);
+  }
+
+  if (/^\d{2}-\d{2}-\d{4}$/.test(text)) {
+    const [day, month, year] = text.split('-');
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return normalizeText(text);
+  }
+
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, '0'),
+    String(parsed.getDate()).padStart(2, '0'),
+  ].join('-');
+};
+
+const buildStudentSignature = (student) => ({
+  student_name: normalizeText(student.student_name),
+  father_name: normalizeText(student.father_name),
+  date_of_birth: normalizeDate(student.date_of_birth),
+  gender: normalizeText(student.gender),
+  mobile_number: normalizeText(student.mobile_number),
+  email: normalizeText(student.email),
+  qualification: normalizeText(student.qualification),
+  address: normalizeText(student.address),
+  city: normalizeText(student.city),
+  district: normalizeText(student.district),
+  state: normalizeText(student.state),
+  country: normalizeText(student.country),
+  enrollment_date: normalizeDate(student.enrollment_date),
+  course_name: normalizeText(student.course_name),
+  course_duration_months: normalizeText(student.course_duration_months),
+});
+
+const hashUploadStructure = (structure) =>
+  crypto.createHash('sha256').update(JSON.stringify(structure)).digest('hex');
+
+const buildCenterMapFingerprint = (centerMap) => {
+  const structure = Array.from(centerMap.entries())
+    .map(([centerId, centerData]) => ({
+      center_id: normalizeText(centerId),
+      batches: Array.from(centerData.batches.entries())
+        .map(([batchNumber, batchData]) => ({
+          batch_number: normalizeText(batchNumber),
+          batch_start_date: normalizeDate(batchData.batchData?.batch_start_date),
+          batch_complete_date: normalizeDate(batchData.batchData?.batch_complete_date),
+          students: (batchData.students || [])
+            .map(buildStudentSignature)
+            .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+        }))
+        .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+    }))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+
+  return hashUploadStructure(structure);
+};
+
+const buildStoredUploadFingerprint = async (connection, uploadId) => {
+  const [centers] = await connection.query(
+    `SELECT id, csv_center_id
+     FROM uploaded_centers
+     WHERE data_upload_id = ?`,
+    [uploadId]
+  );
+
+  const structure = [];
+
+  for (const center of centers) {
+    const [batches] = await connection.query(
+      `SELECT id, batch_number, batch_start_date, batch_complete_date
+       FROM uploaded_batches
+       WHERE uploaded_center_id = ?`,
+      [center.id]
+    );
+
+    const batchStructures = [];
+
+    for (const batch of batches) {
+      const [students] = await connection.query(
+        `SELECT student_name, father_name, date_of_birth, gender, mobile_number,
+                email, qualification, address, city, district, state, country,
+                enrollment_date, course_name, course_duration_months
+         FROM uploaded_students
+         WHERE uploaded_batch_id = ?`,
+        [batch.id]
+      );
+
+      batchStructures.push({
+        batch_number: normalizeText(batch.batch_number),
+        batch_start_date: normalizeDate(batch.batch_start_date),
+        batch_complete_date: normalizeDate(batch.batch_complete_date),
+        students: students
+          .map(buildStudentSignature)
+          .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+      });
+    }
+
+    structure.push({
+      center_id: normalizeText(center.csv_center_id),
+      batches: batchStructures.sort((left, right) =>
+        JSON.stringify(left).localeCompare(JSON.stringify(right))
+      ),
+    });
+  }
+
+  return hashUploadStructure(
+    structure.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+  );
+};
+
+const findDuplicateUpload = async (partnerId, fileName, centerMap) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const [uploads] = await connection.query(
+      `SELECT id, file_name, status, created_at, reviewed_at
+       FROM data_uploads
+       WHERE partner_id = ?
+         AND deleted_at IS NULL
+         AND LOWER(TRIM(file_name)) = ?`,
+      [partnerId, normalizeText(fileName)]
+    );
+
+    if (uploads.length === 0) {
+      return null;
+    }
+
+    const incomingFingerprint = buildCenterMapFingerprint(centerMap);
+
+    for (const upload of uploads) {
+      const existingFingerprint = await buildStoredUploadFingerprint(connection, upload.id);
+
+      if (existingFingerprint !== incomingFingerprint) {
+        continue;
+      }
+
+      const effectiveStatus = await resolveEffectiveUploadStatus(
+        connection,
+        upload.id,
+        upload.status
+      );
+      const statusLabel = effectiveStatus.charAt(0).toUpperCase() + effectiveStatus.slice(1);
+
+      if (effectiveStatus === 'approved' || effectiveStatus === 'partial') {
+        return {
+          id: upload.id,
+          status: effectiveStatus,
+          fileName: upload.file_name,
+          createdAt: upload.created_at,
+          reviewedAt: upload.reviewed_at,
+          message:
+            'This file has already been uploaded with the same file name and data. The existing upload has already been reviewed, so it cannot be uploaded again.',
+          helpText: `${statusLabel} upload found in Upload History. Approved or partially approved uploads cannot be deleted. Remove the related production data first, then upload only the revised data set.`,
+        };
+      }
+
+      return {
+        id: upload.id,
+        status: effectiveStatus,
+        fileName: upload.file_name,
+        createdAt: upload.created_at,
+        reviewedAt: upload.reviewed_at,
+        message:
+          'This file has already been uploaded with the same file name and data. Delete the existing upload from Upload History before uploading it again.',
+        helpText: `${statusLabel} upload found in Upload History. Remove it from Upload History first, then retry this upload.`,
+      };
+    }
+
+    return null;
+  } finally {
+    connection.release();
+  }
+};
+
 /**
  * Get upload version number for partner (deprecated - version column removed)
  */
@@ -159,7 +356,6 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
     let totalCenters = 0;
     let totalBatches = 0;
     let totalStudents = 0;
-    let studentSeqCounter = 0; // Used to auto-generate partner_student_id
     const errors = [];
 
     // Iterate through centers
@@ -253,11 +449,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
         // Insert students with new fields
         for (const student of batchData.students) {
           totalStudents++;
-          studentSeqCounter++;
           const studentUuid = (await connection.query('SELECT UUID() as id'))[0][0].id;
-
-          // Auto-generate partner_student_id (Student ID removed from template - B3)
-          const partnerStudentId = `PSI-${String(studentSeqCounter).padStart(5, '0')}`;
 
           // Use batch start date as enrollment date if not provided
           const enrollmentDate = student.enrollment_date || batchData.batchData.batch_start_date;
@@ -267,9 +459,9 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
             (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, 
              partner_id, partner_student_id, student_name, father_name, date_of_birth, gender, 
              mobile_number, email, qualification, address, city, state, district, country,
-             enrollment_date, course_name, course_duration_months, training_status, 
+             enrollment_date, course_name, course_duration_months, 
              approval_status, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
             [
               studentUuid,
               dataUploadId,
@@ -277,7 +469,7 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
               uploadedBatchId,
               uploadedCenterId, // Use uploaded_centers.id (not centers.id)
               partnerId,
-              partnerStudentId,
+              null,
               student.student_name,
               student.father_name,
               student.date_of_birth,
@@ -293,7 +485,6 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
               enrollmentDate,
               student.course_name,
               student.course_duration_months,
-              student.training_status,
             ]
           );
         }
@@ -380,7 +571,14 @@ const getPartnerUploads = async (partnerId, page = 1, limit = 10, filters = {}) 
       params
     );
 
-    return { uploads };
+    const uploadsWithStatus = await Promise.all(
+      uploads.map(async (upload) => ({
+        ...upload,
+        status: await resolveEffectiveUploadStatus(connection, upload.id, upload.status),
+      }))
+    );
+
+    return { uploads: uploadsWithStatus };
   } catch (error) {
     throw new Error(`Failed to fetch uploads: ${error.message}`);
   } finally {
@@ -413,6 +611,7 @@ const getUploadDetails = async (uploadId, partnerId) => {
     }
 
     const upload = uploads[0];
+    upload.status = await resolveEffectiveUploadStatus(pool, uploadId, upload.status);
 
     // Get centers count
     const [centerCount] = await pool.query(
@@ -435,7 +634,7 @@ const getUploadDetails = async (uploadId, partnerId) => {
     // Get sample data (first 5 students)
     const [sampleStudents] = await pool.query(
       `SELECT 
-        us.student_name, us.gender, us.course_name, us.training_status,
+        us.student_name, us.gender, us.course_name,
         uc.center_name, ub.batch_number
       FROM uploaded_students us
       JOIN uploaded_centers uc ON us.uploaded_center_id = uc.id
@@ -505,13 +704,20 @@ const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10, filter
       params
     );
 
+    const uploadsWithStatus = await Promise.all(
+      uploads.map(async (upload) => ({
+        ...upload,
+        status: await resolveEffectiveUploadStatus(pool, upload.id, upload.status),
+      }))
+    );
+
     const [countResult] = await pool.query(
       `SELECT COUNT(*) as total FROM data_uploads du ${whereClause}`,
       params
     );
 
     return {
-      uploads,
+      uploads: uploadsWithStatus,
       pagination: {
         page,
         limit,
@@ -654,37 +860,15 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
     );
 
     for (const center of centers) {
-      // Generate UUID for the new center
-      const approvedCenterId = uuidv4();
+      // Use the existing approved center — always set by saveUploadedData which
+      // requires the center to exist in production before confirming an upload.
+      const approvedCenterId = center.approved_center_id;
 
-      // Insert into production centers table
-      await connection.query(
-        `INSERT INTO centers 
-        (id, partner_id, center_name, center_type, region, city, state, address, 
-         year_of_establishment, status, center_head, mobile_number, email, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [
-          approvedCenterId,
-          center.partner_id,
-          center.center_name,
-          center.center_type,
-          center.region,
-          center.city,
-          center.state,
-          center.address,
-          center.year_of_establishment,
-          center.status,
-          center.center_head,
-          center.mobile_number,
-          center.email,
-        ]
-      );
-
-      // Update uploaded_centers with approved_center_id
-      await connection.query(
-        'UPDATE uploaded_centers SET approval_status = ?, approved_center_id = ? WHERE id = ?',
-        ['approved', approvedCenterId, center.id]
-      );
+      // Update uploaded_centers status (center already exists in production)
+      await connection.query('UPDATE uploaded_centers SET approval_status = ? WHERE id = ?', [
+        'approved',
+        center.id,
+      ]);
 
       // Get batches for this center
       const [batches] = await connection.query(
@@ -731,20 +915,27 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
         // Insert students into production table
         for (const student of students) {
           const approvedStudentId = uuidv4();
+          const partnerStudentId = await generateUniqueStudentIdentifier(
+            connection,
+            student.partner_id,
+            student,
+            { uploadedStudentId: student.id }
+          );
 
           await connection.query(
             `INSERT INTO students 
-            (id, center_id, batch_id, partner_id, partner_student_id, student_name, date_of_birth, 
-             gender, mobile_number, email, address, city, state, enrollment_date, 
-             course_name, course_duration_months, training_status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            (id, center_id, batch_id, partner_id, partner_student_id, student_name, father_name,
+             date_of_birth, gender, mobile_number, email, address, city, state, district, country,
+             qualification, enrollment_date, course_name, course_duration_months, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
               approvedStudentId,
               approvedCenterId,
               approvedBatchId,
               student.partner_id,
-              student.partner_student_id,
+              partnerStudentId,
               student.student_name,
+              student.father_name || null,
               student.date_of_birth,
               student.gender,
               student.mobile_number,
@@ -752,21 +943,25 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
               student.address,
               student.city,
               student.state,
+              student.district || null,
+              student.country || null,
+              student.qualification || null,
               student.enrollment_date,
               student.course_name,
               student.course_duration_months,
-              student.training_status,
             ]
           );
 
           // Update uploaded_students with approved_student_id
           await connection.query(
-            'UPDATE uploaded_students SET approval_status = ?, approved_student_id = ? WHERE id = ?',
-            ['approved', approvedStudentId, student.id]
+            'UPDATE uploaded_students SET approval_status = ?, approved_student_id = ?, partner_student_id = ? WHERE id = ?',
+            ['approved', approvedStudentId, partnerStudentId, student.id]
           );
         }
       }
     }
+
+    await syncUploadLifecycle(connection, uploadId, reviewedBy, 'approved');
 
     // Create notification for partner
     const [uploadInfo] = await connection.query(
@@ -834,6 +1029,8 @@ const rejectUpload = async (uploadId, reviewedBy, rejectionReason, remarks = nul
       'UPDATE uploaded_students SET approval_status = ? WHERE data_upload_id = ?',
       ['rejected', uploadId]
     );
+
+    await syncUploadLifecycle(connection, uploadId, reviewedBy, 'rejected');
 
     // Create notification for partner
     const [uploadInfo] = await connection.query(
@@ -986,9 +1183,9 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
         (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, 
          partner_id, partner_student_id, student_name, father_name, date_of_birth, gender, 
          mobile_number, email, qualification, address, city, state, district, country,
-         enrollment_date, course_name, course_duration_months, training_status, 
+         enrollment_date, course_name, course_duration_months, 
          approval_status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
         [
           newStudentId,
           newUploadId,
@@ -996,7 +1193,7 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
           batchInfo.length > 0 ? batchInfo[0].id : null,
           newCenter[0].id,
           partnerId,
-          studentData.partner_student_id,
+          null,
           studentData.student_name,
           studentData.father_name,
           studentData.date_of_birth,
@@ -1012,14 +1209,12 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
           studentData.enrollment_date,
           studentData.course_name,
           studentData.course_duration_months,
-          studentData.training_status,
         ]
       );
 
       // Log edits if this student was modified
       if (editedStudent) {
         const fieldsToCheck = [
-          'partner_student_id',
           'student_name',
           'father_name',
           'date_of_birth',
@@ -1034,7 +1229,6 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
           'enrollment_date',
           'course_name',
           'course_duration_months',
-          'training_status',
         ];
 
         for (const field of fieldsToCheck) {
@@ -1107,6 +1301,7 @@ const deleteUpload = async (uploadId, userId, userRole) => {
     }
 
     const upload = uploads[0];
+    const effectiveStatus = await resolveEffectiveUploadStatus(connection, uploadId, upload.status);
 
     // Permission check: Partner can only delete their own, Admin can delete any
     if (userRole === 'PARTNER' && upload.partner_id !== userId) {
@@ -1114,7 +1309,7 @@ const deleteUpload = async (uploadId, userId, userRole) => {
     }
 
     // Prevent deletion of approved or partial uploads
-    if (upload.status === 'approved' || upload.status === 'partial') {
+    if (effectiveStatus === 'approved' || effectiveStatus === 'partial') {
       throw new Error(
         'Cannot delete approved uploads. Data has been moved to production and cannot be removed.'
       );
@@ -1225,6 +1420,11 @@ const bulkDeleteUploads = async (uploadIds, userId, userRole) => {
       }
 
       const upload = uploads[0];
+      const effectiveStatus = await resolveEffectiveUploadStatus(
+        connection,
+        uploadId,
+        upload.status
+      );
 
       // Permission check: Partner can only delete their own, Admin can delete any
       if (userRole === 'PARTNER' && upload.partner_id !== userId) {
@@ -1240,7 +1440,7 @@ const bulkDeleteUploads = async (uploadIds, userId, userRole) => {
       }
 
       // Prevent deletion of approved or partial uploads
-      if (upload.status === 'approved' || upload.status === 'partial') {
+      if (effectiveStatus === 'approved' || effectiveStatus === 'partial') {
         results.failed.push({
           id: uploadId,
           readable_id: upload.file_name || uploadId,
@@ -1394,8 +1594,8 @@ const processUpload = async (partnerId, uploadId, csvData) => {
         for (const student of students) {
           await connection.query(
             `INSERT INTO uploaded_students (id, uploaded_center_id, uploaded_batch_id, data_upload_id, partner_id,
-               partner_student_id, student_name, gender, course_name, batch_number, training_status, review_status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+               partner_student_id, student_name, gender, course_name, batch_number, review_status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
             [
               uuidv4(),
               centerId,
@@ -1407,7 +1607,6 @@ const processUpload = async (partnerId, uploadId, csvData) => {
               student.gender,
               student.course_name,
               student.batch_number || batchNum,
-              student.training_status || 'enrolled',
             ]
           );
         }
@@ -1498,4 +1697,5 @@ module.exports = {
   processUpload,
   getCenterApprovalStatus,
   createResubmission,
+  findDuplicateUpload,
 };

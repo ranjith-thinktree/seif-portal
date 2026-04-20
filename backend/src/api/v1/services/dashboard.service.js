@@ -406,14 +406,30 @@ class DashboardService {
       );
       const totalStudents = studentsResult[0].total;
 
-      // Get total states and UTs covered
-      const [statesResult] = await db.query(
-        `SELECT COUNT(DISTINCT state) as total 
-         FROM centers 
-         WHERE status = ?`,
+      // Get total states and UTs covered (separated)
+      const UNION_TERRITORIES = [
+        'Andaman and Nicobar Islands',
+        'Chandigarh',
+        'Dadra and Nagar Haveli and Daman and Diu',
+        'Delhi',
+        'National Capital Territory of Delhi',
+        'Jammu and Kashmir',
+        'Jammu & Kashmir',
+        'Ladakh',
+        'Lakshadweep',
+        'Puducherry',
+        'Pondicherry',
+      ];
+      const [allStatesResult] = await db.query(
+        `SELECT DISTINCT state FROM centers WHERE status = ? AND state IS NOT NULL`,
         ['active']
       );
-      const totalStates = statesResult[0].total;
+      const allStateNames = allStatesResult.map((r) => r.state || '');
+      const utNamesList = allStateNames.filter((s) =>
+        UNION_TERRITORIES.some((ut) => ut.toLowerCase() === s.toLowerCase())
+      );
+      const totalUTs = utNamesList.length;
+      const totalStates = allStateNames.length - totalUTs;
 
       // Get gender distribution
       const [genderResult] = await db.query(
@@ -542,6 +558,8 @@ class DashboardService {
         totalStudents,
         totalEmployments,
         totalStates,
+        totalUTs,
+        utNames: utNamesList,
         maleStudents,
         femaleStudents,
 

@@ -117,3 +117,10 @@ frontend/verify-components.js
 # Unwanted files
 solo/
 *.pem
+
+# Temp debug/patch files
+__*.json
+apply-live-safe-db-migration.ps1
+test-e2e.ps1
+test-upload-flow.ps1
+data/test_e2e_*.csv

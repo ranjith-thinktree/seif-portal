@@ -163,6 +163,7 @@ class PartnerService {
         `SELECT 
           p.*,
           u.full_name as approved_by_name,
+          (SELECT id FROM users WHERE partner_id = p.id AND role = 'PARTNER' LIMIT 1) as user_id,
           (SELECT COUNT(*) FROM centers WHERE partner_id = p.id AND approval_status = 'approved') as total_centers,
           (SELECT COUNT(*) FROM students WHERE partner_id = p.id) as total_students
         FROM partners p
@@ -175,7 +176,19 @@ class PartnerService {
         return null;
       }
 
-      return partners[0];
+      const partner = partners[0];
+
+      const [statePresenceRows] = await db.query(
+        `SELECT state_id FROM partner_state_presence WHERE partner_id = ? ORDER BY state_id ASC`,
+        [partnerId]
+      );
+
+      partner.country_id = partner.country_ref_id || null;
+      partner.state_id = partner.state_ref_id || null;
+      partner.city_id = partner.city_ref_id || null;
+      partner.state_presence = statePresenceRows.map((row) => String(row.state_id));
+
+      return partner;
     } catch (error) {
       console.error('Error in getPartnerById:', error);
       throw error;
@@ -619,6 +632,49 @@ class PartnerService {
 
       await connection.query(`UPDATE partners SET ${updates.join(', ')} WHERE id = ?`, values);
 
+      const [linkedPartnerUsers] = await connection.query(
+        `SELECT id
+         FROM users
+         WHERE partner_id = ? AND role = 'PARTNER'`,
+        [partnerId]
+      );
+
+      if (linkedPartnerUsers.length > 1) {
+        throw new Error(
+          'Data integrity error: multiple PARTNER login accounts found for this partner'
+        );
+      }
+
+      if (linkedPartnerUsers.length === 1) {
+        const userUpdates = [];
+        const userValues = [];
+
+        if (partner_email !== undefined) {
+          userUpdates.push('email = ?');
+          userValues.push(partner_email);
+        }
+        if (contact_person !== undefined) {
+          userUpdates.push('full_name = ?');
+          userValues.push(contact_person);
+        }
+        if (contact_phone !== undefined) {
+          userUpdates.push('mobile_number = ?');
+          userValues.push(contact_phone || null);
+        }
+        if (status !== undefined) {
+          userUpdates.push('status = ?');
+          userValues.push(status);
+        }
+
+        if (userUpdates.length > 0) {
+          userValues.push(linkedPartnerUsers[0].id);
+          await connection.query(
+            `UPDATE users SET ${userUpdates.join(', ')}, updated_at = NOW() WHERE id = ?`,
+            userValues
+          );
+        }
+      }
+
       await connection.commit();
       connection.release();
 
@@ -957,6 +1013,7 @@ class PartnerService {
       const [students] = await db.query(
         `SELECT 
           us.*,
+          us.partner_student_id as student_id,
           ub.batch_number
         FROM uploaded_students us
         LEFT JOIN uploaded_batches ub ON us.uploaded_batch_id = ub.id
@@ -1087,7 +1144,6 @@ class PartnerService {
             state = ?,
             course_name = ?,
             course_duration_months = ?,
-            training_status = ?,
             enrollment_date = ?,
             is_edited = 1,
             updated_at = NOW()
@@ -1103,7 +1159,6 @@ class PartnerService {
             student.state,
             student.course_name,
             student.course_duration_months,
-            student.training_status,
             student.enrollment_date,
             studentUuid,
           ]
@@ -1121,7 +1176,6 @@ class PartnerService {
           'state',
           'course_name',
           'course_duration_months',
-          'training_status',
           'enrollment_date',
         ];
 
@@ -1331,7 +1385,6 @@ class PartnerService {
             'state',
             'course_name',
             'course_duration_months',
-            'training_status',
             'enrollment_date',
           ];
 
@@ -1422,8 +1475,8 @@ class PartnerService {
           const newStudentId = uuidv4();
           await connection.query(
             `INSERT INTO uploaded_students 
-            (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, partner_id, partner_student_id, student_name, date_of_birth, gender, mobile_number, email, address, city, state, enrollment_date, course_name, course_duration_months, training_status, is_edited, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())`,
+            (id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id, partner_id, partner_student_id, student_name, date_of_birth, gender, mobile_number, email, address, city, state, enrollment_date, course_name, course_duration_months, is_edited, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())`,
             [
               newStudentId,
               uploadUuid,
@@ -1443,7 +1496,6 @@ class PartnerService {
               csvStudent.enrollment_date,
               csvStudent.course_name,
               csvStudent.course_duration_months,
-              csvStudent.training_status,
             ]
           );
         }
@@ -1785,6 +1837,12 @@ class PartnerService {
         throw new Error('No user account found for this partner');
       }
 
+      if (userRows.length > 1) {
+        throw new Error(
+          'Data integrity error: multiple PARTNER login accounts found for this partner'
+        );
+      }
+
       // Generate new temporary password
       const tempPassword = emailService.generatePassword(12);
       const passwordHash = await bcrypt.hash(tempPassword, 10);
@@ -1792,14 +1850,14 @@ class PartnerService {
       // Update user password
       await db.query(
         `UPDATE users 
-         SET password_hash = ?, updated_at = NOW()
+         SET password_hash = ?, must_change_password = TRUE, updated_at = NOW()
          WHERE partner_id = ? AND role = 'PARTNER'`,
         [passwordHash, partnerId]
       );
 
       // Send welcome email with new credentials
       await emailService.sendPartnerWelcomeEmail({
-        email: partner.contact_email,
+        email: userRows[0].email || partner.contact_email,
         name: partner.name,
         partnerId: partner.partner_id,
         tempPassword: tempPassword,
