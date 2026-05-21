@@ -292,10 +292,7 @@ class AuthService {
     // Validate new password strength
     const validation = validatePassword(newPassword);
     if (!validation.isValid) {
-      throw new ValidationError('Password does not meet security requirements', {
-        errors: validation.errors,
-        requirements: validation.errors,
-      });
+      throw new ValidationError('Password does not meet security requirements', validation.errors);
     }
 
     // Check if new password is same as current password

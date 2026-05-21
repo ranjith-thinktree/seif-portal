@@ -52,10 +52,7 @@ const isPartner = checkRole(USER_ROLES.PARTNER);
 /**
  * Check if user is SEIF Read-Only
  */
-const isSeifReadOnly = checkRole([
-  USER_ROLES.SEIF_READONLY,
-  USER_ROLES.SEIF_READONLY_DOWNLOAD,
-]);
+const isSeifReadOnly = checkRole([USER_ROLES.SEIF_READONLY, USER_ROLES.SEIF_READONLY_DOWNLOAD]);
 
 /**
  * Check if user is ESSCI

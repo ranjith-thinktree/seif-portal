@@ -235,12 +235,6 @@ const PartnerReviewStudentsPage = () => {
               return student;
             });
 
-            if (gridRef.current?.api) {
-              setTimeout(() => {
-                gridRef.current.api.setRowData(updatedStudents);
-              }, 0);
-            }
-
             return updatedStudents;
           });
 
@@ -295,12 +289,6 @@ const PartnerReviewStudentsPage = () => {
             }
             return student;
           });
-
-          if (gridRef.current?.api) {
-            setTimeout(() => {
-              gridRef.current.api.setRowData(updatedStudents);
-            }, 0);
-          }
 
           return updatedStudents;
         });
@@ -472,12 +460,6 @@ const PartnerReviewStudentsPage = () => {
           }
           return student;
         });
-
-        if (gridRef.current?.api) {
-          setTimeout(() => {
-            gridRef.current.api.setRowData(updatedStudents);
-          }, 0);
-        }
 
         return updatedStudents;
       });
@@ -727,13 +709,6 @@ const PartnerReviewStudentsPage = () => {
         return student;
       });
 
-      // Update the grid immediately with new data
-      if (gridRef.current?.api) {
-        setTimeout(() => {
-          gridRef.current.api.setRowData(updatedStudents);
-        }, 0);
-      }
-
       return updatedStudents;
     });
 
@@ -756,14 +731,6 @@ const PartnerReviewStudentsPage = () => {
     setIsEditMode(false);
     setHasChanges(false);
     toast.info("Changes discarded");
-    // If there were saved changes, restore them
-    if (gridRef.current?.api) {
-      setTimeout(() => {
-        gridRef.current.api.setRowData(
-          JSON.parse(JSON.stringify(originalStudents)),
-        );
-      }, 0);
-    }
   };
 
   const handleSaveChanges = async () => {

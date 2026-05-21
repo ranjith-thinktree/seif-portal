@@ -188,6 +188,30 @@ const certSupportUpload = multer({
 /** Single support doc for partner certification form (field name: 'supportDoc') */
 const uploadCertificationFiles = certSupportUpload.single('supportDoc');
 
+// ── TOT trainer documents: resume + qualification + ID proof ───────────────
+const totTrainerDocumentFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
+
+  if (!allowed.includes(ext)) {
+    return cb(new Error(`Trainer documents must be PDF, image, or Word files. Got: ${ext}`), false);
+  }
+
+  cb(null, true);
+};
+
+const totTrainerDocumentsUpload = multer({
+  storage: makeDiskStorage('tot_trainer_documents'),
+  fileFilter: totTrainerDocumentFilter,
+  limits: { fileSize: 20 * 1024 * 1024, files: 3 },
+});
+
+const uploadTotTrainerDocuments = totTrainerDocumentsUpload.fields([
+  { name: 'resume', maxCount: 1 },
+  { name: 'qualificationCertificate', maxCount: 1 },
+  { name: 'idProof', maxCount: 1 },
+]);
+
 // ── ESSCI upload: zipFile (archives) + studentListDoc (docs) ─────────────────
 const essciFileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
@@ -278,6 +302,7 @@ module.exports = {
   uploadCSV,
   uploadPDF,
   uploadCertificationFiles,
+  uploadTotTrainerDocuments,
   uploadESSCIFiles,
   uploadEmploymentWithAttachments,
   uploadTemplateFile,

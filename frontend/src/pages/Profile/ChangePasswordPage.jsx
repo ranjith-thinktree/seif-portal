@@ -116,7 +116,7 @@ const ChangePasswordPage = () => {
 
           // Show success message
           toast.success(
-            "Password changed successfully! Please login with your new password."
+            "Password changed successfully! Please login with your new password.",
           );
 
           // Redirect to login
@@ -134,23 +134,36 @@ const ChangePasswordPage = () => {
       if (error.response?.data?.errors) {
         // Validation errors from backend
         const backendErrors = {};
-        error.response.data.errors.forEach((err) => {
-          if (
-            err.includes("current password") ||
-            err.includes("Current password")
-          ) {
-            backendErrors.currentPassword = err;
+        const errorsData = error.response.data.errors;
+
+        // Handle both array and object error structures
+        const errorList = Array.isArray(errorsData)
+          ? errorsData
+          : errorsData.errors || errorsData.requirements || [];
+
+        errorList.forEach((err) => {
+          // Handle both string errors and object errors with message property
+          const errMsg =
+            typeof err === "string" ? err : err.message || JSON.stringify(err);
+
+          if (errMsg.toLowerCase().includes("current password")) {
+            backendErrors.currentPassword = errMsg;
+          } else if (errMsg.toLowerCase().includes("new password")) {
+            backendErrors.newPassword = errMsg;
           } else if (
-            err.includes("new password") ||
-            err.includes("New password")
+            errMsg.toLowerCase().includes("confirm") ||
+            errMsg.toLowerCase().includes("match")
           ) {
-            backendErrors.newPassword = err;
-          } else if (err.includes("confirm") || err.includes("match")) {
-            backendErrors.confirmPassword = err;
+            backendErrors.confirmPassword = errMsg;
+          } else if (
+            errMsg.toLowerCase().includes("reuse") ||
+            errMsg.toLowerCase().includes("last 3")
+          ) {
+            backendErrors.newPassword = errMsg;
           }
         });
-        setErrors(backendErrors);
 
+        setErrors(backendErrors);
         toast.error(error.response.data.message || "Failed to change password");
       } else if (error.response?.data?.message) {
         // General error message

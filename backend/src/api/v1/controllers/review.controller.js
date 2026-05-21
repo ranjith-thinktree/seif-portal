@@ -162,6 +162,14 @@ class ReviewController {
       });
     } catch (error) {
       console.error('Error in approveCenter:', error);
+      if (error.code === 'DUPLICATE_STUDENTS') {
+        return res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_STUDENTS',
+          message: error.message,
+          conflicts: error.conflicts,
+        });
+      }
       return errorResponse(res, error.message || 'Failed to approve center', 500);
     }
   }

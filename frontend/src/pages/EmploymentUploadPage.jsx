@@ -192,7 +192,9 @@ const EmploymentUploadPage = () => {
       const link = document.createElement("a");
       link.href = url;
       const periodLabel =
-        templatePeriod === "all" ? "All" : `${templatePeriod.replace("m", "")}M`;
+        templatePeriod === "all"
+          ? "All"
+          : `${templatePeriod.replace("m", "")}M`;
       link.setAttribute(
         "download",
         `Employment_Template_${periodLabel}_${Date.now()}.xlsx`,
@@ -345,7 +347,9 @@ const EmploymentUploadPage = () => {
                   {templatePeriod === "all" && (
                     <span className="text-xs text-gray-400">
                       Template will include{" "}
-                      <span className="font-medium text-gray-600">all approved students</span>
+                      <span className="font-medium text-gray-600">
+                        all approved students
+                      </span>
                     </span>
                   )}
                 </div>

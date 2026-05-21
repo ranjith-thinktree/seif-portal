@@ -1,6 +1,9 @@
 import apiClient from "../api/client";
+import { API_BASE_URL } from "../constants/api";
 
 const BASE = "/tot";
+
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "/");
 
 /**
  * Download TOT CSV template
@@ -51,6 +54,68 @@ export const getTotUploads = async (page = 1, limit = 10) => {
 export const getTotUploadDetails = async (uploadId) => {
   const response = await apiClient.get(`${BASE}/uploads/${uploadId}`);
   return response.data;
+};
+
+export const getTotTrainers = async (params = {}) => {
+  const response = await apiClient.get(`${BASE}/trainers`, { params });
+  return response.data;
+};
+
+export const getTotTrainerFilterOptions = async () => {
+  const response = await apiClient.get(`${BASE}/trainers/filter-options`);
+  return response.data;
+};
+
+export const createTotTrainer = async (payload) => {
+  const formData = new FormData();
+
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+
+    if (
+      key === "resume" ||
+      key === "qualificationCertificate" ||
+      key === "idProof"
+    ) {
+      if (value instanceof File) {
+        formData.append(key, value);
+      }
+      return;
+    }
+
+    formData.append(key, value);
+  });
+
+  const response = await apiClient.post(`${BASE}/trainers`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+  return response.data;
+};
+
+export const uploadTotTrainerDocuments = async (uploadId, trainerId, files) => {
+  const formData = new FormData();
+
+  if (files.resume) formData.append("resume", files.resume);
+  if (files.qualificationCertificate) {
+    formData.append("qualificationCertificate", files.qualificationCertificate);
+  }
+  if (files.idProof) formData.append("idProof", files.idProof);
+
+  const response = await apiClient.post(
+    `${BASE}/uploads/${uploadId}/trainers/${trainerId}/documents`,
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    },
+  );
+
+  return response.data;
+};
+
+export const getTotDocumentUrl = (fileUrl) => {
+  if (!fileUrl) return null;
+  return new URL(fileUrl.replace(/^\//, ""), API_ORIGIN).toString();
 };
 
 /**

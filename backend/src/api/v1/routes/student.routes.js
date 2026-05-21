@@ -18,7 +18,14 @@ const { checkRole } = require('../../../middleware/role.middleware');
 router.get(
   '/filter-options',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'PARTNER',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+  ]),
   studentController.getFilterOptions
 );
 
@@ -30,7 +37,14 @@ router.get(
 router.get(
   '/',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'PARTNER',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+  ]),
   listStudentsValidator,
   validate,
   studentController.getAllStudents
@@ -58,7 +72,14 @@ router.get(
 router.get(
   '/by-batch/:batchId',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'PARTNER',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+  ]),
   batchIdValidator,
   validate,
   studentController.getStudentsByBatch
@@ -72,7 +93,14 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'PARTNER',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+  ]),
   studentIdValidator,
   validate,
   studentController.getStudentById

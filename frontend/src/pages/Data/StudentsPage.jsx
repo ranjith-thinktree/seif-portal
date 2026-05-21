@@ -15,7 +15,7 @@ import {
   getStudents,
   bulkDeleteStudents,
   exportStudents,
-  downloadCSV,
+  downloadFile,
   getStudentFilterOptions,
 } from "../../services/data.service";
 import { toast } from "react-toastify";
@@ -53,6 +53,7 @@ const StudentsPage = ({ embedded = false }) => {
     city: "",
     state: "",
     course_name: "",
+    batch_year: "",
   });
   const [filterOptions, setFilterOptions] = useState({
     partners: [],
@@ -62,6 +63,7 @@ const StudentsPage = ({ embedded = false }) => {
     cities: [],
     states: [],
     courses: [],
+    years: [],
     trainings: [],
   });
   const [sortBy, setSortBy] = useState("created_at");
@@ -231,6 +233,7 @@ const StudentsPage = ({ embedded = false }) => {
       city: "",
       state: "",
       course_name: "",
+      batch_year: "",
     });
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
@@ -253,11 +256,12 @@ const StudentsPage = ({ embedded = false }) => {
   };
 
   // Handle export
-  const handleExport = async () => {
+  const handleExport = async (format = "csv") => {
     try {
       const params = {
         search: searchTerm,
         ...activeFilters,
+        format,
       };
 
       if (centerId) params.center_id = centerId;
@@ -270,8 +274,10 @@ const StudentsPage = ({ embedded = false }) => {
       );
 
       const blob = await exportStudents(params);
-      downloadCSV(blob, `students_${new Date().getTime()}.csv`);
-      toast.success("Students exported successfully");
+      const extension = format === "excel" ? "xlsx" : format;
+      const yearSuffix = activeFilters.batch_year ? `_${activeFilters.batch_year}` : "";
+      downloadFile(blob, `students${yearSuffix}_${new Date().getTime()}.${extension}`);
+      toast.success(`Students exported as ${format.toUpperCase()}`);
     } catch (error) {
       console.error("Error exporting students:", error);
       toast.error("Failed to export students");
@@ -528,6 +534,15 @@ const StudentsPage = ({ embedded = false }) => {
                     key: "course_name",
                     options: filterOptions.courses,
                   },
+                  ...(filterOptions.years.length > 0
+                    ? [
+                        {
+                          label: "Year",
+                          key: "batch_year",
+                          options: filterOptions.years,
+                        },
+                      ]
+                    : []),
                 ]}
                 activeFilters={
                   centerId || batchId
@@ -558,15 +573,31 @@ const StudentsPage = ({ embedded = false }) => {
               />
             </div>
             {canExport && (
-              <Button
-                onClick={handleExport}
-                variant="outline"
-                size="default"
-                className="gap-2 whitespace-nowrap"
-              >
-                <ArrowDownTrayIcon className="h-4 w-4" />
-                Export CSV
-              </Button>
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <Button
+                  onClick={() => handleExport("csv")}
+                  variant="outline"
+                  size="default"
+                  className="gap-2"
+                >
+                  <ArrowDownTrayIcon className="h-4 w-4" />
+                  CSV
+                </Button>
+                <Button
+                  onClick={() => handleExport("excel")}
+                  variant="outline"
+                  size="default"
+                >
+                  Excel
+                </Button>
+                <Button
+                  onClick={() => handleExport("pdf")}
+                  variant="outline"
+                  size="default"
+                >
+                  PDF
+                </Button>
+              </div>
             )}
           </div>
         </div>

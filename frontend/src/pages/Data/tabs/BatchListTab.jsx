@@ -19,6 +19,7 @@ import {
   getBatches,
   getBatchFilterOptions,
   exportBatches,
+  downloadFile,
   deleteBatch,
   bulkDeleteBatches,
 } from "../../../services/data.service";
@@ -195,28 +196,24 @@ const BatchListTab = () => {
     setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format = "csv") => {
     try {
       setExporting(true);
-      const response = await exportBatches({
+      const blob = await exportBatches({
         search: searchTerm,
         status: activeFilters.status,
         center_id: activeFilters.center_id,
         partner_id: activeFilters.partner_id,
+        format,
       });
 
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      const today = new Date().toISOString().split("T")[0];
-      link.setAttribute("download", `batches_export_${today}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      const extension = format === "excel" ? "xlsx" : format;
+      downloadFile(
+        blob,
+        `batches_export_${new Date().toISOString().split("T")[0]}.${extension}`,
+      );
 
-      toast.success("Batches exported successfully");
+      toast.success(`Batches exported as ${format.toUpperCase()}`);
     } catch (error) {
       console.error("Error exporting batches:", error);
       toast.error("Failed to export batches");
@@ -472,16 +469,34 @@ const BatchListTab = () => {
               onSortChange={handleSortChange}
             />
           </div>
-          <Button
-            onClick={handleExport}
-            disabled={exporting}
-            variant="outline"
-            size="default"
-            className="gap-2 whitespace-nowrap"
-          >
-            <ArrowDownTrayIcon className="h-4 w-4" />
-            {exporting ? "Exporting..." : "Export CSV"}
-          </Button>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <Button
+              onClick={() => handleExport("csv")}
+              disabled={exporting}
+              variant="outline"
+              size="default"
+              className="gap-2"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              {exporting ? "Exporting..." : "CSV"}
+            </Button>
+            <Button
+              onClick={() => handleExport("excel")}
+              disabled={exporting}
+              variant="outline"
+              size="default"
+            >
+              Excel
+            </Button>
+            <Button
+              onClick={() => handleExport("pdf")}
+              disabled={exporting}
+              variant="outline"
+              size="default"
+            >
+              PDF
+            </Button>
+          </div>
         </div>
       </div>
 

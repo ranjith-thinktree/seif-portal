@@ -16,7 +16,7 @@ import {
   createCenter,
   updateCenter,
   exportCenters,
-  downloadCSV,
+  downloadFile,
   getCenterFilterOptions,
 } from "../../services/data.service";
 import { toast } from "react-toastify";
@@ -90,7 +90,7 @@ const MyCentersPage = () => {
       // Remove empty filters
       Object.keys(params).forEach(
         (key) =>
-          (params[key] === "" || params[key] === null) && delete params[key]
+          (params[key] === "" || params[key] === null) && delete params[key],
       );
 
       const response = await getMyCenters(params);
@@ -197,22 +197,24 @@ const MyCentersPage = () => {
   };
 
   // Handle export
-  const handleExport = async () => {
+  const handleExport = async (format = "csv") => {
     try {
       const params = {
         search: searchTerm,
         ...activeFilters,
+        format,
       };
 
       // Remove empty filters
       Object.keys(params).forEach(
         (key) =>
-          (params[key] === "" || params[key] === null) && delete params[key]
+          (params[key] === "" || params[key] === null) && delete params[key],
       );
 
       const blob = await exportCenters(params);
-      downloadCSV(blob, `my_centers_${new Date().getTime()}.csv`);
-      toast.success("Centers exported successfully");
+      const extension = format === "excel" ? "xlsx" : format;
+      downloadFile(blob, `my_centers_${new Date().getTime()}.${extension}`);
+      toast.success(`Centers exported as ${format.toUpperCase()}`);
     } catch (error) {
       console.error("Error exporting centers:", error);
       toast.error("Failed to export centers");
@@ -410,14 +412,22 @@ const MyCentersPage = () => {
                 onSortChange={handleSortChange}
               />
             </div>
-            <Button
-              variant="outline"
-              onClick={handleExport}
-              className="gap-2 shrink-0"
-            >
-              <ArrowDownTrayIcon className="h-5 w-5" />
-              Export CSV
-            </Button>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                variant="outline"
+                onClick={() => handleExport("csv")}
+                className="gap-2"
+              >
+                <ArrowDownTrayIcon className="h-5 w-5" />
+                CSV
+              </Button>
+              <Button variant="outline" onClick={() => handleExport("excel")}>
+                Excel
+              </Button>
+              <Button variant="outline" onClick={() => handleExport("pdf")}>
+                PDF
+              </Button>
+            </div>
           </div>
         )}
 

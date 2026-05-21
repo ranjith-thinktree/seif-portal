@@ -494,10 +494,13 @@ const UploadHistoryPage = () => {
                         File Name
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Partner
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Students
+                        Records
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Status
@@ -543,6 +546,19 @@ const UploadHistoryPage = () => {
                           <div className="text-sm font-medium text-foreground">
                             {upload.file_name}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              upload.upload_type === "employment"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-blue-100 text-blue-700"
+                            }`}
+                          >
+                            {upload.upload_type === "employment"
+                              ? "Employment"
+                              : "Student Data"}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-foreground">
@@ -593,6 +609,7 @@ const UploadHistoryPage = () => {
                               </button>
                             )}
                             {canDelete &&
+                              upload.upload_type !== "employment" &&
                               (upload.status === "pending" ||
                                 upload.status === "rejected") && (
                                 <button

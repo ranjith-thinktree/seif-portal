@@ -357,6 +357,9 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
     let totalBatches = 0;
     let totalStudents = 0;
     const errors = [];
+    // Track student fingerprints within this upload to catch intra-file duplicates
+    // Key: partnerId|centerId|courseName|studentName|dateOfBirth
+    const seenInUpload = new Set();
 
     // Iterate through centers
     for (const [csvCenterId, centerData] of centerMap) {
@@ -448,6 +451,46 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
 
         // Insert students with new fields
         for (const student of batchData.students) {
+          // Build duplicate fingerprint: partner + center + course + name + dob
+          const dupKey = [
+            partnerId,
+            csvCenterId,
+            (student.course_name || '').trim().toLowerCase(),
+            (student.student_name || '').trim().toLowerCase(),
+            student.date_of_birth || '',
+          ].join('|');
+
+          // Reject intra-file duplicates (same student+course appears twice in this upload)
+          if (seenInUpload.has(dupKey)) {
+            errors.push(
+              `Duplicate student in upload: "${student.student_name}" for course "${student.course_name}" in center "${csvCenterId}" appears more than once.`
+            );
+            continue;
+          }
+          seenInUpload.add(dupKey);
+
+          // Reject if this student+course already exists in the approved students table
+          const [existingApproved] = await connection.query(
+            `SELECT id FROM students
+             WHERE partner_id = ? AND center_id = ?
+               AND LOWER(course_name) = LOWER(?)
+               AND LOWER(student_name) = LOWER(?)
+               AND date_of_birth = ?`,
+            [
+              partnerId,
+              approvedCenterId,
+              student.course_name,
+              student.student_name,
+              student.date_of_birth,
+            ]
+          );
+          if (existingApproved.length > 0) {
+            errors.push(
+              `Student "${student.student_name}" is already approved for course "${student.course_name}" in center "${csvCenterId}". Duplicate records are not allowed.`
+            );
+            continue;
+          }
+
           totalStudents++;
           const studentUuid = (await connection.query('SELECT UUID() as id'))[0][0].id;
 
@@ -494,7 +537,10 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
     // If there were validation errors, rollback and return errors
     if (errors.length > 0) {
       await connection.rollback();
-      throw new Error(errors.join('\n'));
+      throw Object.assign(new Error(errors.join('\n')), {
+        code: 'UPLOAD_VALIDATION_ERRORS',
+        errors,
+      });
     }
 
     // Update data_uploads with totals and initialize review progress
@@ -514,6 +560,8 @@ const saveUploadedData = async (dataUploadId, partnerId, centerMap) => {
     return { success: true };
   } catch (error) {
     await connection.rollback();
+    // Re-throw structured errors as-is so callers can inspect error.code / error.errors
+    if (error.code) throw error;
     throw new Error(`Failed to save uploaded data: ${error.message}`);
   } finally {
     connection.release();
@@ -557,7 +605,7 @@ const getPartnerUploads = async (partnerId, page = 1, limit = 10, filters = {}) 
 
     const [uploads] = await connection.query(
       `SELECT 
-        du.id, du.file_name, du.file_url, du.total_records, 
+        du.id, du.file_name, du.file_url, du.total_records, du.version,
         du.status, du.rejection_reason, du.remarks,
         du.created_at, du.reviewed_at,
         u.full_name as uploaded_by_name,
@@ -665,55 +713,94 @@ const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10, filter
   try {
     const offset = (page - 1) * limit;
 
-    const conditions = [];
-    const params = [];
+    const studentConditions = ['du.deleted_at IS NULL'];
+    const studentParams = [];
+    const employmentConditions = ['eu.deleted_at IS NULL'];
+    const employmentParams = [];
 
     if (status) {
-      conditions.push('du.status = ?');
-      params.push(status);
+      studentConditions.push('du.status = ?');
+      studentParams.push(status);
+      employmentConditions.push('eu.status = ?');
+      employmentParams.push(status);
     }
     if (filters.dateFrom) {
-      conditions.push('DATE(du.created_at) >= ?');
-      params.push(filters.dateFrom);
+      studentConditions.push('DATE(du.created_at) >= ?');
+      studentParams.push(filters.dateFrom);
+      employmentConditions.push('DATE(eu.created_at) >= ?');
+      employmentParams.push(filters.dateFrom);
     }
     if (filters.dateTo) {
-      conditions.push('DATE(du.created_at) <= ?');
-      params.push(filters.dateTo);
+      studentConditions.push('DATE(du.created_at) <= ?');
+      studentParams.push(filters.dateTo);
+      employmentConditions.push('DATE(eu.created_at) <= ?');
+      employmentParams.push(filters.dateTo);
     }
     if (filters.partnerId) {
-      conditions.push('du.partner_id = ?');
-      params.push(filters.partnerId);
+      studentConditions.push('du.partner_id = ?');
+      studentParams.push(filters.partnerId);
+      employmentConditions.push('eu.partner_id = ?');
+      employmentParams.push(filters.partnerId);
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const studentWhere =
+      studentConditions.length > 0 ? `WHERE ${studentConditions.join(' AND ')}` : '';
+    const employmentWhere = `WHERE ${employmentConditions.join(' AND ')}`;
 
     const [uploads] = await pool.query(
-      `SELECT 
-        du.id, du.file_name, du.total_records, du.status,
-        du.created_at, du.reviewed_at,
-        p.name as partner_name,
-        u.full_name as uploaded_by_name
-      FROM data_uploads du
-      LEFT JOIN partners p ON du.partner_id = p.id
-      LEFT JOIN users u ON du.uploaded_by = u.id
-      ${whereClause}
-      ORDER BY 
-        CASE WHEN du.status = 'pending' THEN 1 ELSE 2 END,
-        du.created_at DESC
+      `(SELECT
+          du.id, du.file_name, du.total_records, du.status,
+          du.created_at, du.reviewed_at,
+          du.version,
+          p.name as partner_name,
+          u.full_name as uploaded_by_name,
+          ru.full_name as reviewed_by_name,
+          'student' as upload_type
+        FROM data_uploads du
+        LEFT JOIN partners p ON du.partner_id = p.id
+        LEFT JOIN users u ON du.uploaded_by = u.id
+        LEFT JOIN users ru ON du.reviewed_by = ru.id
+        ${studentWhere})
+      UNION ALL
+      (SELECT
+          eu.id, eu.file_name, eu.total_records, eu.status,
+          eu.created_at, eu.reviewed_at,
+          eu.version,
+          p.name as partner_name,
+          u.full_name as uploaded_by_name,
+          ru.full_name as reviewed_by_name,
+          'employment' as upload_type
+        FROM employment_uploads eu
+        LEFT JOIN partners p ON eu.partner_id = p.id
+        LEFT JOIN users u ON eu.uploaded_by = u.id
+        LEFT JOIN users ru ON eu.reviewed_by = ru.id
+        ${employmentWhere})
+      ORDER BY
+        CASE WHEN status IN ('pending', 'pending_review') THEN 1 ELSE 2 END,
+        created_at DESC
       LIMIT ${limit} OFFSET ${offset}`,
-      params
+      [...studentParams, ...employmentParams]
     );
 
     const uploadsWithStatus = await Promise.all(
-      uploads.map(async (upload) => ({
-        ...upload,
-        status: await resolveEffectiveUploadStatus(pool, upload.id, upload.status),
-      }))
+      uploads.map(async (upload) => {
+        if (upload.upload_type === 'student') {
+          return {
+            ...upload,
+            status: await resolveEffectiveUploadStatus(pool, upload.id, upload.status),
+          };
+        }
+        return upload;
+      })
     );
 
     const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total FROM data_uploads du ${whereClause}`,
-      params
+      `SELECT (
+          SELECT COUNT(*) FROM data_uploads du ${studentWhere}
+        ) + (
+          SELECT COUNT(*) FROM employment_uploads eu ${employmentWhere}
+        ) as total`,
+      [...studentParams, ...employmentParams]
     );
 
     return {
@@ -721,8 +808,8 @@ const getAllUploadsForAdmin = async (status = null, page = 1, limit = 10, filter
       pagination: {
         page,
         limit,
-        total: countResult[0].total,
-        totalPages: Math.ceil(countResult[0].total / limit),
+        total: Number(countResult[0].total),
+        totalPages: Math.ceil(Number(countResult[0].total) / limit),
       },
     };
   } catch (error) {
@@ -859,6 +946,77 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
       [uploadId]
     );
 
+    // ── Pre-flight duplicate scan ─────────────────────────────────────────────
+    // Check every staged student against already-approved records BEFORE writing
+    // anything. If any conflict is found, block the entire approval and report
+    // the exact rows so the partner can correct and resubmit.
+    const duplicateConflicts = [];
+    for (const center of centers) {
+      const approvedCenterIdPre = center.approved_center_id;
+      const [allBatchesPre] = await connection.query(
+        'SELECT * FROM uploaded_batches WHERE uploaded_center_id = ?',
+        [center.id]
+      );
+      for (const batch of allBatchesPre) {
+        const [allStudentsPre] = await connection.query(
+          'SELECT * FROM uploaded_students WHERE uploaded_batch_id = ?',
+          [batch.id]
+        );
+        for (const student of allStudentsPre) {
+          const [existing] = await connection.query(
+            `SELECT s.id, s.partner_student_id, s.course_name,
+                    b.batch_number, c.center_id AS center_code
+             FROM students s
+             LEFT JOIN batches b ON b.id = s.batch_id
+             LEFT JOIN centers c ON c.id = s.center_id
+             WHERE s.partner_id = ?
+               AND s.center_id = ?
+               AND LOWER(s.course_name) = LOWER(?)
+               AND LOWER(s.student_name) = LOWER(?)
+               AND s.date_of_birth = ?
+             LIMIT 1`,
+            [
+              student.partner_id,
+              approvedCenterIdPre,
+              student.course_name,
+              student.student_name,
+              student.date_of_birth,
+            ]
+          );
+          if (existing.length > 0) {
+            duplicateConflicts.push({
+              student_name: student.student_name,
+              father_name: student.father_name || '—',
+              date_of_birth: student.date_of_birth,
+              course_name: student.course_name,
+              batch_number: batch.batch_number,
+              center_id: center.csv_center_id || center.center_id,
+              existing_student_id: existing[0].partner_student_id,
+              existing_batch: existing[0].batch_number,
+            });
+          }
+        }
+      }
+    }
+
+    if (duplicateConflicts.length > 0) {
+      const lines = duplicateConflicts.map(
+        (c, i) =>
+          `  Row ${i + 1}: Student "${c.student_name}" (Father: ${c.father_name}, DOB: ${c.date_of_birth}) ` +
+          `for course "${c.course_name}" in center "${c.center_id}" / batch "${c.batch_number}" ` +
+          `already exists as ID "${c.existing_student_id}" (batch: ${c.existing_batch || 'N/A'}).`
+      );
+      await connection.rollback();
+      throw Object.assign(
+        new Error(
+          `Approval blocked — ${duplicateConflicts.length} student record(s) already exist in the system:\n${lines.join('\n')}\n\n` +
+            `Please ask the partner to remove these rows and resubmit.`
+        ),
+        { code: 'DUPLICATE_STUDENTS', conflicts: duplicateConflicts }
+      );
+    }
+    // ── End pre-flight duplicate scan ─────────────────────────────────────────
+
     for (const center of centers) {
       // Use the existing approved center — always set by saveUploadedData which
       // requires the center to exist in production before confirming an upload.
@@ -990,6 +1148,9 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
     return { success: true };
   } catch (error) {
     await connection.rollback();
+    // Re-throw structured errors (e.g. DUPLICATE_STUDENTS) as-is so the controller
+    // can inspect error.code / error.conflicts and return the right HTTP status.
+    if (error.code) throw error;
     throw new Error(`Failed to approve upload: ${error.message}`);
   } finally {
     connection.release();

@@ -68,17 +68,6 @@ router.post(
 // Get partner's upload history
 router.get('/', authenticate, authorize(['PARTNER']), uploadController.getUploads);
 
-// Download original uploaded file (B10)
-router.get(
-  '/:id/download',
-  authenticate,
-  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY_DOWNLOAD']),
-  uploadController.downloadUploadFile
-);
-
-// Get upload details (partner view)
-router.get('/:id', authenticate, authorize(['PARTNER']), uploadController.getUploadDetails);
-
 // ==========================================
 // ADMIN ROUTES (requires ADMIN/SUPER_ADMIN role)
 // ==========================================
@@ -98,6 +87,17 @@ router.get(
   authorize(['ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD']),
   uploadController.getUploadDetailsForAdmin
 );
+
+// Download original uploaded file (B10)
+router.get(
+  '/:id/download',
+  authenticate,
+  authorize(['PARTNER', 'ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY_DOWNLOAD']),
+  uploadController.downloadUploadFile
+);
+
+// Get upload details (partner view)
+router.get('/:id', authenticate, authorize(['PARTNER']), uploadController.getUploadDetails);
 
 // Get students for a specific batch (paginated)
 router.get(

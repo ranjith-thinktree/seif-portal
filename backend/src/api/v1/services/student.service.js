@@ -1,6 +1,5 @@
 const db = require('../../../database/connection');
 const { convertToUUID } = require('../../../utils/uuid.util');
-const { Parser } = require('json2csv');
 
 /**
  * Student Service
@@ -26,6 +25,7 @@ class StudentService {
     city = '',
     state = '',
     course_name = '',
+    batch_year = '',
     sort_by = 'created_at',
     sort_order = 'desc',
   }) {
@@ -89,6 +89,12 @@ class StudentService {
       if (course_name) {
         whereConditions.push('s.course_name = ?');
         queryParams.push(course_name);
+      }
+
+      // Batch year filter — uses batches join already present in the SELECT
+      if (batch_year) {
+        whereConditions.push('YEAR(b.batch_start_date) = ?');
+        queryParams.push(parseInt(batch_year));
       }
 
       // Search filter
@@ -205,9 +211,9 @@ class StudentService {
   }
 
   /**
-   * Export students to CSV
+   * Export students for file generation
    * @param {Object} options - Filter options
-   * @returns {Promise<string>} CSV data
+   * @returns {Promise<Array>} Student rows
    */
   async exportStudents({
     search = '',
@@ -216,6 +222,7 @@ class StudentService {
     partner_id = '',
     role = '',
     user_partner_id = '',
+    batch_year = '',
   }) {
     try {
       let whereConditions = [];
@@ -254,6 +261,12 @@ class StudentService {
         }
       }
 
+      // Batch year filter — uses batches join already present in the SELECT
+      if (batch_year) {
+        whereConditions.push('YEAR(b.batch_start_date) = ?');
+        queryParams.push(parseInt(batch_year));
+      }
+
       // Search filter
       if (search) {
         whereConditions.push(
@@ -268,38 +281,38 @@ class StudentService {
 
       const students = await db.query(
         `SELECT 
-          s.enrollment_id,
-          s.first_name,
-          s.last_name,
-          s.email,
-          s.mobile_number,
-          s.date_of_birth,
-          s.gender,
-          s.category,
-          s.qualification,
-          s.guardian_name,
-          s.guardian_number,
-          s.address,
-          s.city,
-          s.state,
-          s.pincode,
-          s.course_name,
-          s.trade_sector,
-          s.course_start_date,
-          s.course_end_date,
-          s.training_duration_months,
-          s.assessment_date,
-          s.certification_date,
-          s.placement_status,
-          s.company_name,
-          s.job_role,
-          s.monthly_salary,
-          s.employment_type,
-          s.date_of_joining,
-          b.batch_number,
-          c.center_name,
-          p.name as partner_name,
-          s.created_at
+          s.enrollment_id as 'Enrollment ID',
+          s.first_name as 'First Name',
+          s.last_name as 'Last Name',
+          s.email as 'Email',
+          s.mobile_number as 'Mobile Number',
+          s.date_of_birth as 'Date of Birth',
+          s.gender as 'Gender',
+          s.category as 'Category',
+          s.qualification as 'Qualification',
+          s.guardian_name as 'Guardian Name',
+          s.guardian_number as 'Guardian Number',
+          s.address as 'Address',
+          s.city as 'City',
+          s.state as 'State',
+          s.pincode as 'Pincode',
+          s.course_name as 'Course Name',
+          s.trade_sector as 'Trade Sector',
+          s.course_start_date as 'Course Start Date',
+          s.course_end_date as 'Course End Date',
+          s.training_duration_months as 'Training Duration (Months)',
+          s.assessment_date as 'Assessment Date',
+          s.certification_date as 'Certification Date',
+          s.placement_status as 'Placement Status',
+          s.company_name as 'Company Name',
+          s.job_role as 'Job Role',
+          s.monthly_salary as 'Monthly Salary',
+          s.employment_type as 'Employment Type',
+          s.date_of_joining as 'Date of Joining',
+          b.batch_number as 'Batch Number',
+          c.center_name as 'Center Name',
+          p.name as 'Partner Name',
+          s.created_at as 'Created At'
         FROM students s
         LEFT JOIN batches b ON s.batch_id = b.id
         LEFT JOIN centers c ON s.center_id = c.id
@@ -309,46 +322,7 @@ class StudentService {
         queryParams
       );
 
-      // Convert to CSV
-      const fields = [
-        { label: 'Enrollment ID', value: 'enrollment_id' },
-        { label: 'First Name', value: 'first_name' },
-        { label: 'Last Name', value: 'last_name' },
-        { label: 'Email', value: 'email' },
-        { label: 'Mobile Number', value: 'mobile_number' },
-        { label: 'Date of Birth', value: 'date_of_birth' },
-        { label: 'Gender', value: 'gender' },
-        { label: 'Category', value: 'category' },
-        { label: 'Qualification', value: 'qualification' },
-        { label: 'Guardian Name', value: 'guardian_name' },
-        { label: 'Guardian Number', value: 'guardian_number' },
-        { label: 'Address', value: 'address' },
-        { label: 'City', value: 'city' },
-        { label: 'State', value: 'state' },
-        { label: 'Pincode', value: 'pincode' },
-        { label: 'Course Name', value: 'course_name' },
-        { label: 'Trade Sector', value: 'trade_sector' },
-        { label: 'Course Start Date', value: 'course_start_date' },
-        { label: 'Course End Date', value: 'course_end_date' },
-        { label: 'Training Duration (Months)', value: 'training_duration_months' },
-        { label: 'Assessment Date', value: 'assessment_date' },
-        { label: 'Certification Date', value: 'certification_date' },
-        { label: 'Placement Status', value: 'placement_status' },
-        { label: 'Company Name', value: 'company_name' },
-        { label: 'Job Role', value: 'job_role' },
-        { label: 'Monthly Salary', value: 'monthly_salary' },
-        { label: 'Employment Type', value: 'employment_type' },
-        { label: 'Date of Joining', value: 'date_of_joining' },
-        { label: 'Batch Number', value: 'batch_number' },
-        { label: 'Center Name', value: 'center_name' },
-        { label: 'Partner Name', value: 'partner_name' },
-        { label: 'Created At', value: 'created_at' },
-      ];
-
-      const json2csvParser = new Parser({ fields });
-      const csv = json2csvParser.parse(students);
-
-      return csv;
+      return students;
     } catch (error) {
       console.error('Error in exportStudents:', error);
       throw error;
@@ -415,97 +389,100 @@ class StudentService {
 
       // Get unique values for each filterable field
       // MySQL db.query() returns [rows, fields], so we need to destructure the rows
-      const [
-        [partners],
-        [centers],
-        [batches],
-        [genders],
-        [cities],
-        [states],
-        [courses],
-        [],
-      ] = await Promise.all([
-        // Partners - get ALL partners (not just those with students)
-        role !== 'PARTNER'
-          ? db.query(
-              `SELECT id as value, name as label 
+      const [[partners], [centers], [batches], [genders], [cities], [states], [courses], [years]] =
+        await Promise.all([
+          // Partners - get ALL partners (not just those with students)
+          role !== 'PARTNER'
+            ? db.query(
+                `SELECT id as value, name as label 
                FROM partners
                ORDER BY name ASC`
-            )
-          : Promise.resolve([[]]),
-        // Centers - get ALL centers (optionally filtered by center_id or partner)
-        db.query(
-          center_id
-            ? `SELECT id as value, center_name as label 
+              )
+            : Promise.resolve([[]]),
+          // Centers - get ALL centers (optionally filtered by center_id or partner)
+          db.query(
+            center_id
+              ? `SELECT id as value, center_name as label 
                FROM centers
                WHERE id = ?
                ORDER BY center_name ASC`
-            : role === 'PARTNER'
-              ? `SELECT id as value, center_name as label 
+              : role === 'PARTNER'
+                ? `SELECT id as value, center_name as label 
                FROM centers
                WHERE partner_id = ?
                ORDER BY center_name ASC`
-              : `SELECT id as value, center_name as label 
+                : `SELECT id as value, center_name as label 
                FROM centers
                ORDER BY center_name ASC`,
-          center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
-        ),
-        // Batches - get ALL batches (optionally filtered by center or partner)
-        db.query(
-          center_id
-            ? `SELECT id as value, batch_number as label 
+            center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
+          ),
+          // Batches - get ALL batches (optionally filtered by center or partner)
+          db.query(
+            center_id
+              ? `SELECT id as value, batch_number as label 
                FROM batches
                WHERE center_id = ?
                ORDER BY batch_number ASC`
-            : role === 'PARTNER'
-              ? `SELECT id as value, batch_number as label 
+              : role === 'PARTNER'
+                ? `SELECT id as value, batch_number as label 
                FROM batches
                WHERE partner_id = ?
                ORDER BY batch_number ASC`
-              : `SELECT id as value, batch_number as label 
+                : `SELECT id as value, batch_number as label 
                FROM batches
                ORDER BY batch_number ASC`,
-          center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
-        ),
-        // Genders
-        db.query(
-          `SELECT DISTINCT gender as value, 
+            center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
+          ),
+          // Genders
+          db.query(
+            `SELECT DISTINCT gender as value, 
            CONCAT(UPPER(SUBSTRING(gender, 1, 1)), SUBSTRING(gender, 2)) as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} gender IS NOT NULL AND gender != ''
            ORDER BY gender ASC`,
-          queryParams
-        ),
-        // Cities
-        db.query(
-          `SELECT DISTINCT city as value, city as label 
+            queryParams
+          ),
+          // Cities
+          db.query(
+            `SELECT DISTINCT city as value, city as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} city IS NOT NULL AND city != ''
            ORDER BY city ASC`,
-          queryParams
-        ),
-        // States
-        db.query(
-          `SELECT DISTINCT state as value, state as label 
+            queryParams
+          ),
+          // States
+          db.query(
+            `SELECT DISTINCT state as value, state as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} state IS NOT NULL AND state != ''
            ORDER BY state ASC`,
-          queryParams
-        ),
-        // Courses
-        db.query(
-          `SELECT DISTINCT course_name as value, course_name as label 
+            queryParams
+          ),
+          // Courses
+          db.query(
+            `SELECT DISTINCT course_name as value, course_name as label 
            FROM students s 
            ${whereCondition}
            ${whereCondition ? 'AND' : 'WHERE'} course_name IS NOT NULL AND course_name != ''
            ORDER BY course_name ASC`,
-          queryParams
-        ),
-        Promise.resolve([[]]),
-      ]);
+            queryParams
+          ),
+          // Years — distinct YEAR(batch_start_date) from batches, scoped by center or partner
+          db.query(
+            center_id
+              ? `SELECT DISTINCT YEAR(batch_start_date) as value, YEAR(batch_start_date) as label
+               FROM batches WHERE center_id = ? AND batch_start_date IS NOT NULL ORDER BY value DESC`
+              : role === 'PARTNER'
+                ? `SELECT DISTINCT YEAR(batch_start_date) as value, YEAR(batch_start_date) as label
+               FROM batches WHERE partner_id = ? AND batch_start_date IS NOT NULL ORDER BY value DESC`
+                : `SELECT DISTINCT YEAR(batch_start_date) as value, YEAR(batch_start_date) as label
+               FROM batches WHERE batch_start_date IS NOT NULL ORDER BY value DESC`,
+            center_id ? [center_id] : role === 'PARTNER' ? [user_partner_id] : []
+          ),
+        ]);
 
       return {
         partners: (partners || []).map((p) => ({ value: p.value, label: p.label })),
@@ -515,6 +492,7 @@ class StudentService {
         cities: (cities || []).map((c) => ({ value: c.value, label: c.label })),
         states: (states || []).map((s) => ({ value: s.value, label: s.label })),
         courses: (courses || []).map((c) => ({ value: c.value, label: c.label })),
+        years: (years || []).map((y) => ({ value: String(y.value), label: String(y.label) })),
         trainings: [],
       };
     } catch (error) {

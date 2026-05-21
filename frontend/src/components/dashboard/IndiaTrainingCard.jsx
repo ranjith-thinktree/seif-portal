@@ -528,7 +528,7 @@ const IndiaTrainingCard = ({
   }
 
   return (
-    <div className="relative bg-white rounded-xl shadow-sm p-6 border-[#A5A5A5] border">
+    <div className="relative bg-white rounded-xl shadow-sm p-6 border-[#A5A5A5] border h-full">
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 items-end ">
         {/* Map Area (Left - 2/3) */}

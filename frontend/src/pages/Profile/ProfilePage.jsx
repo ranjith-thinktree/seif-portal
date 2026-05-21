@@ -150,7 +150,7 @@ const ProfilePage = () => {
                   <div className="pl-7">
                     <span
                       className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold border ${getRoleBadgeColor(
-                        role
+                        role,
                       )}`}
                     >
                       {role?.replace("_", " ") || "N/A"}

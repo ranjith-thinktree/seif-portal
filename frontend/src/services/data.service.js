@@ -203,7 +203,7 @@ export const getPartnerLoginDetails = async (partnerId) => {
 };
 
 /**
- * Export partners to CSV
+ * Export partners
  */
 export const exportPartners = async (params = {}) => {
   const response = await apiClient.get("/partners/export", {
@@ -344,6 +344,54 @@ export const updateCourseCatalog = async (id, data) => {
 };
 
 /**
+ * Delete a course from the admin catalog
+ */
+export const deleteCourseCatalog = async (id) => {
+  const response = await apiClient.delete(`/courses/${id}`);
+  return response.data;
+};
+
+/**
+ * Get all trainer modules
+ */
+export const getTrainerModules = async (params = {}) => {
+  const response = await apiClient.get('/trainer-modules', { params });
+  return response.data;
+};
+
+/**
+ * Get trainer module by ID
+ */
+export const getTrainerModuleById = async (id) => {
+  const response = await apiClient.get(`/trainer-modules/${id}`);
+  return response.data;
+};
+
+/**
+ * Create a new trainer module
+ */
+export const createTrainerModule = async (data) => {
+  const response = await apiClient.post('/trainer-modules', data);
+  return response.data;
+};
+
+/**
+ * Update an existing trainer module
+ */
+export const updateTrainerModule = async (id, data) => {
+  const response = await apiClient.put(`/trainer-modules/${id}`, data);
+  return response.data;
+};
+
+/**
+ * Delete a trainer module
+ */
+export const deleteTrainerModule = async (id) => {
+  const response = await apiClient.delete(`/trainer-modules/${id}`);
+  return response.data;
+};
+
+/**
  * Get center by ID
  */
 export const getCenterById = async (id) => {
@@ -410,7 +458,7 @@ export const rejectCenter = async (id, rejectionReason) => {
 };
 
 /**
- * Export centers to CSV
+ * Export centers
  */
 export const exportCenters = async (params = {}) => {
   const response = await apiClient.get("/centers/export", {
@@ -487,14 +535,14 @@ export const getBatchFilterOptions = async () => {
 };
 
 /**
- * Export batches to CSV
+ * Export batches
  */
 export const exportBatches = async (params = {}) => {
   const response = await apiClient.get("/batches/export", {
     params,
     responseType: "blob",
   });
-  return response;
+  return response.data;
 };
 
 // ==================== STUDENTS ====================
@@ -540,7 +588,7 @@ export const getStudentById = async (id) => {
 };
 
 /**
- * Export students to CSV
+ * Export students
  */
 export const exportStudents = async (params = {}) => {
   const response = await apiClient.get("/students/export", {
@@ -553,9 +601,9 @@ export const exportStudents = async (params = {}) => {
 // ==================== UTILITIES ====================
 
 /**
- * Download CSV file helper
+ * Download blob file helper
  */
-export const downloadCSV = (blob, filename) => {
+export const downloadFile = (blob, filename) => {
   const url = window.URL.createObjectURL(new Blob([blob]));
   const link = document.createElement("a");
   link.href = url;
@@ -565,6 +613,8 @@ export const downloadCSV = (blob, filename) => {
   link.parentNode.removeChild(link);
   window.URL.revokeObjectURL(url);
 };
+
+export const downloadCSV = downloadFile;
 
 // Default export for convenient importing
 const dataService = {
@@ -626,6 +676,7 @@ const dataService = {
   getStudentFilterOptions,
   exportStudents,
   // Utilities
+  downloadFile,
   downloadCSV,
 };
 

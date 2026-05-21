@@ -36,7 +36,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
-import { getCenters, deleteCenter } from "../../services/data.service";
+import CenterForm from "../../components/forms/CenterForm";
+import {
+  createCenter,
+  getCenterById,
+  getCenters,
+  deleteCenter,
+  updateCenter,
+} from "../../services/data.service";
 
 /**
  * Organization Centers Page
@@ -46,12 +53,27 @@ import { getCenters, deleteCenter } from "../../services/data.service";
 const OrganizationCentersPage = ({ embedded = false }) => {
   // State Management
   const [centers, setCenters] = useState([]);
-  const [filteredCenters, setFilteredCenters] = useState([]);
+  const [table, setTable] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeFilters, setActiveFilters] = useState({
+    partner: [],
+    region: [],
+    center_type: [],
+    city: [],
+    state: [],
+    status: [],
+  });
+  const [sortBy, setSortBy] = useState("center_name");
+  const [sortOrder, setSortOrder] = useState("asc");
   const [selectedCenter, setSelectedCenter] = useState(null);
+  const [editingCenter, setEditingCenter] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingCenterDetails, setLoadingCenterDetails] = useState(false);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -74,7 +96,6 @@ const OrganizationCentersPage = ({ embedded = false }) => {
             center.status === "active" || center.status === "inactive",
         );
         setCenters(approvedCenters);
-        setFilteredCenters(approvedCenters);
       } else {
         throw new Error(response.message);
       }
@@ -84,7 +105,6 @@ const OrganizationCentersPage = ({ embedded = false }) => {
         error.message || "Failed to fetch centers. Please try again.",
       );
       setCenters([]);
-      setFilteredCenters([]);
     } finally {
       setLoading(false);
     }
@@ -120,15 +140,71 @@ const OrganizationCentersPage = ({ embedded = false }) => {
     }
   };
 
+  const fetchCenterDetails = useCallback(async (centerId) => {
+    const response = await getCenterById(centerId);
+    if (!response.success) {
+      throw new Error(response.message || "Failed to fetch center details");
+    }
+    return response.data;
+  }, []);
+
+  const handleCreateCenter = async (formData) => {
+    try {
+      setIsSubmitting(true);
+      const response = await createCenter(formData);
+      if (!response.success) {
+        throw new Error(response.message || "Failed to create center");
+      }
+      toast.success("Center created successfully");
+      setShowForm(false);
+      setEditingCenter(null);
+      fetchCenters();
+    } catch (error) {
+      console.error("Error creating center:", error);
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to create center",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateCenter = async (formData) => {
+    if (!editingCenter?.id) return;
+
+    try {
+      setIsSubmitting(true);
+      const response = await updateCenter(editingCenter.id, formData);
+      if (!response.success) {
+        throw new Error(response.message || "Failed to update center");
+      }
+      toast.success("Center updated successfully");
+      setShowForm(false);
+      setEditingCenter(null);
+      fetchCenters();
+    } catch (error) {
+      console.error("Error updating center:", error);
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to update center",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Handle Export
   const handleExport = useCallback(() => {
     try {
-      if (filteredCenters.length === 0) {
+      if (filteredAndSortedCenters.length === 0) {
         toast.warn("No data to export.");
         return;
       }
       // Prepare CSV data
-      const csvData = filteredCenters.map((center) => ({
+      const csvData = filteredAndSortedCenters.map((center) => ({
         "Center Name": center.center_name,
         "Partner Name": center.partner_name || "",
         "Center Type": center.center_type || "",
@@ -168,9 +244,50 @@ const OrganizationCentersPage = ({ embedded = false }) => {
       console.error("Error exporting:", error);
       toast.error("Failed to export data. Please try again.");
     }
-  }, [filteredCenters]);
+  }, [centers, searchTerm, activeFilters, sortBy, sortOrder]);
 
   // Table Columns Definition
+  const handleCreate = useCallback(() => {
+    setEditingCenter(null);
+    setShowForm(true);
+  }, []);
+
+  const handleViewDetails = useCallback(
+    async (center) => {
+      try {
+        setLoadingCenterDetails(true);
+        setSelectedCenter(null);
+        setShowViewDialog(true);
+        const detailedCenter = await fetchCenterDetails(center.id);
+        setSelectedCenter(detailedCenter);
+      } catch (error) {
+        console.error("Error fetching center details:", error);
+        toast.error(error.message || "Failed to load center details");
+        setShowViewDialog(false);
+      } finally {
+        setLoadingCenterDetails(false);
+      }
+    },
+    [fetchCenterDetails],
+  );
+
+  const handleEdit = useCallback(
+    async (center) => {
+      try {
+        setLoadingCenterDetails(true);
+        const detailedCenter = await fetchCenterDetails(center.id);
+        setEditingCenter(detailedCenter);
+        setShowForm(true);
+      } catch (error) {
+        console.error("Error fetching center for edit:", error);
+        toast.error(error.message || "Failed to load center for editing");
+      } finally {
+        setLoadingCenterDetails(false);
+      }
+    },
+    [fetchCenterDetails],
+  );
+
   const columns = useMemo(
     () => [
       {
@@ -294,15 +411,11 @@ const OrganizationCentersPage = ({ embedded = false }) => {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() => handleViewDetails(row.original)}
-              >
+              <DropdownMenuItem onClick={() => handleViewDetails(row.original)}>
                 <Eye className="w-4 h-4 mr-2" />
                 View Details
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleEdit(row.original)}
-              >
+              <DropdownMenuItem onClick={() => handleEdit(row.original)}>
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </DropdownMenuItem>
@@ -322,128 +435,186 @@ const OrganizationCentersPage = ({ embedded = false }) => {
         ),
       },
     ],
-    [],
+    [handleEdit, handleViewDetails],
   );
 
-  // Search Configuration
-  const searchConfig = useMemo(
-    () => ({
-      searchableFields: ["center_name", "partner_name"],
-      filterGroups: [
-        {
-          id: "partner",
-          label: "Partner",
-          options: [
-            ...new Set(centers.map((c) => c.partner_name).filter(Boolean)),
-          ].map((partner) => ({
-            value: partner,
-            label: partner,
-          })),
-          filterFn: (center, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(center.partner_name),
-        },
-        {
-          id: "region",
-          label: "Region",
-          options: [
-            ...new Set(centers.map((c) => c.region).filter(Boolean)),
-          ].map((region) => ({
-            value: region,
-            label: region,
-          })),
-          filterFn: (center, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(center.region),
-        },
-        {
-          id: "center_type",
-          label: "Center Type",
-          options: [
-            ...new Set(centers.map((c) => c.center_type).filter(Boolean)),
-          ].map((type) => ({
-            value: type,
-            label: type,
-          })),
-          filterFn: (center, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(center.center_type),
-        },
-        {
-          id: "city",
-          label: "City",
-          options: [...new Set(centers.map((c) => c.city).filter(Boolean))].map(
-            (city) => ({
-              value: city,
-              label: city,
-            }),
+  const filterGroups = useMemo(
+    () => [
+      {
+        key: "partner",
+        label: "Partner",
+        multi: true,
+        options: [
+          ...new Set(
+            centers.map((center) => center.partner_name).filter(Boolean),
           ),
-          filterFn: (center, selectedValues) =>
-            selectedValues.length === 0 || selectedValues.includes(center.city),
-        },
-        {
-          id: "state",
-          label: "State",
-          options: [
-            ...new Set(centers.map((c) => c.state).filter(Boolean)),
-          ].map((state) => ({
-            value: state,
-            label: state,
-          })),
-          filterFn: (center, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(center.state),
-        },
-        {
-          id: "status",
-          label: "Status",
-          options: [
-            { value: "active", label: "Active" },
-            { value: "inactive", label: "Inactive" },
-          ],
-          filterFn: (center, selectedValues) =>
-            selectedValues.length === 0 ||
-            selectedValues.includes(center.status),
-        },
-      ],
-    }),
+        ].map((partner) => ({ value: partner, label: partner })),
+      },
+      {
+        key: "region",
+        label: "Region",
+        multi: true,
+        options: [
+          ...new Set(centers.map((center) => center.region).filter(Boolean)),
+        ].map((region) => ({ value: region, label: region })),
+      },
+      {
+        key: "center_type",
+        label: "Center Type",
+        multi: true,
+        options: [
+          ...new Set(
+            centers.map((center) => center.center_type).filter(Boolean),
+          ),
+        ].map((type) => ({ value: type, label: type })),
+      },
+      {
+        key: "city",
+        label: "City",
+        multi: true,
+        options: [
+          ...new Set(centers.map((center) => center.city).filter(Boolean)),
+        ].map((city) => ({ value: city, label: city })),
+      },
+      {
+        key: "state",
+        label: "State",
+        multi: true,
+        options: [
+          ...new Set(centers.map((center) => center.state).filter(Boolean)),
+        ].map((state) => ({ value: state, label: state })),
+      },
+      {
+        key: "status",
+        label: "Status",
+        multi: true,
+        options: [
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+        ],
+      },
+    ],
     [centers],
   );
 
-  // Handle Search
-  const handleSearch = useCallback((searchResults) => {
-    setFilteredCenters(searchResults);
+  const sortOptions = useMemo(
+    () => [
+      { label: "Center Name", value: "center_name" },
+      { label: "Partner", value: "partner_name" },
+      { label: "Center Type", value: "center_type" },
+      { label: "Region", value: "region" },
+      { label: "City", value: "city" },
+      { label: "State", value: "state" },
+      { label: "Total Students", value: "total_students" },
+      { label: "Status", value: "status" },
+      { label: "Year of Establishment", value: "year_of_establishment" },
+    ],
+    [],
+  );
+
+  const filteredAndSortedCenters = useMemo(() => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+    const filtered = centers.filter((center) => {
+      const matchesSearch =
+        !normalizedSearchTerm ||
+        [
+          center.center_name,
+          center.partner_name,
+          center.center_type,
+          center.region,
+          center.city,
+          center.state,
+          center.center_head,
+        ]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(normalizedSearchTerm));
+
+      const matchesPartner =
+        activeFilters.partner.length === 0 ||
+        activeFilters.partner.includes(center.partner_name);
+      const matchesRegion =
+        activeFilters.region.length === 0 ||
+        activeFilters.region.includes(center.region);
+      const matchesCenterType =
+        activeFilters.center_type.length === 0 ||
+        activeFilters.center_type.includes(center.center_type);
+      const matchesCity =
+        activeFilters.city.length === 0 ||
+        activeFilters.city.includes(center.city);
+      const matchesState =
+        activeFilters.state.length === 0 ||
+        activeFilters.state.includes(center.state);
+      const matchesStatus =
+        activeFilters.status.length === 0 ||
+        activeFilters.status.includes(center.status);
+
+      return (
+        matchesSearch &&
+        matchesPartner &&
+        matchesRegion &&
+        matchesCenterType &&
+        matchesCity &&
+        matchesState &&
+        matchesStatus
+      );
+    });
+
+    if (!sortBy) return filtered;
+
+    return [...filtered].sort((a, b) => {
+      const aValue = a?.[sortBy];
+      const bValue = b?.[sortBy];
+
+      const aStr = String(aValue ?? "").toLowerCase();
+      const bStr = String(bValue ?? "").toLowerCase();
+
+      if (aStr < bStr) return sortOrder === "asc" ? -1 : 1;
+      if (aStr > bStr) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [centers, searchTerm, activeFilters, sortBy, sortOrder]);
+
+  const handleFilterChange = (key, value) => {
+    setActiveFilters((prev) => ({ ...prev, [key]: value }));
     setCurrentPage(1);
-  }, []);
+  };
+
+  const handleClearFilters = () => {
+    setActiveFilters({
+      partner: [],
+      region: [],
+      center_type: [],
+      city: [],
+      state: [],
+      status: [],
+    });
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (field, order) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setCurrentPage(1);
+  };
 
   // Paginated Data - slice data for current page
   const paginatedCenters = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    return filteredCenters.slice(startIndex, endIndex);
-  }, [filteredCenters, currentPage, pageSize]);
+    return filteredAndSortedCenters.slice(startIndex, endIndex);
+  }, [filteredAndSortedCenters, currentPage, pageSize]);
 
   // Pagination Object
   const paginationConfig = useMemo(() => {
-    const totalPages = Math.ceil(filteredCenters.length / pageSize);
+    const totalPages = Math.ceil(filteredAndSortedCenters.length / pageSize);
     return {
       page: currentPage,
       limit: pageSize,
-      total: filteredCenters.length,
+      total: filteredAndSortedCenters.length,
       totalPages: totalPages || 1,
     };
-  }, [filteredCenters.length, currentPage, pageSize]);
-
-  // Handle View Details
-  const handleViewDetails = (center) => {
-    setSelectedCenter(center);
-    setShowViewDialog(true);
-  };
-
-  // Handle Edit
-  const handleEdit = (center) => {
-    toast.info("Edit functionality coming soon.");
-  };
+  }, [filteredAndSortedCenters.length, currentPage, pageSize]);
 
   // Render Content
   const content = (
@@ -461,61 +632,91 @@ const OrganizationCentersPage = ({ embedded = false }) => {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <Button onClick={() => console.log("Add Center")}>
+          <Button onClick={handleCreate}>
             <Plus className="w-4 h-4 mr-2" />
             Add Center
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Total Centers</div>
-          <div className="text-2xl font-bold">{centers.length}</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Active Centers</div>
-          <div className="text-2xl font-bold text-green-600">
-            {centers.filter((c) => c.status === "active").length}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Total Students</div>
-          <div className="text-2xl font-bold">
-            {centers.reduce((sum, c) => sum + (c.total_students || 0), 0)}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="text-sm text-gray-600">Regions</div>
-          <div className="text-2xl font-bold">
-            {new Set(centers.map((c) => c.region).filter(Boolean)).size}
-          </div>
-        </div>
-      </div>
+      {showForm && (
+        <CenterForm
+          center={editingCenter}
+          onSubmit={editingCenter ? handleUpdateCenter : handleCreateCenter}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingCenter(null);
+          }}
+          isLoading={isSubmitting}
+          preselectedPartnerId={editingCenter?.partner_id || null}
+        />
+      )}
 
-      {/* Search Bar */}
-      <AdvancedSearchBar
-        data={centers}
-        searchConfig={searchConfig}
-        onSearch={handleSearch}
-        placeholder="Search centers by name or partner..."
-      />
+      {!showForm && (
+        <>
+          {/* Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Total Centers</div>
+              <div className="text-2xl font-bold">{centers.length}</div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Active Centers</div>
+              <div className="text-2xl font-bold text-green-600">
+                {centers.filter((c) => c.status === "active").length}
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Total Students</div>
+              <div className="text-2xl font-bold">
+                {centers.reduce((sum, c) => sum + (c.total_students || 0), 0)}
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm text-gray-600">Regions</div>
+              <div className="text-2xl font-bold">
+                {new Set(centers.map((c) => c.region).filter(Boolean)).size}
+              </div>
+            </div>
+          </div>
 
-      {/* Data Table */}
-      <EnhancedDataTable
-        columns={columns}
-        data={paginatedCenters}
-        pagination={paginationConfig}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setCurrentPage(1);
-        }}
-        isLoading={loading}
-        emptyMessage="No centers found"
-        storageKey="organization-centers-table"
-      />
+          {/* Search Bar */}
+          <AdvancedSearchBar
+            value={searchTerm}
+            onChange={(value) => {
+              setSearchTerm(value);
+              setCurrentPage(1);
+            }}
+            activeFilters={activeFilters}
+            onFilterChange={handleFilterChange}
+            onClearFilters={handleClearFilters}
+            filterGroups={filterGroups}
+            sortOptions={sortOptions}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={handleSortChange}
+            table={table}
+            storageKey="organization-centers"
+            placeholder="Search centers by name, partner, region, city..."
+          />
+
+          {/* Data Table */}
+          <EnhancedDataTable
+            columns={columns}
+            data={paginatedCenters}
+            pagination={paginationConfig}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            isLoading={loading}
+            emptyMessage="No centers found"
+            storageKey="organization-centers-table"
+            onTableReady={setTable}
+          />
+        </>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmationModal
@@ -543,10 +744,24 @@ const OrganizationCentersPage = ({ embedded = false }) => {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedCenter && (
+          {loadingCenterDetails && (
+            <div className="py-8 text-center text-sm text-gray-500">
+              Loading center details...
+            </div>
+          )}
+
+          {!loadingCenterDetails && selectedCenter && (
             <div className="space-y-4 py-2">
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Center ID
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedCenter.center_id || "—"}
+                  </p>
+                </div>
                 <div>
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
                     Center Name
@@ -565,6 +780,22 @@ const OrganizationCentersPage = ({ embedded = false }) => {
                 </div>
                 <div>
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Partner Contact Person
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedCenter.partner_contact_person || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Partner Contact Email
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedCenter.partner_contact_email || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
                     Center Type
                   </p>
                   <Badge variant="outline">
@@ -577,6 +808,14 @@ const OrganizationCentersPage = ({ embedded = false }) => {
                   </p>
                   <p className="text-gray-700">
                     {selectedCenter.region || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Country
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedCenter.country || "—"}
                   </p>
                 </div>
                 <div>
@@ -599,6 +838,14 @@ const OrganizationCentersPage = ({ embedded = false }) => {
                   </p>
                   <p className="text-gray-700">
                     {selectedCenter.year_of_establishment || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    Approval Status
+                  </p>
+                  <p className="text-gray-700">
+                    {selectedCenter.approval_status || "—"}
                   </p>
                 </div>
               </div>
@@ -646,7 +893,24 @@ const OrganizationCentersPage = ({ embedded = false }) => {
                     <div className="flex items-center gap-1">
                       <Users className="w-4 h-4 text-gray-500" />
                       <p className="font-semibold text-blue-600 text-lg">
-                        {selectedCenter.total_students ?? 0}
+                        {selectedCenter.total_students ??
+                          selectedCenter.batches?.reduce(
+                            (sum, batch) =>
+                              sum + (batch.enrolled_students || 0),
+                            0,
+                          ) ??
+                          0}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Total Batches
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Users className="w-4 h-4 text-gray-500" />
+                      <p className="font-semibold text-blue-600 text-lg">
+                        {selectedCenter.batches?.length ?? 0}
                       </p>
                     </div>
                   </div>
@@ -672,6 +936,14 @@ const OrganizationCentersPage = ({ embedded = false }) => {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Country
+                    </p>
+                    <p className="text-gray-700">
+                      {selectedCenter.country || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
                       City
                     </p>
                     <p className="text-gray-700">
@@ -690,21 +962,68 @@ const OrganizationCentersPage = ({ embedded = false }) => {
               </div>
 
               {/* Courses */}
-              {selectedCenter.courses_offered?.length > 0 && (
+              {((selectedCenter.courses && selectedCenter.courses.length > 0) ||
+                (selectedCenter.courses_offered &&
+                  selectedCenter.courses_offered.length > 0)) && (
                 <div className="border-t pt-4">
                   <p className="text-sm font-semibold text-gray-700 mb-3">
                     <BookOpen className="w-4 h-4 inline mr-1" />
-                    Courses Offered ({selectedCenter.courses_offered.length})
+                    Courses Offered (
+                    {selectedCenter.courses?.length ||
+                      selectedCenter.courses_offered?.length ||
+                      0}
+                    )
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {selectedCenter.courses_offered.map((course, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
+                    {(selectedCenter.courses?.length
+                      ? selectedCenter.courses.map(
+                          (course) => course.course_name,
+                        )
+                      : selectedCenter.courses_offered || []
+                    ).map((course, idx) => (
+                      <Badge
+                        key={`${course}-${idx}`}
+                        variant="outline"
+                        className="text-xs"
+                      >
                         {course}
                       </Badge>
                     ))}
                   </div>
                 </div>
               )}
+
+              <div className="border-t pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">
+                  Metadata
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Created At
+                    </p>
+                    <p className="text-gray-700">
+                      {selectedCenter.created_at
+                        ? new Date(selectedCenter.created_at).toLocaleString(
+                            "en-GB",
+                          )
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Last Updated
+                    </p>
+                    <p className="text-gray-700">
+                      {selectedCenter.updated_at
+                        ? new Date(selectedCenter.updated_at).toLocaleString(
+                            "en-GB",
+                          )
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

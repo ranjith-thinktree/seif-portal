@@ -33,6 +33,7 @@ import {
   getGroupedNotifications,
   getUploadCenterDetails,
 } from "../../services/notification.service";
+import { getEmploymentUploadAttachments } from "../../services/employment.service";
 import { toast } from "react-toastify";
 import NotificationDetailCard from "./NotificationDetailCard";
 import RefurbishmentDetailCard from "./RefurbishmentDetailCard";
@@ -281,6 +282,7 @@ const InboxPage = () => {
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [csvData, setCsvData] = useState(null);
   const [centerDetails, setCenterDetails] = useState(null);
+  const [employmentAttachments, setEmploymentAttachments] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [pagination, setPagination] = useState({
@@ -394,15 +396,36 @@ const InboxPage = () => {
     setSelectedNotification(notification);
     setCenterDetails(null);
     setCsvData(null);
+    setEmploymentAttachments([]);
 
-    // Fetch center details for this upload
-    if (notification.upload_id) {
+    // Fetch center details for this upload (student data uploads only, not employment)
+    if (
+      notification.upload_id &&
+      notification.related_entity_type !== "employment_upload" &&
+      notification.notification_type !== "employment"
+    ) {
       try {
         const response = await getUploadCenterDetails(notification.upload_id);
         setCenterDetails(response.data);
       } catch (error) {
         console.error("Failed to fetch center details:", error);
         toast.error("Failed to load center details");
+      }
+    }
+
+    // Fetch attachments for employment upload notifications
+    const isEmploymentNotif =
+      notification.related_entity_type === "employment_upload" ||
+      notification.notification_type === "employment";
+    if (isEmploymentNotif && notification.upload_id) {
+      try {
+        const res = await getEmploymentUploadAttachments(
+          notification.upload_id,
+        );
+        setEmploymentAttachments(res.data?.attachments || []);
+      } catch (error) {
+        console.error("Failed to fetch employment attachments:", error);
+        // Non-fatal — just show empty list
       }
     }
   };
@@ -682,6 +705,7 @@ const InboxPage = () => {
                       notification={selectedNotification}
                       csvData={csvData}
                       centerDetails={centerDetails}
+                      employmentAttachments={employmentAttachments}
                       onReview={() => {
                         // Navigation is handled in the component
                       }}

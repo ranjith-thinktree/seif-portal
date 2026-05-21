@@ -15,7 +15,6 @@ import {
 
 const YEAR_OPTIONS = [
   { value: "all", label: "All Years (Global)" },
-  { value: "2022-23", label: "2022-23" },
   { value: "2023-24", label: "2023-24" },
   { value: "2024-25", label: "2024-25" },
   { value: "2025-26", label: "2025-26" },

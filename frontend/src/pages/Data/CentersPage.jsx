@@ -37,7 +37,7 @@ import {
   approveCenter,
   rejectCenter,
   exportCenters,
-  downloadCSV,
+  downloadFile,
   getCenterFilterOptions,
   getPartnerById,
 } from "../../services/data.service";
@@ -51,7 +51,6 @@ const CentersPage = ({ embedded = false }) => {
   const { role } = useAuth();
 
   const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(role);
-  const isSuperAdmin = role === "SUPER_ADMIN";
   const canExport = ["ADMIN", "SUPER_ADMIN", "ESSCI", "PARTNER"].includes(role);
   const canCreate = ["ADMIN", "SUPER_ADMIN", "PARTNER"].includes(role);
 
@@ -395,14 +394,16 @@ const CentersPage = ({ embedded = false }) => {
   };
 
   // Handle export
-  const handleExport = async () => {
+  const handleExport = async (format = "csv") => {
     try {
       const blob = await exportCenters({
         search: searchTerm,
         ...(partnerId && { partner_id: partnerId }),
+        format,
       });
-      downloadCSV(blob, `centers_${new Date().getTime()}.csv`);
-      toast.success("Centers exported successfully");
+      const extension = format === "excel" ? "xlsx" : format;
+      downloadFile(blob, `centers_${new Date().getTime()}.${extension}`);
+      toast.success(`Centers exported as ${format.toUpperCase()}`);
     } catch (error) {
       console.error("Error exporting centers:", error);
       toast.error("Failed to export centers");
@@ -747,13 +748,20 @@ const CentersPage = ({ embedded = false }) => {
                 />
               </div>
               {canExport && (
-                <Button
-                  onClick={handleExport}
-                  variant="outline"
-                  className="whitespace-nowrap"
-                >
-                  Export CSV
-                </Button>
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  <Button onClick={() => handleExport("csv")} variant="outline">
+                    CSV
+                  </Button>
+                  <Button
+                    onClick={() => handleExport("excel")}
+                    variant="outline"
+                  >
+                    Excel
+                  </Button>
+                  <Button onClick={() => handleExport("pdf")} variant="outline">
+                    PDF
+                  </Button>
+                </div>
               )}
             </div>
           </div>

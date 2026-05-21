@@ -22,6 +22,7 @@ const NotificationDetailCard = ({
   notification,
   csvData,
   centerDetails,
+  employmentAttachments = [],
   onReview,
   onDismiss,
 }) => {
@@ -55,7 +56,7 @@ const NotificationDetailCard = ({
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
-    }
+    },
   );
 
   // Status badge styling - use aggregated_status from notification
@@ -105,8 +106,20 @@ const NotificationDetailCard = ({
 
   const handleReviewClick = () => {
     if (notification.related_entity_id) {
-      // Check related entity type
-      if (notification.related_entity_type === "center") {
+      // Employment upload notification — route by role
+      if (
+        notification.related_entity_type === "employment_upload" ||
+        notification.type === "employment_upload"
+      ) {
+        if (user?.role === "PARTNER") {
+          // Partner sees their rejected employment uploads
+          navigate(ROUTES.PARTNER_REJECTED_EMPLOYMENT_UPLOADS);
+        } else {
+          // Admin/SuperAdmin goes to review page
+          navigate(ROUTES.EMPLOYMENT_REVIEW);
+        }
+        // Check related entity type
+      } else if (notification.related_entity_type === "center") {
         // Navigate to pending centers review page
         navigate(ROUTES.REVIEW_PENDING_CENTERS);
       } else if (user?.role === "PARTNER") {
@@ -114,22 +127,27 @@ const NotificationDetailCard = ({
         navigate(
           ROUTES.PARTNER_REJECTED_CENTERS.replace(
             ":uploadId",
-            notification.related_entity_id
-          )
+            notification.related_entity_id,
+          ),
         );
       } else if (user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") {
         // Admins navigate to review page
         navigate(
           ROUTES.REVIEW_UPLOAD.replace(
             ":uploadId",
-            notification.related_entity_id
-          )
+            notification.related_entity_id,
+          ),
         );
       }
     } else if (onReview) {
       onReview();
     }
   };
+
+  const isEmploymentNotification =
+    notification.related_entity_type === "employment_upload" ||
+    notification.notification_type === "employment" ||
+    notification.type === "employment_upload";
 
   return (
     <Card className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-[16px]">
@@ -195,7 +213,7 @@ const NotificationDetailCard = ({
             </div> */}
 
             <div>
-              <label class Name="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Submission Date & Time
               </label>
               <Input
@@ -206,13 +224,71 @@ const NotificationDetailCard = ({
             </div>
           </div>
 
-          {/* Right Column - Center List or CSV Preview */}
+          {/* Right Column - Center List, Employment Info, or CSV Preview */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {centerDetails ? "Centers Summary" : "CSV Preview"}
+              {isEmploymentNotification
+                ? "Employment Upload Details"
+                : centerDetails
+                  ? "Centers Summary"
+                  : "CSV Preview"}
             </label>
             <div className="border border-gray-200 rounded-[16px] overflow-auto max-h-[400px] bg-white">
-              {centerDetails && centerDetails.centers ? (
+              {isEmploymentNotification ? (
+                <div className="p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-purple-700 font-semibold">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-purple-400" />
+                    Employment Data Upload
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {notification.message ||
+                      "An employment data file has been uploaded and is awaiting review."}
+                  </p>
+                  {payload?.totalRecords != null && (
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium text-gray-700">
+                        Records:
+                      </span>{" "}
+                      {payload.totalRecords}
+                    </p>
+                  )}
+                  {notification.remark && (
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium text-gray-700">Remark:</span>{" "}
+                      {notification.remark}
+                    </p>
+                  )}
+                  {/* Supporting documents */}
+                  {employmentAttachments.length > 0 && (
+                    <div className="pt-2 border-t border-purple-100">
+                      <p className="text-xs font-semibold text-purple-700 mb-2">
+                        Supporting Documents ({employmentAttachments.length})
+                      </p>
+                      <ul className="space-y-1">
+                        {employmentAttachments.map((att, idx) => (
+                          <li key={idx} className="flex items-center gap-2">
+                            <span className="text-purple-400 text-xs">📎</span>
+                            <a
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline truncate"
+                              title={att.name}
+                            >
+                              {att.name}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {employmentAttachments.length === 0 && (
+                    <p className="text-xs text-gray-400 pt-1">
+                      No supporting documents attached.
+                    </p>
+                  )}
+                </div>
+              ) : centerDetails && centerDetails.centers ? (
                 <table className="min-w-full text-xs">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
@@ -261,8 +337,8 @@ const NotificationDetailCard = ({
                               center.review_status === "approved"
                                 ? "bg-green-100 text-green-700 border-green-200"
                                 : center.review_status === "rejected"
-                                ? "bg-red-100 text-red-700 border-red-200"
-                                : "text-[#E47F00] border-[#E47F00]"
+                                  ? "bg-red-100 text-red-700 border-red-200"
+                                  : "text-[#E47F00] border-[#E47F00]"
                             }`}
                             style={
                               center.review_status === "pending"

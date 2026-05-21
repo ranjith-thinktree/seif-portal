@@ -554,6 +554,17 @@ const confirmUpload = async (req, res, next) => {
       fs.unlinkSync(req.body.filePath);
     }
 
+    // Validation errors from saveUploadedData (duplicate students, invalid data) should
+    // come back as 400 with the individual error messages, not a generic 500.
+    if (error.code === 'UPLOAD_VALIDATION_ERRORS') {
+      return res.status(400).json({
+        success: false,
+        message: 'Upload validation failed. Please fix the errors and re-upload.',
+        errors: error.errors || [],
+        totalErrors: (error.errors || []).length,
+      });
+    }
+
     next(error);
   }
 };
@@ -689,6 +700,14 @@ const approveUpload = async (req, res, next) => {
       message: 'Upload approved successfully. Data moved to production.',
     });
   } catch (error) {
+    if (error.code === 'DUPLICATE_STUDENTS') {
+      return res.status(409).json({
+        success: false,
+        code: 'DUPLICATE_STUDENTS',
+        message: error.message,
+        conflicts: error.conflicts,
+      });
+    }
     next(error);
   }
 };

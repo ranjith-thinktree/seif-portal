@@ -298,11 +298,13 @@ class BatchService {
     try {
       const centerUuid = convertToUUID(centerId);
 
-      const batches = await db.query(
+      const [batches] = await db.query(
         `SELECT 
           b.*,
+          c.partner_id,
           (SELECT COUNT(*) FROM students WHERE batch_id = b.id) as enrolled_students
         FROM batches b
+        JOIN centers c ON c.id = b.center_id
         WHERE b.center_id = ?
         ORDER BY b.batch_start_date DESC`,
         [centerUuid]

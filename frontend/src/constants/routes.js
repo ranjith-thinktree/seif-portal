@@ -37,15 +37,26 @@ export const ROUTES = {
   MY_CENTERS: "/my-centers",
   MY_DATA: "/my-data",
   MY_REQUESTS: "/my-requests",
+  PARTNER_ORGANIZATION_MANAGEMENT: "/partner/organization-management",
   UPLOAD_DATA: "/upload",
   UPLOAD_HISTORY: "/upload/history",
   EMPLOYMENT_UPLOAD: "/employment/upload",
-  EMPLOYMENT_MANAGEMENT: "/admin/employment",
+  EMPLOYMENT_REVIEW: "/admin/employment/review",
+  EMPLOYMENT_REVIEW_CENTERS: "/admin/employment/review/:uploadId",
+  EMPLOYMENT_REVIEW_RECORDS:
+    "/admin/employment/review/:uploadId/centers/:centerId",
   PARTNER_REVIEW_EDIT: "/my-data/review/:uploadId",
   PARTNER_REJECTED_UPLOADS: "/partner/rejected-uploads",
   PARTNER_REJECTED_CENTERS: "/partner/uploads/:uploadId/centers",
   PARTNER_REVIEW_STUDENTS:
     "/partner/uploads/:uploadId/centers/:centerId/students",
+
+  // Partner: Employment Edit & Resubmit
+  PARTNER_REJECTED_EMPLOYMENT_UPLOADS: "/partner/employment/rejected-uploads",
+  PARTNER_REJECTED_EMPLOYMENT_CENTERS:
+    "/partner/employment/uploads/:uploadId/centers",
+  PARTNER_REVIEW_EMPLOYMENT:
+    "/partner/employment/uploads/:uploadId/centers/:centerId/records",
 
   // SEIF/ESSCI Routes
   REPORTS: "/reports",

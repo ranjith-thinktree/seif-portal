@@ -112,7 +112,9 @@ exports.updateTemplate = async (req, res) => {
  */
 exports.getDashboardData = async (req, res) => {
   try {
-    const raw = await fs.readFile(DASHBOARD_DATA_PATH, 'utf-8');
+    let raw = await fs.readFile(DASHBOARD_DATA_PATH, 'utf-8');
+    // Strip UTF-8 BOM if present (files saved by Excel/Notepad may include it)
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
     const data = JSON.parse(raw);
     return ApiResponse.success(res, data, 'Dashboard data retrieved');
   } catch (error) {

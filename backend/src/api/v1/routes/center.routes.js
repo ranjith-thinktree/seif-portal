@@ -38,7 +38,14 @@ const upload = multer({
 router.get(
   '/',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD', 'PARTNER']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+    'PARTNER',
+  ]),
   listCentersValidator,
   validate(),
   centerController.getAllCenters
@@ -77,7 +84,14 @@ router.get(
 router.get(
   '/filter-options',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD', 'PARTNER']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+    'PARTNER',
+  ]),
   centerController.getFilterOptions
 );
 
@@ -89,7 +103,14 @@ router.get(
 router.get(
   '/courses',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD', 'PARTNER']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+    'PARTNER',
+  ]),
   centerController.getAllCourses
 );
 
@@ -127,7 +148,14 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD', 'PARTNER']),
+  checkRole([
+    'ADMIN',
+    'SUPER_ADMIN',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+    'PARTNER',
+  ]),
   centerIdValidator,
   validate(),
   centerController.getCenterById

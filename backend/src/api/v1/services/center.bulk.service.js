@@ -8,6 +8,19 @@ const centerService = require('./center.service');
  * Handles bulk center creation from CSV
  */
 class CenterBulkService {
+  normalizePartnerName(value) {
+    if (!value) return '';
+
+    return String(value)
+      .toLowerCase()
+      .trim()
+      .replace(/\bcentre\b/g, 'center')
+      .replace(/\bbharath\b/g, 'bharat')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   /**
    * Process bulk center upload from CSV
    * @param {Buffer} fileBuffer - CSV file buffer
@@ -125,12 +138,17 @@ class CenterBulkService {
    * @returns {Promise<Map>} Partner name to ID map
    */
   async getPartnerMap() {
-    const partners = await db.query('SELECT id, name FROM partners WHERE status = "active"');
+    const partnerResult = await db.query('SELECT id, name FROM partners WHERE status = "active"');
+    const partners = Array.isArray(partnerResult[0]) ? partnerResult[0] : partnerResult;
 
     const map = new Map();
     partners.forEach((partner) => {
+      if (!partner || !partner.name || !partner.id) {
+        return;
+      }
+
       // Create multiple variations of partner name for matching
-      const normalizedName = partner.name.toLowerCase().trim();
+      const normalizedName = this.normalizePartnerName(partner.name);
       map.set(normalizedName, partner.id);
 
       // Also store with extra spaces removed
@@ -140,6 +158,11 @@ class CenterBulkService {
       // Store without spaces for fuzzy matching
       const noSpaceName = normalizedName.replace(/\s+/g, '');
       map.set(noSpaceName, partner.id);
+
+      // Known alias used in legacy center sheets
+      if (normalizedName === 'sri sri rural development trust') {
+        map.set('ssrdpt', partner.id);
+      }
     });
 
     return map;
@@ -152,9 +175,10 @@ class CenterBulkService {
   async getDefaultLocation() {
     try {
       // Get India country
-      const countries = await db.query(
+      const countryResult = await db.query(
         'SELECT id, name FROM countries WHERE name = "India" LIMIT 1'
       );
+      const countries = Array.isArray(countryResult[0]) ? countryResult[0] : countryResult;
 
       if (!countries || countries.length === 0) {
         throw new Error('Default country (India) not found in database');
@@ -218,9 +242,9 @@ class CenterBulkService {
    */
   async mapCSVToCenter(row, partnerMap, defaultLocation) {
     // Get partner ID from name
-    const partnerName = (row.implemenation_partner || row.implementation_partner || '')
-      .toLowerCase()
-      .trim();
+    const partnerName = this.normalizePartnerName(
+      row.implemenation_partner || row.implementation_partner || ''
+    );
 
     // Try multiple matching strategies
     let partner_id =
@@ -239,20 +263,22 @@ class CenterBulkService {
     let city_id = null;
 
     if (row.state && row.state.trim() !== '') {
-      const states = await db.query('SELECT id FROM states WHERE name = ? AND country_id = ?', [
-        row.state.trim(),
-        defaultLocation.country_id,
-      ]);
+      const stateResult = await db.query(
+        'SELECT id FROM states WHERE name = ? AND country_id = ?',
+        [row.state.trim(), defaultLocation.country_id]
+      );
+      const states = Array.isArray(stateResult[0]) ? stateResult[0] : stateResult;
       if (states && states.length > 0) {
         state_id = states[0].id;
       }
     }
 
     if (row.city && row.city.trim() !== '' && state_id) {
-      const cities = await db.query('SELECT id FROM cities WHERE name = ? AND state_id = ?', [
+      const cityResult = await db.query('SELECT id FROM cities WHERE name = ? AND state_id = ?', [
         row.city.trim(),
         state_id,
       ]);
+      const cities = Array.isArray(cityResult[0]) ? cityResult[0] : cityResult;
       if (cities && cities.length > 0) {
         city_id = cities[0].id;
       }

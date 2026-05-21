@@ -8,11 +8,12 @@ import {
 } from "../components/ui/tabs";
 import OrganizationPartnersPage from "./OrganizationManagement/OrganizationPartnersPage";
 import OrganizationCentersPage from "./OrganizationManagement/OrganizationCentersPage";
+import OrganizationTrainersPage from "./OrganizationManagement/OrganizationTrainersPage";
 
 /**
  * Organization Management Page
- * Single page with tabs for Partners and Centers management
- * Shows APPROVED partners and centers with detailed contact and address information
+ * Single page with tabs for Partners, Centers, and Trainers management
+ * Shows APPROVED entities with detailed information
  * Different from Data page which shows PENDING/UPLOADED data for review
  */
 const OrganizationManagementPage = () => {
@@ -27,18 +28,22 @@ const OrganizationManagementPage = () => {
             Organization Management
           </h1>
           <p className="text-gray-600 mt-2">
-            Manage approved partner organizations and training centers
+            Manage approved partner organizations, training centers, and
+            trainers
           </p>
         </div>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-md grid-cols-3">
             <TabsTrigger value="partners" className="text-base">
               Partners
             </TabsTrigger>
             <TabsTrigger value="centers" className="text-base">
               Centers
+            </TabsTrigger>
+            <TabsTrigger value="trainers" className="text-base">
+              Trainers
             </TabsTrigger>
           </TabsList>
 
@@ -50,6 +55,11 @@ const OrganizationManagementPage = () => {
           {/* Centers Tab Content */}
           <TabsContent value="centers" className="mt-6">
             <OrganizationCentersPage embedded={true} />
+          </TabsContent>
+
+          {/* Trainers Tab Content */}
+          <TabsContent value="trainers" className="mt-6">
+            <OrganizationTrainersPage embedded={true} />
           </TabsContent>
         </Tabs>
       </div>

@@ -117,11 +117,12 @@ const getUploadDetails = async (uploadId, partnerId = null) => {
   );
   if (!upload) return null;
 
-  // Fetch approved students for this batch from the main students table
+  // Fetch students for this batch from the main students table.
+  // Current schema uses partner_student_id (not student_id) and has no status column.
   const [students] = await db.query(
-    `SELECT id, student_name AS trainee_name, student_id, gender
+    `SELECT id, student_name AS trainee_name, partner_student_id AS student_id, gender
      FROM students
-     WHERE batch_id = ? AND status = 'approved'
+     WHERE batch_id = ?
      ORDER BY student_name`,
     [upload.batch_id]
   );
@@ -355,11 +356,11 @@ const getESSCIData = async ({ page = 1, limit = 20, search, filter } = {}) => {
        (SELECT COUNT(*) FROM students s
         JOIN batches   bx ON bx.id = s.batch_id
         JOIN certification_uploads cu2 ON cu2.batch_id = bx.id AND cu2.status = 'approved'
-        WHERE s.status = 'approved') as total_students,
+        ) as total_students,
        (SELECT COUNT(*) FROM students s
         JOIN batches   bx ON bx.id = s.batch_id
         JOIN certification_uploads cu2 ON cu2.batch_id = bx.id AND cu2.status = 'approved'
-        WHERE s.status = 'approved' AND (s.gender = 'Female' OR s.gender = 'female')) as female_trainees
+        WHERE (s.gender = 'Female' OR s.gender = 'female')) as female_trainees
      FROM certification_uploads cu
      WHERE cu.status = 'approved'`
   );
@@ -595,6 +596,7 @@ const getAllCertificatePDFs = async ({ status, page = 1, limit = 20 } = {}) => {
   const safeLimit4 = parseInt(limit) || 20;
   const safeOffset4 = parseInt(offset);
   const baseParams = status ? [status] : [];
+  const where = status ? 'WHERE cp.status = ?' : '';
   const [pdfs] = await db.query(
     `SELECT cp.*,
             p.name      as partner_name,

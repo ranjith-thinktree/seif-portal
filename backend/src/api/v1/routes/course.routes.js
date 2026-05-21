@@ -48,4 +48,13 @@ router.put(
   courseController.updateCourse
 );
 
+router.delete(
+  '/:id',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  courseIdValidator,
+  validate(),
+  courseController.deleteCourse
+);
+
 module.exports = router;

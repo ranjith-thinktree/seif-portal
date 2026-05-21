@@ -1,6 +1,6 @@
 const centerService = require('../services/center.service');
 const { successResponse, errorResponse } = require('../../../utils/response.util');
-const { Parser } = require('json2csv');
+const { sendExportResponse } = require('../../../utils/export.util');
 
 /**
  * Center Controller
@@ -361,7 +361,7 @@ class CenterController {
    */
   async exportCenters(req, res) {
     try {
-      const { status, approval_status, partner_id, search } = req.query;
+      const { status, approval_status, partner_id, search, format = 'csv' } = req.query;
       const { role, partner_id: user_partner_id } = req.user;
 
       const centers = await centerService.exportCenters({
@@ -377,15 +377,12 @@ class CenterController {
         return errorResponse(res, 'No centers found to export', 404);
       }
 
-      // Convert to CSV
-      const parser = new Parser();
-      const csv = parser.parse(centers);
-
-      // Set headers for CSV download
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename=centers_${Date.now()}.csv`);
-
-      return res.send(csv);
+      return sendExportResponse(res, centers, {
+        format,
+        baseFileName: 'centers',
+        title: 'Centers Report',
+        sheetName: 'Centers',
+      });
     } catch (error) {
       console.error('Error in exportCenters:', error);
       return errorResponse(res, 'Failed to export centers', 500);

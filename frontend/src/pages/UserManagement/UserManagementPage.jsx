@@ -122,15 +122,11 @@ const UserManagementPage = () => {
   });
   const [formErrors, setFormErrors] = useState({});
 
-  // Tab configuration - CRITICAL SECURITY: Hide Super Admins from non-Super Admins
+  // Tab configuration
   const tabs = useMemo(() => {
     const baseTabs = [
       { id: "all", label: "All Users", role: null },
-      {
-        id: "admins",
-        label: "Admins",
-        role: isSuperAdmin ? ["ADMIN", "SUPER_ADMIN"] : ["ADMIN"], // Only show SUPER_ADMIN to Super Admins
-      },
+      { id: "admins", label: "Admins", role: "ADMIN" },
       { id: "partners", label: "Partners", role: "PARTNER" },
       { id: "essci", label: "ESSCI", role: "ESSCI" },
       { id: "readonly", label: "SEIF Readonly", role: "SEIF_READONLY" },
@@ -184,13 +180,7 @@ const UserManagementPage = () => {
       if (activeTab !== "all") {
         const tab = tabs.find((t) => t.id === activeTab);
         if (tab?.role) {
-          if (Array.isArray(tab.role)) {
-            // For admins tab, we need to filter on backend
-            // For now, fetch all and filter client-side
-            params.role = tab.role[0]; // Simplified - backend needs enhancement for OR queries
-          } else {
-            params.role = tab.role;
-          }
+          params.role = tab.role;
         }
       }
 
@@ -202,20 +192,7 @@ const UserManagementPage = () => {
 
       const response = await getUsers(params);
 
-      // Client-side filter for admins tab (temporary until backend supports OR)
-      // CRITICAL SECURITY: Only show SUPER_ADMIN to Super Admins
-      let filteredUsers = response.data.users;
-      if (activeTab === "admins") {
-        filteredUsers = filteredUsers.filter((u) => {
-          if (isSuperAdmin) {
-            return u.role === "ADMIN" || u.role === "SUPER_ADMIN";
-          } else {
-            return u.role === "ADMIN"; // Hide SUPER_ADMIN from non-Super Admins
-          }
-        });
-      }
-
-      setUsers(filteredUsers || []);
+      setUsers(response.data.users || []);
       setPagination({
         page: response.data.page || 1,
         limit: response.data.limit || 10,
@@ -240,7 +217,6 @@ const UserManagementPage = () => {
     sortOrder,
     activeTab,
     tabs,
-    isSuperAdmin,
   ]);
 
   // Fetch users when dependencies change
@@ -248,17 +224,14 @@ const UserManagementPage = () => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Handle search with debounce
+  // Handle search with debounce — only resets page when searchTerm changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      // Reset to page 1 when search changes - this will trigger fetchUsers via the main useEffect
-      if (pagination.page !== 1) {
-        setPagination((prev) => ({ ...prev, page: 1 }));
-      }
+      setPagination((prev) => ({ ...prev, page: 1 }));
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, pagination.page]);
+  }, [searchTerm]);
 
   // Form validation
   const validateForm = (data, isEdit = false) => {

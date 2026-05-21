@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout";
 import { toast } from "react-toastify";
 import axios from "axios";
@@ -10,7 +11,9 @@ import {
   ArrowPathIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ClipboardDocumentCheckIcon,
 } from "@heroicons/react/24/outline";
+import { ROUTES } from "../../constants/routes";
 
 /**
  * EmploymentManagementPage
@@ -18,6 +21,7 @@ import {
  * Allows admin to verify individual employment records.
  */
 const EmploymentManagementPage = () => {
+  const navigate = useNavigate();
   const [uploads, setUploads] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -27,10 +31,23 @@ const EmploymentManagementPage = () => {
     total: 0,
     totalPages: 1,
   });
+  const [pendingCount, setPendingCount] = useState(0);
 
   const getAuthHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
+
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const res = await axios.get("/api/v1/employment/admin/review-uploads", {
+        params: { page: 1, limit: 1, status: "pending_review" },
+        headers: getAuthHeaders(),
+      });
+      setPendingCount(res.data?.pagination?.total || 0);
+    } catch {
+      // non-critical
+    }
+  }, []);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -68,7 +85,8 @@ const EmploymentManagementPage = () => {
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    fetchPendingCount();
+  }, [fetchStats, fetchPendingCount]);
 
   useEffect(() => {
     fetchUploads();
@@ -127,26 +145,70 @@ const EmploymentManagementPage = () => {
               Review and verify partner employment data uploads
             </p>
           </div>
-          <button
-            onClick={() => {
-              fetchStats();
-              fetchUploads();
-            }}
-            title="Refresh"
-            style={{
-              background: "none",
-              border: "1px solid #dee2e6",
-              borderRadius: "6px",
-              padding: "8px 12px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <ArrowPathIcon style={{ width: 16, height: 16 }} />
-            Refresh
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {/* Review Uploads button */}
+            <button
+              onClick={() => navigate(ROUTES.EMPLOYMENT_REVIEW)}
+              style={{
+                background: "#3DCD58",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontWeight: 600,
+                fontSize: "14px",
+                position: "relative",
+              }}
+            >
+              <ClipboardDocumentCheckIcon style={{ width: 18, height: 18 }} />
+              Review Uploads
+              {pendingCount > 0 && (
+                <span
+                  style={{
+                    background: "#dc3545",
+                    color: "#fff",
+                    borderRadius: "50%",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    minWidth: "18px",
+                    height: "18px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 4px",
+                    marginLeft: "2px",
+                  }}
+                >
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => {
+                fetchStats();
+                fetchUploads();
+                fetchPendingCount();
+              }}
+              title="Refresh"
+              style={{
+                background: "none",
+                border: "1px solid #dee2e6",
+                borderRadius: "6px",
+                padding: "8px 12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <ArrowPathIcon style={{ width: 16, height: 16 }} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Stats Cards */}

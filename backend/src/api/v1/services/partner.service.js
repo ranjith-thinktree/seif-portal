@@ -382,17 +382,18 @@ class PartnerService {
       await connection.commit();
 
       // Send welcome email with credentials (async, don't wait)
-      emailService
-        .sendPartnerWelcomeEmail({
-          email: partner_email,
-          name: name,
-          partnerId: readablePartnerId,
-          tempPassword: tempPassword,
-        })
-        .catch((err) => {
-          console.error('Failed to send welcome email:', err);
-          // Don't throw error - partner creation succeeded
-        });
+      // TODO: Re-enable email sending when SMTP is ready
+      // emailService
+      //   .sendPartnerWelcomeEmail({
+      //     email: partner_email,
+      //     name: name,
+      //     partnerId: readablePartnerId,
+      //     tempPassword: tempPassword,
+      //   })
+      //   .catch((err) => {
+      //     console.error('Failed to send welcome email:', err);
+      //     // Don't throw error - partner creation succeeded
+      //   });
 
       // Return created partner
       connection.release();
@@ -714,11 +715,26 @@ class PartnerService {
         );
       }
 
-      // Delete associated user accounts (partner login accounts are automatically created)
+      // Delete in correct dependency order:
+      // 1. Notifications for this partner's users
+      await db.query(
+        `DELETE FROM notifications WHERE recipient_id IN (
+           SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
+         )`,
+        [partnerId]
+      );
+
+      // 2. Notification queue entries for this partner
+      await db.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
+
+      // 3. Delete associated user accounts (partner login accounts are automatically created)
       // This only deletes users with role='PARTNER' linked to this partner
       await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [partnerId]);
 
-      // Delete the partner
+      // 4. Delete partner state presence
+      await db.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
+
+      // 5. Delete the partner
       await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
 
       return true;
@@ -931,13 +947,28 @@ class PartnerService {
   async getRejectedCenters(uploadId, partnerId) {
     const connection = await db.getConnection();
     try {
+      // Fetch upload header info
+      const [uploadRows] = await connection.query(
+        `SELECT du.id, du.status, du.created_at, du.file_name,
+                du.centers_total, du.centers_approved, du.centers_rejected,
+                u.full_name as uploaded_by_name
+         FROM data_uploads du
+         LEFT JOIN users u ON du.uploaded_by = u.id
+         WHERE du.id = ?`,
+        [uploadId]
+      );
+
       const [centers] = await connection.query(
         `SELECT uc.* FROM uploaded_centers uc
         WHERE uc.data_upload_id = ? AND uc.review_status = 'rejected'
         ORDER BY uc.center_name`,
         [uploadId]
       );
-      return centers;
+
+      return {
+        upload: uploadRows[0] || null,
+        centers,
+      };
     } catch (error) {
       console.error('Error in getRejectedCenters:', error);
       throw error;
@@ -1019,7 +1050,7 @@ class PartnerService {
         LEFT JOIN uploaded_batches ub ON us.uploaded_batch_id = ub.id
         WHERE ${whereClause}
         ORDER BY us.student_name
-        LIMIT ${validLimit} OFFSET ${offset}`,
+        LIMIT ${limit} OFFSET ${offset}`,
         queryParams
       );
 
@@ -1027,10 +1058,10 @@ class PartnerService {
         center: center[0],
         students,
         pagination: {
-          page: validPage,
-          limit: validLimit,
+          page,
+          limit,
           total,
-          totalPages: Math.ceil(total / validLimit),
+          totalPages: Math.ceil(total / limit),
         },
       };
     } catch (error) {
@@ -1130,6 +1161,40 @@ class PartnerService {
         const original = originalStudent[0];
         let hasChanges = false;
 
+        // Handle batch_number change: find or create an uploaded_batches record
+        let newUploadedBatchId = original.uploaded_batch_id;
+        if (student.batch_number && student.batch_number !== original.batch_number_from_join) {
+          // Get original batch_number via join for comparison
+          const [origBatch] = await connection.query(
+            `SELECT ub.batch_number FROM uploaded_batches ub WHERE ub.id = ?`,
+            [original.uploaded_batch_id]
+          );
+          const origBatchNumber =
+            origBatch && origBatch.length > 0 ? origBatch[0].batch_number : null;
+
+          if (student.batch_number !== origBatchNumber) {
+            // Look for an existing batch with this batch_number in the same center
+            const [existingBatch] = await connection.query(
+              `SELECT id FROM uploaded_batches WHERE uploaded_center_id = ? AND batch_number = ?`,
+              [centerUuid, student.batch_number]
+            );
+
+            if (existingBatch && existingBatch.length > 0) {
+              newUploadedBatchId = existingBatch[0].id;
+            } else {
+              // Create a new uploaded_batches record
+              const newBatchId = uuidv4();
+              await connection.query(
+                `INSERT INTO uploaded_batches 
+                  (id, data_upload_id, uploaded_center_id, partner_id, batch_number, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+                [newBatchId, uploadUuid, centerUuid, partnerUuid, student.batch_number]
+              );
+              newUploadedBatchId = newBatchId;
+            }
+          }
+        }
+
         // Update student record
         await connection.query(
           `UPDATE uploaded_students 
@@ -1145,6 +1210,7 @@ class PartnerService {
             course_name = ?,
             course_duration_months = ?,
             enrollment_date = ?,
+            uploaded_batch_id = ?,
             is_edited = 1,
             updated_at = NOW()
           WHERE id = ?`,
@@ -1160,6 +1226,7 @@ class PartnerService {
             student.course_name,
             student.course_duration_months,
             student.enrollment_date,
+            newUploadedBatchId,
             studentUuid,
           ]
         );
@@ -1178,6 +1245,23 @@ class PartnerService {
           'course_duration_months',
           'enrollment_date',
         ];
+
+        // Log batch_number change separately (it's on uploaded_batches, not uploaded_students)
+        if (newUploadedBatchId !== original.uploaded_batch_id) {
+          hasChanges = true;
+          const [origBatchRow] = await connection.query(
+            'SELECT batch_number FROM uploaded_batches WHERE id = ?',
+            [original.uploaded_batch_id]
+          );
+          const origBatchNum =
+            origBatchRow && origBatchRow.length > 0 ? origBatchRow[0].batch_number : null;
+          await connection.query(
+            `INSERT INTO data_edit_logs 
+            (id, upload_id, version, table_name, record_id, field_name, old_value, new_value, edited_by, edit_type, created_at)
+            VALUES (?, ?, ?, 'uploaded_students', ?, 'batch_number', ?, ?, ?, 'update', NOW())`,
+            [uuidv4(), uploadUuid, 1, studentUuid, origBatchNum, student.batch_number, userUuid]
+          );
+        }
 
         for (const field of fieldsToCheck) {
           const oldValue = original[field];
@@ -1928,15 +2012,26 @@ class PartnerService {
           }
 
           // All checks passed - safe to delete
-          // Delete associated user accounts first
+          // 1. Notifications for this partner's users
+          await db.query(
+            `DELETE FROM notifications WHERE recipient_id IN (
+               SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
+             )`,
+            [partnerId]
+          );
+
+          // 2. Notification queue entries for this partner
+          await db.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
+
+          // 3. Delete associated user accounts first
           await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [
             partnerId,
           ]);
 
-          // Delete partner_state_presence records
+          // 4. Delete partner_state_presence records
           await db.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
 
-          // Delete the partner
+          // 5. Delete the partner
           await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
 
           results.success.push({

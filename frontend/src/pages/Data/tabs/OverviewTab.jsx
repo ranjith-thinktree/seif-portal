@@ -347,59 +347,59 @@ const OverviewTab = () => {
 
     // Map financial year to calendar year
     const yearMap = {
-      "2022-23": "2022",
       "2023-24": "2023",
       "2024-25": "2024",
       "2025-26": "2025",
     };
 
     if (year === "all") {
-      // Sum all years
-      const allYears = ["2022", "2023", "2024", "2025"];
+      // Use the pre-computed "all" key (2023-2026, excludes 2022 per user requirement)
       return {
-        total_students: allYears.reduce(
-          (sum, y) => sum + (dashboardData[y]?.total_students || 0),
-          0,
-        ),
-        india: allYears.reduce(
-          (sum, y) => sum + (dashboardData[y]?.india || 0),
-          0,
-        ),
-        greater_india: allYears.reduce(
-          (sum, y) => sum + (dashboardData[y]?.greater_india || 0),
-          0,
-        ),
-        nsi: allYears.reduce((sum, y) => sum + (dashboardData[y]?.nsi || 0), 0),
-        male: allYears.reduce(
-          (sum, y) => sum + (dashboardData[y]?.male || 0),
-          0,
-        ),
-        female: allYears.reduce(
-          (sum, y) => sum + (dashboardData[y]?.female || 0),
-          0,
-        ),
-        tot: allYears.reduce((sum, y) => sum + (dashboardData[y]?.tot || 0), 0),
-        employment: allYears.reduce(
-          (sum, y) => sum + (dashboardData[y]?.employment || 0),
-          0,
-        ),
+        total_students: dashboardData.all?.total_students || 0,
+        india: dashboardData.all?.india || 0,
+        greater_india: dashboardData.all?.greater_india || 0,
+        nsi: dashboardData.all?.nsi || 0,
+        alumni: dashboardData.all?.alumni || 0,
+        male: dashboardData.all?.male || 0,
+        female: dashboardData.all?.female || 0,
+        tot: dashboardData.all?.tot || 0,
+        employment: dashboardData.all?.employment || 0,
         monthly: null,
       };
     }
 
     const calendarYear = yearMap[year];
-    return (
-      dashboardData[calendarYear] || {
-        total_students: 0,
-        india: 0,
-        greater_india: 0,
-        nsi: 0,
-        male: 0,
-        female: 0,
-        tot: 0,
-        monthly: null,
-      }
-    );
+    const baseData = dashboardData[calendarYear] || {
+      total_students: 0,
+      india: 0,
+      greater_india: 0,
+      nsi: 0,
+      alumni: 0,
+      male: 0,
+      female: 0,
+      tot: 0,
+      employment: 0,
+      monthly: null,
+    };
+
+    // For FY 2025-26, also include Jan-Mar 2026 data stored under "2026" key
+    if (calendarYear === "2025" && dashboardData["2026"]) {
+      const y2026 = dashboardData["2026"];
+      return {
+        total_students: (baseData.total_students || 0) + (y2026.total_students || 0),
+        india: (baseData.india || 0) + (y2026.india || 0),
+        greater_india: (baseData.greater_india || 0) + (y2026.greater_india || 0),
+        nsi: (baseData.nsi || 0) + (y2026.nsi || 0),
+        alumni: (baseData.alumni || 0) + (y2026.alumni || 0),
+        male: (baseData.male || 0) + (y2026.male || 0),
+        female: (baseData.female || 0) + (y2026.female || 0),
+        tot: (baseData.tot || 0) + (y2026.tot || 0),
+        employment: (baseData.employment || 0) + (y2026.employment || 0),
+        monthly: baseData.monthly,
+      };
+    }
+
+    return baseData;
   }, [filters.financialYear]);
 
   // Log matching results ONCE (prevents console spam)
@@ -528,7 +528,6 @@ const OverviewTab = () => {
                     key: "financialYear",
                     options: [
                       { value: "all", label: "All Years" },
-                      { value: "2022-23", label: "FY 2022-23" },
                       { value: "2023-24", label: "FY 2023-24" },
                       { value: "2024-25", label: "FY 2024-25" },
                       { value: "2025-26", label: "FY 2025-26" },
@@ -536,7 +535,7 @@ const OverviewTab = () => {
                         ? analytics.availableYears
                             .filter(
                               (year) =>
-                                !["2022-23", "2023-24", "2024-25"].includes(
+                                !["2023-24", "2024-25", "2025-26"].includes(
                                   year,
                                 ),
                             )
@@ -653,10 +652,6 @@ const OverviewTab = () => {
                             ? [
                                 {
                                   value:
-                                    dashboardData["2022"]?.total_students || 0,
-                                },
-                                {
-                                  value:
                                     dashboardData["2023"]?.total_students || 0,
                                 },
                                 {
@@ -665,7 +660,7 @@ const OverviewTab = () => {
                                 },
                                 {
                                   value:
-                                    dashboardData["2025"]?.total_students || 0,
+                                    (dashboardData["2025"]?.total_students || 0) + (dashboardData["2026"]?.total_students || 0),
                                 },
                               ]
                             : Array.isArray(analytics.yearlyTrend) &&
@@ -696,10 +691,9 @@ const OverviewTab = () => {
                           )
                         : filters.financialYear === "all"
                           ? [
-                              { value: dashboardData["2022"]?.male || 0 },
                               { value: dashboardData["2023"]?.male || 0 },
                               { value: dashboardData["2024"]?.male || 0 },
-                              { value: dashboardData["2025"]?.male || 0 },
+                              { value: (dashboardData["2025"]?.male || 0) + (dashboardData["2026"]?.male || 0) },
                             ]
                           : Array.isArray(analytics.yearlyTrend) &&
                               analytics.yearlyTrend.length > 0
@@ -726,10 +720,9 @@ const OverviewTab = () => {
                           )
                         : filters.financialYear === "all"
                           ? [
-                              { value: dashboardData["2022"]?.female || 0 },
                               { value: dashboardData["2023"]?.female || 0 },
                               { value: dashboardData["2024"]?.female || 0 },
-                              { value: dashboardData["2025"]?.female || 0 },
+                              { value: (dashboardData["2025"]?.female || 0) + (dashboardData["2026"]?.female || 0) },
                             ]
                           : Array.isArray(analytics.yearlyTrend) &&
                               analytics.yearlyTrend.length > 0
@@ -755,10 +748,6 @@ const OverviewTab = () => {
                           ? [
                               {
                                 value:
-                                  dashboardData["2022"]?.total_students || 0,
-                              },
-                              {
-                                value:
                                   dashboardData["2023"]?.total_students || 0,
                               },
                               {
@@ -767,7 +756,7 @@ const OverviewTab = () => {
                               },
                               {
                                 value:
-                                  dashboardData["2025"]?.total_students || 0,
+                                  (dashboardData["2025"]?.total_students || 0) + (dashboardData["2026"]?.total_students || 0),
                               },
                             ]
                           : Array.isArray(analytics.partnerBreakdown) &&
@@ -796,10 +785,6 @@ const OverviewTab = () => {
                           ? [
                               {
                                 value:
-                                  dashboardData["2022"]?.total_students || 0,
-                              },
-                              {
-                                value:
                                   dashboardData["2023"]?.total_students || 0,
                               },
                               {
@@ -808,7 +793,7 @@ const OverviewTab = () => {
                               },
                               {
                                 value:
-                                  dashboardData["2025"]?.total_students || 0,
+                                  (dashboardData["2025"]?.total_students || 0) + (dashboardData["2026"]?.total_students || 0),
                               },
                             ]
                           : Array.isArray(analytics.centerBreakdown) &&
@@ -838,10 +823,9 @@ const OverviewTab = () => {
                           )
                         : filters.financialYear === "all"
                           ? [
-                              { value: dashboardData["2022"]?.tot || 0 },
                               { value: dashboardData["2023"]?.tot || 0 },
                               { value: dashboardData["2024"]?.tot || 0 },
-                              { value: dashboardData["2025"]?.tot || 0 },
+                              { value: (dashboardData["2025"]?.tot || 0) + (dashboardData["2026"]?.tot || 0) },
                             ]
                           : dummyGraphData
                     }
@@ -863,10 +847,9 @@ const OverviewTab = () => {
                           )
                         : filters.financialYear === "all"
                           ? [
-                              { value: dashboardData["2022"]?.employment || 0 },
                               { value: dashboardData["2023"]?.employment || 0 },
                               { value: dashboardData["2024"]?.employment || 0 },
-                              { value: dashboardData["2025"]?.employment || 0 },
+                              { value: (dashboardData["2025"]?.employment || 0) + (dashboardData["2026"]?.employment || 0) },
                             ]
                           : dummyGraphData
                     }
@@ -1014,7 +997,7 @@ const OverviewTab = () => {
                       {(() => {
                         // Combine API yearlyTrend + dashboardData.json yearly data
                         const apiYears = analytics.yearlyTrend || [];
-                        const dashboardYears = ["2022", "2023", "2024", "2025"];
+                        const dashboardYears = ["2023", "2024", "2025", "2026"];
 
                         // Create a map of financial years from API data
                         const yearMap = {};
@@ -1029,10 +1012,13 @@ const OverviewTab = () => {
                         });
 
                         // Add/merge dashboardData.json data
+                        // Note: "2026" key = Jan-Mar 2026 = still FY 2025-26, so merge into "2025-2026"
                         dashboardYears.forEach((year) => {
                           const dashYear = dashboardData[year];
                           if (dashYear) {
-                            const financialYear = `${year}-${parseInt(year) + 1}`;
+                            const financialYear = year === "2026"
+                              ? "2025-2026"
+                              : `${year}-${parseInt(year) + 1}`;
                             if (yearMap[financialYear]) {
                               // Merge with existing
                               yearMap[financialYear].male_students +=

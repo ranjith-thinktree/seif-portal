@@ -7,6 +7,8 @@ import PartnerListTab from "./tabs/PartnerListTab";
 import CenterListTab from "./tabs/CenterListTab";
 import BatchListTab from "./tabs/BatchListTab";
 import StudentListTab from "./tabs/StudentListTab";
+import TotListTab from "./tabs/TotListTab";
+import EmploymentListTab from "./tabs/EmploymentListTab";
 
 /**
  * Data Management Page
@@ -39,6 +41,8 @@ const DataManagementPage = () => {
     { id: "centers", label: "Center List", visible: true },
     { id: "batches", label: "Batch List", visible: true },
     { id: "students", label: "Students List", visible: true },
+    { id: "tot", label: "TOT", visible: true },
+    { id: "employment", label: "Employment", visible: true },
   ];
 
   const visibleTabs = tabs.filter((tab) => tab.visible);
@@ -85,6 +89,8 @@ const DataManagementPage = () => {
           {activeTab === "centers" && <CenterListTab />}
           {activeTab === "batches" && <BatchListTab />}
           {activeTab === "students" && <StudentListTab />}
+          {activeTab === "tot" && <TotListTab />}
+          {activeTab === "employment" && <EmploymentListTab />}
         </div>
       </div>
     </MainLayout>

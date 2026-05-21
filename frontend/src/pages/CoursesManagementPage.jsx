@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MainLayout from "../components/layout/MainLayout";
+import TrainerModulesTab from "../components/dashboard/TrainerModulesTab";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import EnhancedDataTable from "../components/common/EnhancedDataTable";
 import AdvancedSearchBar from "../components/common/AdvancedSearchBar";
 import { Button } from "../components/ui/button";
@@ -27,6 +29,7 @@ import {
 import { toast } from "react-toastify";
 import {
   createCourseCatalog,
+  deleteCourseCatalog,
   getCoursesCatalog,
   updateCourseCatalog,
 } from "../services/data.service";
@@ -41,6 +44,7 @@ import {
   Package,
   Plus,
   Power,
+  Trash2,
 } from "lucide-react";
 
 const INITIAL_FORM_DATA = {
@@ -72,6 +76,7 @@ const escapeCsvValue = (value) => {
 };
 
 const CoursesManagementPage = () => {
+  const [activeTab, setActiveTab] = useState("student");
   const [courses, setCourses] = useState([]);
   const [filteredCourses, setFilteredCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +98,8 @@ const CoursesManagementPage = () => {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [statusTargetCourse, setStatusTargetCourse] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteTargetCourse, setDeleteTargetCourse] = useState(null);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -279,6 +286,11 @@ const CoursesManagementPage = () => {
     setShowStatusDialog(true);
   }, []);
 
+  const openDeleteDialog = useCallback((course) => {
+    setDeleteTargetCourse(course);
+    setShowDeleteDialog(true);
+  }, []);
+
   const handleExport = useCallback(() => {
     try {
       if (filteredCourses.length === 0) {
@@ -381,6 +393,35 @@ const CoursesManagementPage = () => {
         error.response?.data?.message ||
           error.message ||
           "Failed to save course",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetCourse) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const response = await deleteCourseCatalog(deleteTargetCourse.id);
+
+      if (!response.success) {
+        throw new Error(response.message || "Unable to delete course");
+      }
+
+      toast.success("Course deleted successfully");
+      setShowDeleteDialog(false);
+      setDeleteTargetCourse(null);
+      await fetchCourses();
+    } catch (error) {
+      console.error("Error deleting course:", error);
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to delete course",
       );
     } finally {
       setSubmitting(false);
@@ -522,12 +563,20 @@ const CoursesManagementPage = () => {
                 <Power className="mr-2 h-4 w-4" />
                 {row.original.is_active ? "Deactivate" : "Activate"}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => openDeleteDialog(row.original)}
+                className="text-red-600 focus:text-red-600"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       },
     ],
-    [openEditDialog, openStatusDialog, openViewDialog],
+    [openDeleteDialog, openEditDialog, openStatusDialog, openViewDialog],
   );
 
   const totalCourses = courses.length;
@@ -545,11 +594,18 @@ const CoursesManagementPage = () => {
             Courses Management
           </h1>
           <p className="mt-2 text-gray-600">
-            Manage the course master data used across centers, uploads, and
-            refurbishment workflows.
+            Manage course and trainer module master data used across the portal.
           </p>
         </div>
 
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="mb-2">
+            <TabsTrigger value="student">Student Modules</TabsTrigger>
+            <TabsTrigger value="trainer">Trainer Modules</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="student">
+            <div className="space-y-6">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <div className="text-sm text-gray-600">Total Courses</div>
@@ -659,7 +715,9 @@ const CoursesManagementPage = () => {
             <form onSubmit={handleSubmit} className="space-y-4 py-2">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="course_name">Course Name</Label>
+                  <Label htmlFor="course_name">
+                    Course Name <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="course_name"
                     value={formData.course_name}
@@ -676,7 +734,12 @@ const CoursesManagementPage = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="course_code">Course Code</Label>
+                  <Label htmlFor="course_code">
+                    Course Code{" "}
+                    <span className="text-gray-400 text-xs font-normal">
+                      (optional)
+                    </span>
+                  </Label>
                   <Input
                     id="course_code"
                     value={formData.course_code}
@@ -692,7 +755,12 @@ const CoursesManagementPage = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="duration_months">Duration (Months)</Label>
+                  <Label htmlFor="duration_months">
+                    Duration (Months){" "}
+                    <span className="text-gray-400 text-xs font-normal">
+                      (optional)
+                    </span>
+                  </Label>
                   <Input
                     id="duration_months"
                     type="number"
@@ -710,7 +778,12 @@ const CoursesManagementPage = () => {
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description">
+                    Description{" "}
+                    <span className="text-gray-400 text-xs font-normal">
+                      (optional)
+                    </span>
+                  </Label>
                   <Textarea
                     id="description"
                     value={formData.description}
@@ -961,6 +1034,86 @@ const CoursesManagementPage = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        <Dialog
+          open={showDeleteDialog}
+          onOpenChange={(open) => {
+            setShowDeleteDialog(open);
+            if (!open) {
+              setDeleteTargetCourse(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Delete Course</DialogTitle>
+              <DialogDescription>
+                This action is permanent and cannot be undone. The course will
+                be removed from the system entirely.
+              </DialogDescription>
+            </DialogHeader>
+
+            {deleteTargetCourse && (
+              <div className="space-y-3 py-2 text-sm text-gray-700">
+                <p>
+                  <span className="font-semibold">Course:</span>{" "}
+                  {deleteTargetCourse.course_name}
+                </p>
+                {deleteTargetCourse.course_code && (
+                  <p>
+                    <span className="font-semibold">Code:</span>{" "}
+                    {deleteTargetCourse.course_code}
+                  </p>
+                )}
+                <p>
+                  <span className="font-semibold">Linked centers:</span>{" "}
+                  {deleteTargetCourse.centers_count || 0}
+                </p>
+                <p>
+                  <span className="font-semibold">Linked packages:</span>{" "}
+                  {deleteTargetCourse.packages_count || 0}
+                </p>
+                {(deleteTargetCourse.centers_count > 0 ||
+                  deleteTargetCourse.packages_count > 0) && (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                    This course has active links. Remove all links before
+                    deleting, or deactivate it instead.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteDialog(false);
+                  setDeleteTargetCourse(null);
+                }}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDelete}
+                disabled={
+                  submitting ||
+                  (deleteTargetCourse?.centers_count || 0) > 0 ||
+                  (deleteTargetCourse?.packages_count || 0) > 0
+                }
+              >
+                {submitting ? "Deleting..." : "Delete Course"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="trainer">
+            <TrainerModulesTab />
+          </TabsContent>
+        </Tabs>
       </div>
     </MainLayout>
   );

@@ -88,6 +88,12 @@ export const SIDEBAR_MENU = [
     roles: [ROLES.PARTNER],
   },
   {
+    name: "Organization Management",
+    path: ROUTES.PARTNER_ORGANIZATION_MANAGEMENT,
+    icon: BuildingOfficeIcon,
+    roles: [ROLES.PARTNER],
+  },
+  {
     name: "User Management",
     path: ROUTES.USER_MANAGEMENT,
     icon: UsersIcon,
@@ -133,12 +139,6 @@ export const SIDEBAR_MENU = [
     name: "Refurbishment",
     path: ROUTES.REFURBISHMENT,
     icon: WrenchScrewdriverIcon,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  },
-  {
-    name: "Employment",
-    path: ROUTES.EMPLOYMENT_MANAGEMENT,
-    icon: AcademicCapIcon,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {

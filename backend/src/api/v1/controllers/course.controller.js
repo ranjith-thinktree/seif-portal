@@ -78,6 +78,25 @@ class CourseController {
       );
     }
   }
+
+  async deleteCourse(req, res) {
+    try {
+      const result = await courseService.deleteCourse(req.params.id);
+
+      if (!result) {
+        return errorResponse(res, 'Course not found', 404);
+      }
+
+      return successResponse(res, 'Course deleted successfully', null);
+    } catch (error) {
+      console.error('Error in deleteCourse:', error);
+      return errorResponse(
+        res,
+        error.message || 'Failed to delete course',
+        error.statusCode || 500
+      );
+    }
+  }
 }
 
 module.exports = new CourseController();

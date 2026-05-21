@@ -287,6 +287,22 @@ const formatExcelDate = (excelDate) => {
 };
 
 /**
+ * Remove workbook constructs that are known to trigger Excel repair dialogs.
+ * ExcelJS note/comment serialization can produce invalid XML in some versions.
+ */
+const sanitizeWorkbookForExcelCompatibility = (workbook) => {
+  workbook.worksheets.forEach((sheet) => {
+    sheet.eachRow({ includeEmpty: true }, (row) => {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        if (cell.note) {
+          cell.note = undefined;
+        }
+      });
+    });
+  });
+};
+
+/**
  * Generate employment data upload template
  * Partners use this to upload employment/placement data for their students
  * @param {string} partnerName - Partner organization name
@@ -474,6 +490,7 @@ const generateEmploymentTemplate = async (partnerName = 'Partner', sampleRowCoun
     });
 
     // Generate buffer and return
+    sanitizeWorkbookForExcelCompatibility(workbook);
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer;
   } catch (error) {
@@ -554,8 +571,19 @@ const generateDynamicTemplate = async (
     // Get course names from database or use defaults
     const sampleCourses =
       availableCourses && availableCourses.length > 0
-        ? availableCourses.map((c) => c.course_name)
+        ? availableCourses
+            .map((c) => String(c.course_name || '').trim())
+            .filter(Boolean)
+            .filter((course, idx, arr) => arr.indexOf(course) === idx)
         : ['Electrical', 'Solar', 'Industrial Automation', 'TOT'];
+
+    // Keep course dropdown values in a hidden worksheet to avoid Excel inline-list limits.
+    const validationSheet = workbook.addWorksheet('_validation_data');
+    validationSheet.state = 'veryHidden';
+    sampleCourses.forEach((course, index) => {
+      validationSheet.getCell(index + 1, 1).value = course;
+    });
+    const courseValidationRange = `=${validationSheet.name}!$A$1:$A$${sampleCourses.length}`;
 
     // Start data after header row
     const dataStartRow = 2;
@@ -625,8 +653,6 @@ const generateDynamicTemplate = async (
 
     // Add data validation for Course Attended column (Column L - 12, after Student ID removal) with strict validation and styling
     if (sampleCourses && sampleCourses.length > 0) {
-      const courseList = sampleCourses.join(',');
-
       worksheet.getColumn(12).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
         if (rowNumber > 1) {
           // Apply to all data rows (skip header)
@@ -634,13 +660,13 @@ const generateDynamicTemplate = async (
           cell.dataValidation = {
             type: 'list',
             allowBlank: false,
-            formulae: [`"${courseList}"`],
+            formulae: [courseValidationRange],
             showErrorMessage: true,
             errorTitle: 'Invalid Course',
-            error: `You must select a course from the dropdown list. Available courses: ${courseList}`,
+            error: 'You must select a course from the dropdown list.',
             showInputMessage: true,
             promptTitle: 'Course Selection Required',
-            prompt: `Please select from dropdown: ${courseList}`,
+            prompt: 'Please select a course from the dropdown list.',
           };
 
           // Add light orange/yellow background to indicate dropdown field
@@ -649,17 +675,8 @@ const generateDynamicTemplate = async (
             pattern: 'solid',
             fgColor: { argb: 'FFFFF4E6' }, // Light orange/yellow
           };
-
-          // Add note to indicate this is a dropdown field
-          cell.note = {
-            texts: [
-              {
-                font: { bold: true, size: 10, color: { argb: 'FFFF6600' } },
-                text: 'Dropdown Required\n',
-              },
-              { font: { size: 9 }, text: `Select from: ${courseList}` },
-            ],
-          };
+          // Note: cell.note intentionally removed — ExcelJS generates invalid XML for notes
+          // which causes Excel to show "We found a problem with some content" error.
         }
       });
     }
@@ -677,8 +694,13 @@ const generateDynamicTemplate = async (
       { header: '', key: 'col4', width: 35 },
     ];
 
-    // Build dynamic course list from database
-    const courseListText = sampleCourses.map((course) => `   • ${course}`).join('\n');
+    // Build dynamic course list from database (cap display length for readability)
+    const displayedCourses = sampleCourses.slice(0, 30);
+    const hiddenCourseCount = sampleCourses.length - displayedCourses.length;
+    const courseListText = [
+      ...displayedCourses.map((course) => `   • ${course}`),
+      ...(hiddenCourseCount > 0 ? [`   • ...and ${hiddenCourseCount} more`] : []),
+    ].join('\n');
 
     const instructions = [
       `Welcome ${partnerName}! Please follow these guidelines:`,
@@ -791,6 +813,7 @@ const generateDynamicTemplate = async (
       }
     }
 
+    sanitizeWorkbookForExcelCompatibility(workbook);
     return workbook;
   } catch (error) {
     console.error('Template generation error:', error);
@@ -819,11 +842,14 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
       views: [{ state: 'frozen', ySplit: 1 }],
     });
 
-    // B5 column order: 5 pre-filled locked + 6 editable
+    // B5 column order: 7 pre-filled locked + 6 editable (13 total)
+    // Columns 1-3: IDs | 4-5: Batch dates (NEW) | 6-7: Student info | 8-13: Editable
     worksheet.columns = [
       { header: 'Center ID', key: 'centerId', width: 22 },
       { header: 'Student ID', key: 'studentId', width: 22 },
       { header: 'Batch ID', key: 'batchId', width: 22 },
+      { header: 'Batch Start Date', key: 'batchStartDate', width: 18 },
+      { header: 'Batch End Date', key: 'batchEndDate', width: 18 },
       { header: 'Student Name', key: 'studentName', width: 28 },
       { header: 'Father Name', key: 'fatherName', width: 25 },
       { header: 'Employment Status', key: 'empStatus', width: 22 },
@@ -840,12 +866,12 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
     headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     headerRow.height = 32;
 
-    // Green for pre-filled locked cols (1-5), teal for editable cols (6-11)
+    // Dark green for pre-filled locked cols (1-7), teal for editable cols (8-13)
     headerRow.eachCell((cell, colNumber) => {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: colNumber <= 5 ? 'FF1F7A45' : 'FF00B050' },
+        fgColor: { argb: colNumber <= 7 ? 'FF1F7A45' : 'FF00B050' },
       };
       cell.border = {
         top: { style: 'thin', color: { argb: 'FF000000' } },
@@ -854,25 +880,15 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
         right: { style: 'thin', color: { argb: 'FF000000' } },
       };
       // Mark locked columns with 🔒 in note
-      if (colNumber <= 5) {
-        cell.note = {
-          texts: [{ font: { bold: true, size: 9 }, text: '🔒 Pre-filled — Do not edit' }],
-        };
-      }
+      // Note: cell.note intentionally removed — ExcelJS generates invalid XML for notes
+      // which causes Excel to show "We found a problem with some content" error.
     });
 
     // ── Worksheet protection (B6) ─────────────────────────────────────────────
-    // Protect sheet but allow selecting unlocked cells (editable cols)
-    await worksheet.protect('', {
-      selectLockedCells: true,
-      selectUnlockedCells: true,
-      formatColumns: false,
-      formatRows: false,
-      insertRows: false,
-      deleteRows: false,
-      sort: false,
-      autoFilter: false,
-    });
+    // Set default cell protection to locked=false so only explicitly locked cells are locked
+    worksheet.properties.defaultColWidth = undefined;
+    // We do NOT call worksheet.protect() — it generates XML that older Excel versions reject.
+    // Instead we rely on per-cell protection markers only (harmless without sheet password).
 
     const EMPLOYMENT_STATUS_OPTIONS = [
       'Employed',
@@ -891,20 +907,24 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
         centerId: student.center_csv_id || '',
         studentId: student.partner_student_id || '',
         batchId: student.batch_number || '',
+        batchStartDate: formatExcelDate(student.batch_start_date) || '',
+        batchEndDate: formatExcelDate(student.batch_end_date) || '',
         studentName: student.student_name || '',
         fatherName: student.father_name || '',
-        // editable cols initially empty
-        empStatus: '',
-        companyName: '',
-        companyLoc: '',
-        dateJoining: '',
-        designation: '',
-        salary: '',
+        // Pre-fill employment columns if the student already has an approved record
+        empStatus: student.existing_emp_status || '',
+        companyName: student.existing_company_name || '',
+        companyLoc: student.existing_company_location || '',
+        dateJoining: formatExcelDate(student.existing_date_of_joining) || '',
+        designation: student.existing_designation || '',
+        salary: student.existing_salary != null ? student.existing_salary : '',
       });
 
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        if (colNumber <= 5) {
-          // B6: lock pre-filled cells
+      // Only touch the 13 defined columns — never iterate includeEmpty beyond defined range
+      for (let colNumber = 1; colNumber <= 13; colNumber++) {
+        const cell = row.getCell(colNumber);
+        if (colNumber <= 7) {
+          // B6: lock pre-filled cells (cols 1-7)
           cell.protection = { locked: true };
           cell.fill = {
             type: 'pattern',
@@ -914,8 +934,8 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
         } else {
           // unlock editable cells
           cell.protection = { locked: false };
-          if (colNumber === 6) {
-            // Employment Status dropdown
+          if (colNumber === 8) {
+            // Employment Status dropdown (col 8)
             cell.dataValidation = {
               type: 'list',
               allowBlank: false,
@@ -937,7 +957,7 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
           bottom: { style: 'thin', color: { argb: 'FFD3D3D3' } },
           right: { style: 'thin', color: { argb: 'FFD3D3D3' } },
         };
-      });
+      }
     });
 
     // ── Instructions sheet ────────────────────────────────────────────────────
@@ -951,13 +971,13 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
       '',
       '📋 HOW TO USE THIS TEMPLATE:',
       '',
-      '1. Columns A–E (dark green header) are PRE-FILLED and LOCKED.',
-      '   - Center ID, Student ID, Batch ID, Student Name, Father Name are read-only.',
+      '1. Columns A–G (dark green header) are PRE-FILLED and LOCKED.',
+      '   - Center ID, Student ID, Batch ID, Batch Start Date, Batch End Date, Student Name, Father Name are read-only.',
       '   - These are fetched from your approved student records.',
       '',
-      '2. Columns F–K (light green header) are EDITABLE — fill in employment details.',
+      '2. Columns H–M (light green header) are EDITABLE — fill in employment details.',
       '',
-      '3. Employment Status (Column F) — select from dropdown:',
+      '3. Employment Status (Column H) — select from dropdown:',
       '   Employed | Self-Employed | Entrepreneur | Further Education | Higher Study | NA',
       '   Note: If status is NA, Company Name, Salary and other fields become optional.',
       '',
@@ -984,6 +1004,7 @@ const generatePrefilledEmploymentTemplate = async (students = [], partnerName = 
       }
     });
 
+    sanitizeWorkbookForExcelCompatibility(workbook);
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer;
   } catch (error) {
@@ -1036,6 +1057,7 @@ module.exports = {
   parseExcelFile,
   validateHeaders,
   formatExcelDate,
+  sanitizeWorkbookForExcelCompatibility,
   generateDynamicTemplate,
   generateEmploymentTemplate,
   generatePrefilledEmploymentTemplate,

@@ -47,9 +47,10 @@ import {
 
 const OrganizationPartnersPage = ({ embedded = false }) => {
   const { user } = useSelector((state) => state.auth);
-  const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(user?.role);
+  const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(
+    user?.role,
+  );
   const [partners, setPartners] = useState([]);
-  const [filteredPartners, setFilteredPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilters, setActiveFilters] = useState({
@@ -67,6 +68,9 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
   const [loadingPartnerDetails, setLoadingPartnerDetails] = useState(false);
   const [showBlockedDeleteDialog, setShowBlockedDeleteDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
+  const [table, setTable] = useState(null);
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -88,14 +92,12 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       );
 
       setPartners(approvedPartners);
-      setFilteredPartners(approvedPartners);
     } catch (error) {
       console.error("Error fetching partners:", error);
       toast.error(
         error.message || "Failed to fetch partners. Please try again.",
       );
       setPartners([]);
-      setFilteredPartners([]);
     } finally {
       setLoading(false);
     }
@@ -166,12 +168,12 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
 
   const handleExport = useCallback(() => {
     try {
-      if (filteredPartners.length === 0) {
+      if (filteredAndSortedPartners.length === 0) {
         toast.warn("No data to export.");
         return;
       }
 
-      const csvData = filteredPartners.map((partner) => ({
+      const csvData = filteredAndSortedPartners.map((partner) => ({
         "Partner Name": partner.name,
         "Partner ID": partner.partner_id || "",
         "Organization Type": partner.organization_type || "",
@@ -208,11 +210,11 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       console.error("Error exporting:", error);
       toast.error("Failed to export data. Please try again.");
     }
-  }, [filteredPartners]);
+  }, [partners, searchTerm, activeFilters, sortBy, sortOrder]);
 
-  useEffect(() => {
+  const filteredAndSortedPartners = useMemo(() => {
     const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-    const nextFilteredPartners = partners.filter((partner) => {
+    const filtered = partners.filter((partner) => {
       const matchesSearch =
         !normalizedSearchTerm ||
         [partner.name, partner.partner_id, partner.organization_type]
@@ -241,24 +243,42 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       );
     });
 
-    setFilteredPartners(nextFilteredPartners);
-  }, [partners, searchTerm, activeFilters]);
+    if (!sortBy) return filtered;
+
+    return [...filtered].sort((a, b) => {
+      const aValue = a?.[sortBy];
+      const bValue = b?.[sortBy];
+
+      const aStr = String(aValue ?? "").toLowerCase();
+      const bStr = String(bValue ?? "").toLowerCase();
+
+      if (aStr < bStr) return sortOrder === "asc" ? -1 : 1;
+      if (aStr > bStr) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [partners, searchTerm, activeFilters, sortBy, sortOrder]);
+
+  const handleSortChange = (field, order) => {
+    setSortBy(field);
+    setSortOrder(order);
+    setCurrentPage(1);
+  };
 
   const paginatedPartners = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    return filteredPartners.slice(startIndex, endIndex);
-  }, [filteredPartners, currentPage, pageSize]);
+    return filteredAndSortedPartners.slice(startIndex, endIndex);
+  }, [filteredAndSortedPartners, currentPage, pageSize]);
 
   const paginationConfig = useMemo(() => {
-    const totalPages = Math.ceil(filteredPartners.length / pageSize);
+    const totalPages = Math.ceil(filteredAndSortedPartners.length / pageSize);
     return {
       page: currentPage,
       limit: pageSize,
-      total: filteredPartners.length,
+      total: filteredAndSortedPartners.length,
       totalPages: totalPages || 1,
     };
-  }, [filteredPartners.length, currentPage, pageSize]);
+  }, [filteredAndSortedPartners.length, currentPage, pageSize]);
 
   const handleViewPartner = useCallback((partner) => {
     setSelectedPartner(partner);
@@ -461,6 +481,19 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
     [partners],
   );
 
+  const sortOptions = useMemo(
+    () => [
+      { label: "Partner Name", value: "name" },
+      { label: "Partner ID", value: "partner_id" },
+      { label: "Organization Type", value: "organization_type" },
+      { label: "City", value: "city" },
+      { label: "State", value: "state" },
+      { label: "Status", value: "status" },
+      { label: "Total Centers", value: "total_centers" },
+    ],
+    [],
+  );
+
   const content = (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -561,6 +594,12 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
               setCurrentPage(1);
             }}
             filterGroups={filterGroups}
+            sortOptions={sortOptions}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={handleSortChange}
+            table={table}
+            storageKey="organization-partners"
             placeholder="Search partners by name, ID, or type..."
           />
 
@@ -576,6 +615,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
             isLoading={loading}
             emptyMessage="No partners found"
             storageKey="organization-partners-table"
+            onTableReady={setTable}
           />
         </>
       )}

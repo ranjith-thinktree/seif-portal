@@ -1,5 +1,6 @@
 const studentService = require('../services/student.service');
 const { successResponse, errorResponse } = require('../../../utils/response.util');
+const { sendExportResponse } = require('../../../utils/export.util');
 
 /**
  * Student Controller
@@ -23,6 +24,7 @@ class StudentController {
         city = '',
         state = '',
         course_name = '',
+        batch_year = '',
         sort_by = 'created_at',
         sort_order = 'desc',
       } = req.query;
@@ -49,6 +51,7 @@ class StudentController {
         city,
         state,
         course_name,
+        batch_year,
         sort_by,
         sort_order,
         role,
@@ -101,7 +104,14 @@ class StudentController {
    */
   async exportStudents(req, res) {
     try {
-      const { search = '', center_id = '', batch_id = '', partner_id = '' } = req.query;
+      const {
+        search = '',
+        center_id = '',
+        batch_id = '',
+        partner_id = '',
+        format = 'csv',
+        batch_year = '',
+      } = req.query;
 
       const { role, partner_id: userPartnerId } = req.user;
 
@@ -114,19 +124,26 @@ class StudentController {
           : [partner_id]
         : '';
 
-      const csv = await studentService.exportStudents({
+      const students = await studentService.exportStudents({
         search,
         center_id: centerIdFilter,
         batch_id: batchIdFilter,
         partner_id: partnerIdFilter,
+        batch_year,
         role,
         user_partner_id: userPartnerId,
       });
 
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename=students_${Date.now()}.csv`);
+      if (!students || students.length === 0) {
+        return successResponse(res, 'No students found for export', []);
+      }
 
-      return res.status(200).send(csv);
+      return sendExportResponse(res, students, {
+        format,
+        baseFileName: batch_year ? `students_${batch_year}` : 'students',
+        title: 'Students Report',
+        sheetName: 'Students',
+      });
     } catch (error) {
       console.error('Error in exportStudents controller:', error);
       return errorResponse(res, 'Failed to export students', 500);

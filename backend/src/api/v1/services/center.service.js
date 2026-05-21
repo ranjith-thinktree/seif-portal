@@ -7,6 +7,36 @@ const { convertToUUID } = require('../../../utils/uuid.util');
  * Handles all business logic for center management
  */
 class CenterService {
+  async generateUniqueCenterReadableId(partnerId) {
+    const [partnerRows] = await db.query('SELECT name FROM partners WHERE id = ? LIMIT 1', [
+      partnerId,
+    ]);
+
+    const partnerName =
+      partnerRows && partnerRows[0] && partnerRows[0].name ? partnerRows[0].name : 'CEN';
+    const letters = partnerName
+      .toUpperCase()
+      .replace(/[^A-Z]/g, '')
+      .slice(0, 3)
+      .padEnd(3, 'X');
+
+    const [existingRows] = await db.query('SELECT center_id FROM centers WHERE center_id LIKE ?', [
+      `${letters}-%`,
+    ]);
+
+    let maxNum = 0;
+    for (const row of existingRows) {
+      if (!row.center_id) continue;
+      const parts = row.center_id.split('-');
+      const n = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(n) && n > maxNum) {
+        maxNum = n;
+      }
+    }
+
+    return `${letters}-${String(maxNum + 1).padStart(3, '0')}`;
+  }
+
   /**
    * Get all centers with pagination, search, and filters
    * @param {Object} options - Query options
@@ -320,6 +350,8 @@ class CenterService {
         course_ids = [], // Array of course IDs
       } = centerData;
 
+      const readableCenterId = await this.generateUniqueCenterReadableId(partner_id);
+
       // Partners create centers with pending approval
       // Admins create centers with auto-approval
       const approval_status =
@@ -333,14 +365,15 @@ class CenterService {
       // Convert undefined to null for MySQL compatibility
       await db.query(
         `INSERT INTO centers (
-          id, partner_id, center_name, center_type, region,
+          id, center_id, partner_id, center_name, center_type, region,
           country_id, state_id, city_id, country, city, state, address,
           year_of_establishment, status, approval_status, center_head, mobile_number,
           email, latitude, longitude, refurbishment_eligible,
           refurbishment_frequency_months, last_refurbishment_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           centerId,
+          readableCenterId,
           partner_id || null,
           center_name || null,
           center_type || null,

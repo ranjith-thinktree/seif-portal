@@ -29,8 +29,8 @@ import ColumnVisibilityToggle from "./ColumnVisibilityToggle";
  * @param {array} suggestions - Array of suggestion objects: { value, label, type }
  */
 const AdvancedSearchBar = ({
-  value,
-  onChange,
+  value = "",
+  onChange = () => {},
   placeholder = "Search...",
   filterGroups = [],
   activeFilters = {},

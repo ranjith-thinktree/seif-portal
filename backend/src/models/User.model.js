@@ -53,8 +53,8 @@ class UserModel {
     const sql = `
       INSERT INTO users (
         id, email, password_hash, full_name, mobile_number, 
-        role, partner_id, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        role, partner_id, status, must_change_password, first_login, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
 
     const params = [
@@ -66,6 +66,8 @@ class UserModel {
       userData.role,
       userData.partner_id || null,
       userData.status || 'active',
+      userData.must_change_password !== undefined ? userData.must_change_password : true,
+      userData.first_login !== undefined ? userData.first_login : true,
     ];
 
     await query(sql, params);
@@ -148,8 +150,9 @@ class UserModel {
    * @param {String} id - User UUID
    */
   static async hardDelete(id) {
-    const sql = 'DELETE FROM users WHERE id = ?';
-    await query(sql, [id]);
+    // Delete notifications for this user first (no FK cascade on notifications table)
+    await query('DELETE FROM notifications WHERE recipient_id = ?', [id]);
+    await query('DELETE FROM users WHERE id = ?', [id]);
   }
 
   /**

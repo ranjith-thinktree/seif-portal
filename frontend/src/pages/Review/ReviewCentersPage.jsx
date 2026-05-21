@@ -49,6 +49,7 @@ const ReviewCentersPage = () => {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [duplicateConflicts, setDuplicateConflicts] = useState(null);
   const itemsPerPage = 10;
 
   // Breadcrumb items
@@ -307,17 +308,29 @@ const ReviewCentersPage = () => {
     }
 
     setIsProcessing(true);
+    setDuplicateConflicts(null);
 
-    const results = await Promise.allSettled(
-      selectedCenterIds.map((centerId) =>
-        reviewService.approveCenter(uploadId, centerId),
-      ),
-    );
+    // Process sequentially to avoid race condition in syncUploadLifecycle
+    let successful = 0;
+    let failed = 0;
+    let blockedByDuplicates = null;
+    for (const centerId of selectedCenterIds) {
+      try {
+        await reviewService.approveCenter(uploadId, centerId);
+        successful++;
+      } catch (error) {
+        const data = error?.response?.data;
+        if (data?.code === "DUPLICATE_STUDENTS") {
+          blockedByDuplicates = data;
+        } else {
+          failed++;
+        }
+      }
+    }
 
-    const successful = results.filter(
-      (result) => result.status === "fulfilled",
-    ).length;
-    const failed = results.length - successful;
+    if (blockedByDuplicates) {
+      setDuplicateConflicts(blockedByDuplicates);
+    }
 
     if (successful > 0) {
       showToast.success(
@@ -343,16 +356,17 @@ const ReviewCentersPage = () => {
 
     setIsProcessing(true);
 
-    const results = await Promise.allSettled(
-      selectedCenterIds.map((centerId) =>
-        reviewService.rejectCenter(uploadId, centerId, reason, remarks),
-      ),
-    );
-
-    const successful = results.filter(
-      (result) => result.status === "fulfilled",
-    ).length;
-    const failed = results.length - successful;
+    // Process sequentially to avoid race condition in syncUploadLifecycle
+    let successful = 0;
+    let failed = 0;
+    for (const centerId of selectedCenterIds) {
+      try {
+        await reviewService.rejectCenter(uploadId, centerId, reason, remarks);
+        successful++;
+      } catch {
+        failed++;
+      }
+    }
 
     if (successful > 0) {
       showToast.success(
@@ -399,6 +413,79 @@ const ReviewCentersPage = () => {
       <div className="space-y-6">
         {/* Breadcrumb */}
         <Breadcrumb items={breadcrumbItems} />
+
+        {/* Duplicate Students Conflict Panel */}
+        {duplicateConflicts && (
+          <div className="bg-red-50 border border-red-300 rounded-xl p-5 shadow-sm">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h2 className="text-base font-semibold text-red-800">
+                  Approval Blocked — Duplicate Students Detected
+                </h2>
+                <p className="text-sm text-red-700 mt-1">
+                  The following {duplicateConflicts.conflicts.length} student
+                  record(s) already exist in the system. Ask the partner to
+                  remove these rows and resubmit.
+                </p>
+              </div>
+              <button
+                onClick={() => setDuplicateConflicts(null)}
+                className="ml-4 text-red-400 hover:text-red-600 text-lg font-bold leading-none"
+                aria-label="Dismiss"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs text-red-900 border border-red-200 rounded-lg overflow-hidden">
+                <thead className="bg-red-100">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">#</th>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      Student Name
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      Father Name
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      Date of Birth
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      Course
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      Center
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      Existing ID
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">
+                      Existing Batch
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-red-100">
+                  {duplicateConflicts.conflicts.map((c, i) => (
+                    <tr key={i} className="bg-white even:bg-red-50">
+                      <td className="px-3 py-2">{i + 1}</td>
+                      <td className="px-3 py-2 font-medium">
+                        {c.student_name}
+                      </td>
+                      <td className="px-3 py-2">{c.father_name}</td>
+                      <td className="px-3 py-2">{c.date_of_birth}</td>
+                      <td className="px-3 py-2">{c.course_name}</td>
+                      <td className="px-3 py-2">{c.center_id}</td>
+                      <td className="px-3 py-2 font-mono">
+                        {c.existing_student_id}
+                      </td>
+                      <td className="px-3 py-2">{c.existing_batch || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -465,7 +552,7 @@ const ReviewCentersPage = () => {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {upload?.centers_total ?? 0}
+                {upload?.review_stats?.total_centers ?? 0}
               </p>
               <p className="text-xs text-gray-500">Total Centers</p>
             </div>
@@ -476,7 +563,7 @@ const ReviewCentersPage = () => {
             </div>
             <div>
               <p className="text-2xl font-bold text-yellow-700">
-                {(upload?.centers_total ?? 0) - (upload?.centers_reviewed ?? 0)}
+                {upload?.review_stats?.pending_centers ?? 0}
               </p>
               <p className="text-xs text-gray-500">Pending Review</p>
             </div>
@@ -487,7 +574,7 @@ const ReviewCentersPage = () => {
             </div>
             <div>
               <p className="text-2xl font-bold text-green-700">
-                {upload?.centers_approved ?? 0}
+                {upload?.review_stats?.approved_centers ?? 0}
               </p>
               <p className="text-xs text-gray-500">Approved</p>
             </div>
@@ -498,7 +585,7 @@ const ReviewCentersPage = () => {
             </div>
             <div>
               <p className="text-2xl font-bold text-red-700">
-                {upload?.centers_rejected ?? 0}
+                {upload?.review_stats?.rejected_centers ?? 0}
               </p>
               <p className="text-xs text-gray-500">Rejected</p>
             </div>
@@ -723,7 +810,7 @@ const ReviewCentersPage = () => {
                 currentPage={currentPage}
                 totalPages={totalPages}
                 itemsPerPage={itemsPerPage}
-                totalItems={upload?.centers_total || 0}
+                totalItems={upload?.review_stats?.total_centers || 0}
                 currentItemsCount={displayCenters.length}
                 onPageChange={setCurrentPage}
               />

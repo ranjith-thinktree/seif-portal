@@ -50,6 +50,13 @@ class ReviewService {
 
       upload.review_stats = statsRows[0];
 
+      // Override stale cached columns in data_uploads with live computed values
+      upload.centers_total = Number(statsRows[0].total_centers || 0);
+      upload.centers_approved = Number(statsRows[0].approved_centers || 0);
+      upload.centers_rejected = Number(statsRows[0].rejected_centers || 0);
+      upload.centers_reviewed =
+        Number(statsRows[0].approved_centers || 0) + Number(statsRows[0].rejected_centers || 0);
+
       return upload;
     } catch (error) {
       console.error('Error in getUploadForReview:', error);
@@ -477,6 +484,60 @@ class ReviewService {
         'SELECT * FROM uploaded_students WHERE uploaded_center_id = ? AND data_upload_id = ?',
         [centerUuid, uploadUuid]
       );
+
+      // ── Pre-flight duplicate scan ─────────────────────────────────────────
+      // Block the entire approval if any student already exists in production
+      // with the same partner + center + course + name + date_of_birth.
+      // A different course for the same student IS allowed (per-enrollment IDs).
+      const duplicateConflicts = [];
+      for (const student of students) {
+        const [existing] = await connection.query(
+          `SELECT s.partner_student_id, b.batch_number, c.center_id AS center_code
+           FROM students s
+           LEFT JOIN batches b ON b.id = s.batch_id
+           LEFT JOIN centers c ON c.id = s.center_id
+           WHERE s.partner_id = ?
+             AND s.center_id = ?
+             AND LOWER(s.course_name) = LOWER(?)
+             AND LOWER(s.student_name) = LOWER(?)
+             AND s.date_of_birth = ?
+           LIMIT 1`,
+          [
+            center.partner_id,
+            approvedCenterId,
+            student.course_name,
+            student.student_name,
+            student.date_of_birth,
+          ]
+        );
+        if (existing.length > 0) {
+          duplicateConflicts.push({
+            student_name: student.student_name,
+            father_name: student.father_name || '—',
+            date_of_birth: student.date_of_birth,
+            course_name: student.course_name,
+            center_id: center.csv_center_id || center.center_name,
+            existing_student_id: existing[0].partner_student_id,
+            existing_batch: existing[0].batch_number,
+          });
+        }
+      }
+      if (duplicateConflicts.length > 0) {
+        const lines = duplicateConflicts.map(
+          (c, i) =>
+            `  Row ${i + 1}: "${c.student_name}" (Father: ${c.father_name}, DOB: ${c.date_of_birth}) ` +
+            `for course "${c.course_name}" in center "${c.center_id}" ` +
+            `already exists as ID "${c.existing_student_id}" (batch: ${c.existing_batch || 'N/A'}).`
+        );
+        throw Object.assign(
+          new Error(
+            `Approval blocked — ${duplicateConflicts.length} student record(s) already exist in the system:\n${lines.join('\n')}\n\n` +
+              `Please ask the partner to remove these rows and resubmit.`
+          ),
+          { code: 'DUPLICATE_STUDENTS', conflicts: duplicateConflicts }
+        );
+      }
+      // ── End pre-flight duplicate scan ─────────────────────────────────────
 
       // Insert students
       for (const student of students) {

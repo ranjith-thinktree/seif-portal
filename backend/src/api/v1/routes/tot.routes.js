@@ -3,7 +3,11 @@ const router = express.Router();
 const totController = require('../controllers/tot.controller');
 const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
-const { uploadCSV, handleUploadError } = require('../../../middleware/upload.middleware');
+const {
+  uploadCSV,
+  uploadTotTrainerDocuments,
+  handleUploadError,
+} = require('../../../middleware/upload.middleware');
 
 /**
  * TOT Routes
@@ -37,6 +41,52 @@ router.get(
   authenticate,
   checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
   totController.getUploadDetails
+);
+
+router.get(
+  '/trainers',
+  authenticate,
+  checkRole([
+    'PARTNER',
+    'ADMIN',
+    'SUPER_ADMIN',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+  ]),
+  totController.getTrainers
+);
+
+router.get(
+  '/trainers/filter-options',
+  authenticate,
+  checkRole([
+    'PARTNER',
+    'ADMIN',
+    'SUPER_ADMIN',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+  ]),
+  totController.getTrainerFilterOptions
+);
+
+router.post(
+  '/trainers',
+  authenticate,
+  checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
+  uploadTotTrainerDocuments,
+  handleUploadError,
+  totController.createTrainer
+);
+
+router.post(
+  '/uploads/:id/trainers/:trainerId/documents',
+  authenticate,
+  checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
+  uploadTotTrainerDocuments,
+  handleUploadError,
+  totController.uploadTrainerDocuments
 );
 
 // Admin: all uploads

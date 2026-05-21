@@ -28,6 +28,9 @@ const courseRoutes = require('./course.routes');
 const tutorialRoutes = require('./tutorial.routes');
 const totRoutes = require('./tot.routes');
 const supportRoutes = require('./support.routes');
+const trainerRoutes = require('./trainer.routes');
+const trainerModuleRoutes = require('./trainer-module.routes');
+const reportRoutes = require('./report.routes');
 
 /**
  * API v1 Routes Index
@@ -61,6 +64,9 @@ router.use('/courses', courseRoutes);
 router.use('/tutorials', tutorialRoutes);
 router.use('/tot', totRoutes);
 router.use('/support-contacts', supportRoutes);
+router.use('/trainers', trainerRoutes);
+router.use('/trainer-modules', trainerModuleRoutes);
+router.use('/reports', reportRoutes);
 
 // Future routes will be added here:
 // router.use('/requests', requestRoutes);

@@ -1,6 +1,6 @@
 const partnerService = require('../services/partner.service');
 const { successResponse, errorResponse } = require('../../../utils/response.util');
-const { Parser } = require('json2csv');
+const { sendExportResponse } = require('../../../utils/export.util');
 
 /**
  * Partner Controller
@@ -208,7 +208,7 @@ class PartnerController {
    */
   async exportPartners(req, res) {
     try {
-      const { status, approval_status, search } = req.query;
+      const { status, approval_status, search, format = 'csv' } = req.query;
       const { role } = req.user;
 
       const partners = await partnerService.exportPartners({
@@ -222,15 +222,12 @@ class PartnerController {
         return errorResponse(res, 'No partners found to export', 404);
       }
 
-      // Convert to CSV
-      const parser = new Parser();
-      const csv = parser.parse(partners);
-
-      // Set headers for CSV download
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename=partners_${Date.now()}.csv`);
-
-      return res.send(csv);
+      return sendExportResponse(res, partners, {
+        format,
+        baseFileName: 'partners',
+        title: 'Partners Report',
+        sheetName: 'Partners',
+      });
     } catch (error) {
       console.error('Error in exportPartners:', error);
       return errorResponse(res, 'Failed to export partners', 500);

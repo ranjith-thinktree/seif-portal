@@ -345,7 +345,7 @@ const getNotificationById = async (notificationId, userId, role) => {
  */
 const createUploadNotification = async (uploadData) => {
   try {
-    const { uploadId, partnerId, partnerName, fileName, totalRecords } = uploadData;
+    const { uploadId, partnerId, partnerName, fileName, totalRecords, entityType } = uploadData;
 
     // Get all admin users
     const [admins] = await pool.query(
@@ -358,11 +358,14 @@ const createUploadNotification = async (uploadData) => {
 
     const adminIds = admins.map((admin) => admin.id);
 
+    const resolvedEntityType = entityType || 'data_upload';
+    const titlePrefix = resolvedEntityType === 'employment_upload' ? 'Employment ' : '';
+
     const notificationData = {
       recipientRole: 'admin',
       type: NOTIFICATION_TYPES.UPLOAD,
       alertType: ALERT_TYPES.INFO,
-      title: 'New Data Upload',
+      title: `New ${titlePrefix}Data Upload`,
       message: `${partnerName} has uploaded a new data file: ${fileName} (${totalRecords} records)`,
       remark: 'Requires review and approval',
       payload: {
@@ -372,7 +375,7 @@ const createUploadNotification = async (uploadData) => {
         fileName,
         totalRecords,
       },
-      relatedEntityType: 'data_upload',
+      relatedEntityType: resolvedEntityType,
       relatedEntityId: uploadId,
       sentVia: 'platform',
     };
@@ -391,8 +394,16 @@ const createUploadNotification = async (uploadData) => {
  */
 const createReviewNotification = async (reviewData) => {
   try {
-    const { uploadId, partnerId, partnerName, fileName, status, reviewerName, remarks } =
-      reviewData;
+    const {
+      uploadId,
+      partnerId,
+      partnerName,
+      fileName,
+      status,
+      reviewerName,
+      remarks,
+      entityType,
+    } = reviewData;
 
     // Get partner user ID
     const [partners] = await pool.query(
@@ -406,13 +417,15 @@ const createReviewNotification = async (reviewData) => {
 
     const statusText = status === 'approved' ? 'approved' : 'rejected';
     const alertType = status === 'approved' ? ALERT_TYPES.SUCCESS : ALERT_TYPES.ERROR;
+    const resolvedEntityType = entityType || 'data_upload';
+    const titlePrefix = resolvedEntityType === 'employment_upload' ? 'Employment ' : '';
 
     const notificationData = {
       recipientId: partners[0].id,
       recipientRole: 'partner',
       type: NOTIFICATION_TYPES.REVIEW,
       alertType,
-      title: `Upload ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`,
+      title: `${titlePrefix}Upload ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`,
       message: `Your upload "${fileName}" has been ${statusText} by ${reviewerName}`,
       remark: remarks || null,
       payload: {
@@ -421,7 +434,7 @@ const createReviewNotification = async (reviewData) => {
         reviewerName,
         remarks,
       },
-      relatedEntityType: 'data_upload',
+      relatedEntityType: resolvedEntityType,
       relatedEntityId: uploadId,
       sentVia: 'platform',
     };
@@ -547,6 +560,28 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
     const [refurbishmentResults] =
       role === 'PARTNER' ? await pool.query(refurbishmentQuery, params) : [[]];
 
+    // Employment upload notifications (rejected/approved by admin)
+    const employmentQuery = `
+      SELECT 
+        n.id,
+        n.related_entity_id as upload_id,
+        n.created_at,
+        n.type,
+        n.alert_type,
+        n.title,
+        n.message,
+        n.remark,
+        n.is_read,
+        n.payload,
+        eu.review_status as current_review_status,
+        'employment' as notification_type
+      FROM notifications n
+      LEFT JOIN employment_uploads eu ON eu.id = n.related_entity_id
+      ${whereClause}
+        AND n.related_entity_type = 'employment_upload'
+      ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
+    `;
+    const [employmentResults] = await pool.query(employmentQuery, params);
     // Process center notifications (simple format)
     const processedfCenterNotifications = centerNotifications.map((notif) => {
       const payload = notif.payload ? JSON.parse(notif.payload) : {};
@@ -664,11 +699,49 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       };
     });
 
-    // Merge center, refurbishment and upload notifications, sort by created_at
+    // Process employment upload notifications (individual, not grouped)
+    const processedEmploymentNotifications = employmentResults.map((notif) => {
+      const payload = notif.payload ? JSON.parse(notif.payload) : {};
+      const normalizedStatus =
+        notif.current_review_status === 'approved'
+          ? 'approved'
+          : notif.current_review_status === 'rejected'
+            ? 'rejected'
+            : 'pending';
+      const alertType =
+        normalizedStatus === 'approved'
+          ? 'success'
+          : normalizedStatus === 'rejected'
+            ? 'error'
+            : 'info';
+      return {
+        id: notif.id,
+        upload_id: notif.upload_id,
+        type: notif.type,
+        alert_type: alertType,
+        aggregated_status: normalizedStatus,
+        title: notif.title,
+        message: notif.message,
+        remark: notif.remark,
+        is_read: Boolean(notif.is_read),
+        created_at: notif.created_at,
+        related_entity_type: 'employment_upload',
+        related_entity_id: notif.upload_id,
+        notification_type: 'employment',
+        payload: {
+          ...payload,
+          uploadId: notif.upload_id,
+          review_status: normalizedStatus,
+        },
+      };
+    });
+
+    // Merge center, refurbishment, upload and employment notifications, sort by created_at
     const allNotifications = [
       ...processedfCenterNotifications,
       ...processedRefurbishmentNotifications,
       ...processedUploadNotifications,
+      ...processedEmploymentNotifications,
     ];
     allNotifications.sort((a, b) => {
       const dateA = new Date(a.created_at);
@@ -785,6 +858,15 @@ const getActualCenterStatus = async (uploadId) => {
  */
 const getUploadCenterDetails = async (uploadId, userId, role) => {
   try {
+    // First check if this is an employment upload (wrong endpoint)
+    const [empCheck] = await pool.query('SELECT id FROM employment_uploads WHERE id = ? LIMIT 1', [
+      uploadId,
+    ]);
+    if (empCheck.length > 0) {
+      // Employment uploads don't have center details — return empty gracefully
+      return { upload: null, centers: [], isEmploymentUpload: true };
+    }
+
     // Verify user has access to this upload
     const [uploads] = await pool.query(
       `SELECT du.* FROM data_uploads du

@@ -72,6 +72,7 @@ class UserService {
 
     // Create user
     const newUser = await UserModel.create({
+      id: uuidv4(),
       ...userData,
       password_hash: passwordHash,
       status: userData.status || 'active',
@@ -282,29 +283,39 @@ class UserService {
   }
 
   /**
-   * Generate temporary password
+   * Generate temporary password using cryptographically secure random bytes
    */
   static generateTempPassword() {
-    const length = 12;
-    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    const crypto = require('crypto');
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const digits = '0123456789';
+    const special = '!@#$%^&*';
+    const charset = upper + lower + digits + special;
+
+    const bytes = crypto.randomBytes(16);
+
+    // Guarantee at least one character from each required class
     let password = '';
+    password += upper[bytes[0] % upper.length];
+    password += lower[bytes[1] % lower.length];
+    password += digits[bytes[2] % digits.length];
+    password += special[bytes[3] % special.length];
 
-    // Ensure at least one of each type
-    password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
-    password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)];
-    password += '0123456789'[Math.floor(Math.random() * 10)];
-    password += '!@#$%^&*'[Math.floor(Math.random() * 8)];
-
-    // Fill the rest
-    for (let i = password.length; i < length; i++) {
-      password += charset[Math.floor(Math.random() * charset.length)];
+    // Fill remaining 8 characters
+    for (let i = 4; i < 12; i++) {
+      password += charset[bytes[i] % charset.length];
     }
 
-    // Shuffle
-    return password
-      .split('')
-      .sort(() => Math.random() - 0.5)
-      .join('');
+    // Shuffle with Fisher-Yates using fresh random bytes
+    const arr = password.split('');
+    const shuffleBytes = crypto.randomBytes(arr.length);
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = shuffleBytes[i] % (i + 1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+
+    return arr.join('');
   }
 
   /**

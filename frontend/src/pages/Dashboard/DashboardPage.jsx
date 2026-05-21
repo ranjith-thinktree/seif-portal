@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+﻿import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../../hooks";
 import { useNotifications } from "../../hooks/useNotifications";
 import { ROLES, ROLE_LABELS, ROUTES } from "../../constants";
@@ -183,7 +183,7 @@ const GenderBreakdownTooltip = ({ male, female, children }) => {
  * @param {array} graphData - Array of data points for chart: [{ value: 42 }, { value: 44 }, ...]
  */
 const StatCard = ({ title, value, trend = "up", graphData = [] }) => {
-  // ✅ Clean the title to create a valid SVG ID (no spaces)
+  // âœ… Clean the title to create a valid SVG ID (no spaces)
   const cleanId = title.replace(/\s+/g, "-").toLowerCase();
 
   const isUpTrend = trend === "up";
@@ -281,8 +281,7 @@ const StatCard = ({ title, value, trend = "up", graphData = [] }) => {
   );
 };
 
-const StatesUTsCard = ({ states, uts, utNames = [], graphData = [] }) => {
-  const [showUTList, setShowUTList] = useState(false);
+const StatesUTsCard = ({ states, uts, graphData = [] }) => {
   return (
     <div className="relative bg-white rounded-[16px] border border-[#A5A5A5] p-3 transition-shadow duration-300 min-h-[150px] flex flex-col">
       <div className="flex items-start justify-between mb-2">
@@ -312,43 +311,6 @@ const StatesUTsCard = ({ states, uts, utNames = [], graphData = [] }) => {
           <ArrowTrendingUpIcon className="h-4 w-4 text-[#10B981]" />
         </div>
       </div>
-
-      {utNames.length > 0 && (
-        <div className="mb-1">
-          <button
-            onClick={() => setShowUTList((v) => !v)}
-            className="text-[10px] text-[#009530] hover:underline focus:outline-none flex items-center gap-0.5"
-          >
-            {showUTList ? "Hide" : "Show"} UT names
-            <svg
-              className={`w-2.5 h-2.5 transition-transform ${showUTList ? "rotate-180" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-          {showUTList && (
-            <ul className="mt-1 space-y-0.5">
-              {utNames.map((name) => (
-                <li
-                  key={name}
-                  className="text-[10px] text-gray-600 flex items-center gap-1"
-                >
-                  <span className="w-1 h-1 rounded-full bg-[#009530] flex-shrink-0" />
-                  {name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
 
       <div
         className="mt-auto h-[40px] md:h-[40px] w-full"
@@ -417,13 +379,23 @@ const AdminDashboard = () => {
 
     if (!yearData) return null;
 
+    // For FY 2025-26, also include Jan-Mar 2026 data stored under "2026" key
+    const extra =
+      yearKey === "2025" && jsonData["2026"] ? jsonData["2026"] : null;
+
     return {
-      totalStudents: yearData.total_students || 0,
-      maleStudents: yearData.male || 0,
-      femaleStudents: yearData.female || 0,
-      totalEmployments: yearData.employment || 0,
-      totalCenters: yearData.tot || 0, // tot = total centers in JSON
+      totalStudents:
+        (yearData.total_students || 0) + (extra?.total_students || 0),
+      maleStudents: (yearData.male || 0) + (extra?.male || 0),
+      femaleStudents: (yearData.female || 0) + (extra?.female || 0),
+      totalEmployments: (yearData.employment || 0) + (extra?.employment || 0),
+      totalCenters: yearData.centers || 0, // centers field in JSON (tot = TOT trainers, not centers)
       totalStates: 28, // India has 28 states (fallback)
+      totalTot: (yearData.tot || 0) + (extra?.tot || 0),
+      edp: (yearData.edp || 0) + (extra?.edp || 0),
+      greaterIndia: (yearData.greater_india || 0) + (extra?.greater_india || 0),
+      nsi: (yearData.nsi || 0) + (extra?.nsi || 0),
+      alumni: (yearData.alumni || 0) + (extra?.alumni || 0),
       monthlyBreakdown: yearData.monthly
         ? Object.keys(yearData.monthly).map((month) => ({
             month:
@@ -457,10 +429,10 @@ const AdminDashboard = () => {
           selectedYear === "all" ? null : selectedYear,
         );
 
-        console.log("📊 Raw Establishment Response:", establishmentData);
-        console.log("📊 Establishment Data Type:", typeof establishmentData);
+        console.log("ðŸ“Š Raw Establishment Response:", establishmentData);
+        console.log("ðŸ“Š Establishment Data Type:", typeof establishmentData);
         console.log(
-          "📊 Establishment Data Keys:",
+          "ðŸ“Š Establishment Data Keys:",
           Object.keys(establishmentData || {}),
         );
 
@@ -469,9 +441,9 @@ const AdminDashboard = () => {
 
         setAnalytics(analyticsData);
 
-        console.log("✅ Analytics Data:", analyticsData);
+        console.log("âœ… Analytics Data:", analyticsData);
         console.log(
-          "✅ Establishment Years:",
+          "âœ… Establishment Years:",
           analyticsData.establishmentYears,
         );
 
@@ -480,9 +452,9 @@ const AdminDashboard = () => {
           setCourseBreakdown(analyticsData.courseBreakdown);
         }
       } catch (err) {
-        console.error("❌ Error fetching dashboard data:", err);
-        console.error("❌ Error details:", err.message);
-        console.error("❌ Error stack:", err.stack);
+        console.error("âŒ Error fetching dashboard data:", err);
+        console.error("âŒ Error details:", err.message);
+        console.error("âŒ Error stack:", err.stack);
         setError(err.message);
 
         // If API fails, use dashboardData.json as fallback
@@ -491,7 +463,7 @@ const AdminDashboard = () => {
           selectedYear,
         );
         if (fallbackData) {
-          console.log("⚠️ Using fallback data from dashboardData.json");
+          console.log("âš ï¸ Using fallback data from dashboardData.json");
           setAnalytics(fallbackData);
         }
       } finally {
@@ -534,8 +506,8 @@ const AdminDashboard = () => {
         };
       });
 
-      console.log("📊 Raw Establishment Data:", establishmentData);
-      console.log("📊 Cumulative Centers Growth:", cumulativeData);
+      console.log("ðŸ“Š Raw Establishment Data:", establishmentData);
+      console.log("ðŸ“Š Cumulative Centers Growth:", cumulativeData);
 
       return cumulativeData;
     } else {
@@ -556,13 +528,9 @@ const AdminDashboard = () => {
   const studentsTrendData = useMemo(() => {
     if (selectedYear === "all") {
       // Use year-wise totals from dashboardData.json (accurate yearly data)
-      // Calculate cumulative totals
+      // Calculate cumulative totals (from 2023 onwards, per user requirement)
+      // FY 2025-26 combines 2025 (Apr-Dec) + 2026 (Jan-Mar) data
       const yearlyData = [
-        {
-          year: "2022",
-          name: "2022-23",
-          students: dashboardData["2022"]?.total_students || 0,
-        },
         {
           year: "2023",
           name: "2023-24",
@@ -576,7 +544,9 @@ const AdminDashboard = () => {
         {
           year: "2025",
           name: "2025-26",
-          students: dashboardData["2025"]?.total_students || 0,
+          students:
+            (dashboardData["2025"]?.total_students || 0) +
+            (dashboardData["2026"]?.total_students || 0),
         },
       ];
 
@@ -589,12 +559,14 @@ const AdminDashboard = () => {
         };
       });
 
-      console.log("📊 Cumulative Students Trend:", cumulativeData);
+      console.log("ðŸ“Š Cumulative Students Trend:", cumulativeData);
 
       return cumulativeData;
     } else {
       // For specific year, use monthly data from dashboardData.json - also cumulative
-      const yearData = dashboardData[selectedYear];
+      // Extract calendar year key: "2025-26" -> "2025"
+      const yearKey = selectedYear.split("-")[0];
+      const yearData = dashboardData[yearKey];
       if (!yearData?.monthly) return [];
 
       // Convert monthly object to array format for chart with cumulative totals
@@ -625,7 +597,7 @@ const AdminDashboard = () => {
     const merged = {
       partners: combined(apiData.totalPartners || 0, "partners"),
       centers: combined(
-        apiData.totalCenters || jsonData?.totalCenters || 0,
+        apiData.totalCenters ?? jsonData?.totalCenters ?? 0,
         "centers",
       ),
       students: combined(
@@ -644,11 +616,11 @@ const AdminDashboard = () => {
       utNames: apiData.utNames || [],
       maleStudents: apiData.maleStudents || jsonData?.maleStudents || 0,
       femaleStudents: apiData.femaleStudents || jsonData?.femaleStudents || 0,
-      edpCount: combined(apiData.edpCount || 0, "edp"),
-      trainersCount: combined(0, "trainers_trained"),
-      greaterIndia: combined(0, "greater_india"),
-      nsi: combined(0, "nsi"),
-      alumni: combined(0, "alumni"),
+      edpCount: combined(apiData.edpCount || jsonData?.edp || 0, "edp"),
+      trainersCount: combined(jsonData?.totalTot || 0, "trainers_trained"),
+      greaterIndia: combined(jsonData?.greaterIndia || 0, "greater_india"),
+      nsi: combined(jsonData?.nsi || 0, "nsi"),
+      alumni: combined(jsonData?.alumni || 0, "alumni"),
     };
 
     // Attach visibility flags from kpiSettings (default all visible)
@@ -687,7 +659,6 @@ const AdminDashboard = () => {
             className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
           >
             <option value="all">All Years</option>
-            <option value="2022-23">2022-23</option>
             <option value="2023-24">2023-24</option>
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
@@ -935,7 +906,6 @@ const AdminDashboard = () => {
                     key={card.key}
                     states={combinedValues.states.toLocaleString()}
                     uts={combinedValues.uts.toLocaleString()}
-                    utNames={combinedValues.utNames}
                     graphData={card.graphData}
                   />
                 );
@@ -1122,7 +1092,6 @@ const PartnerDashboard = ({ userName }) => {
             className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
           >
             <option value="all">All Years</option>
-            <option value="2022-23">2022-23</option>
             <option value="2023-24">2023-24</option>
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
@@ -1282,7 +1251,6 @@ const SeifReadOnlyDashboard = ({ userName }) => {
             className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
           >
             <option value="all">All Years</option>
-            <option value="2022-23">2022-23</option>
             <option value="2023-24">2023-24</option>
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
@@ -1513,7 +1481,6 @@ const EssciDashboard = ({ userName }) => {
             className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
           >
             <option value="all">All Years</option>
-            <option value="2022-23">2022-23</option>
             <option value="2023-24">2023-24</option>
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
@@ -1535,7 +1502,7 @@ const EssciDashboard = ({ userName }) => {
             <div>
               <p className="text-xs text-gray-500">{label}</p>
               <p className="text-2xl font-bold text-gray-900">
-                {statsLoading ? "—" : value}
+                {statsLoading ? "â€”" : value}
               </p>
             </div>
           </div>

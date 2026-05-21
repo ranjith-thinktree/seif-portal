@@ -8,8 +8,8 @@ const partnerService = {
    * Save edited students data
    */
   saveEditedStudents: async (uploadId, centerId, data) => {
-    const response = await apiClient.put(
-      `/partners/uploads/${uploadId}/centers/${centerId}/students`,
+    const response = await apiClient.post(
+      `/partners/uploads/${uploadId}/centers/${centerId}/save-edits`,
       data,
     );
     return response.data;

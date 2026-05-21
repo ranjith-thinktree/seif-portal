@@ -407,29 +407,95 @@ class DashboardService {
       const totalStudents = studentsResult[0].total;
 
       // Get total states and UTs covered (separated)
-      const UNION_TERRITORIES = [
-        'Andaman and Nicobar Islands',
-        'Chandigarh',
-        'Dadra and Nagar Haveli and Daman and Diu',
-        'Delhi',
-        'National Capital Territory of Delhi',
-        'Jammu and Kashmir',
-        'Jammu & Kashmir',
-        'Ladakh',
-        'Lakshadweep',
-        'Puducherry',
-        'Pondicherry',
-      ];
+      // India has 28 states and 8 Union Territories (as of 2019 reorganisation)
+      // Canonical set of 28 Indian states (lowercase)
+      const INDIA_STATES = new Set([
+        'andhra pradesh',
+        'arunachal pradesh',
+        'assam',
+        'bihar',
+        'chhattisgarh',
+        'goa',
+        'gujarat',
+        'haryana',
+        'himachal pradesh',
+        'jharkhand',
+        'karnataka',
+        'kerala',
+        'madhya pradesh',
+        'maharashtra',
+        'manipur',
+        'meghalaya',
+        'mizoram',
+        'nagaland',
+        'odisha',
+        'punjab',
+        'rajasthan',
+        'sikkim',
+        'tamil nadu',
+        'telangana',
+        'tripura',
+        'uttar pradesh',
+        'uttarakhand',
+        'west bengal',
+      ]);
+      // Canonical set of 8 Indian UTs (lowercase)
+      const INDIA_UTS = new Set([
+        'andaman and nicobar islands',
+        'chandigarh',
+        'dadra and nagar haveli and daman and diu',
+        'delhi',
+        'jammu and kashmir',
+        'ladakh',
+        'lakshadweep',
+        'puducherry',
+      ]);
+      // Map known spelling variants / typos → canonical lowercase key
+      const STATE_VARIANTS = {
+        // States
+        maharastra: 'maharashtra',
+        orissa: 'odisha',
+        uttaranchal: 'uttarakhand',
+        pondicherry: 'puducherry',
+        // UTs
+        andaman: 'andaman and nicobar islands',
+        'andaman & nicobar': 'andaman and nicobar islands',
+        'andaman and nicobar': 'andaman and nicobar islands',
+        'andaman & nicobar islands': 'andaman and nicobar islands',
+        'new delhi': 'delhi',
+        'nct of delhi': 'delhi',
+        'nct delhi': 'delhi',
+        'national capital territory of delhi': 'delhi',
+        'j&k': 'jammu and kashmir',
+        'j & k': 'jammu and kashmir',
+        'jammu & kashmir': 'jammu and kashmir',
+        lakshdweep: 'lakshadweep',
+        'laccadive islands': 'lakshadweep',
+        pondichery: 'puducherry',
+        puducherri: 'puducherry',
+        'dadra and nagar haveli': 'dadra and nagar haveli and daman and diu',
+        'dadra & nagar haveli': 'dadra and nagar haveli and daman and diu',
+        'daman and diu': 'dadra and nagar haveli and daman and diu',
+        'daman & diu': 'dadra and nagar haveli and daman and diu',
+        'dadra & nagar haveli and daman & diu': 'dadra and nagar haveli and daman and diu',
+      };
+
       const [allStatesResult] = await db.query(
         `SELECT DISTINCT state FROM centers WHERE status = ? AND state IS NOT NULL`,
         ['active']
       );
-      const allStateNames = allStatesResult.map((r) => r.state || '');
-      const utNamesList = allStateNames.filter((s) =>
-        UNION_TERRITORIES.some((ut) => ut.toLowerCase() === s.toLowerCase())
-      );
-      const totalUTs = utNamesList.length;
-      const totalStates = allStateNames.length - totalUTs;
+      const stateSet = new Set();
+      const utSet = new Set();
+      allStatesResult.forEach((r) => {
+        const raw = (r.state || '').trim().toLowerCase();
+        const canonical = STATE_VARIANTS[raw] || raw;
+        if (INDIA_UTS.has(canonical)) utSet.add(canonical);
+        else if (INDIA_STATES.has(canonical)) stateSet.add(canonical);
+        // unknown/invalid entries are ignored
+      });
+      const utNamesList = [...utSet];
+      const totalUTs = utSet.size;
+      const totalStates = stateSet.size;
 
       // Get gender distribution
       const [genderResult] = await db.query(

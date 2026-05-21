@@ -35,9 +35,15 @@ import RefurbishmentDashboard from "../pages/Admin/RefurbishmentDashboard";
 import ForcedPasswordChangeGuard from "./ForcedPasswordChangeGuard";
 import UserManagementPage from "../pages/UserManagement/UserManagementPage";
 import OrganizationManagementPage from "../pages/OrganizationManagementPage";
+import PartnerOrganizationManagementPage from "../pages/PartnerOrganizationManagementPage";
 import CoursesManagementPage from "../pages/CoursesManagementPage";
 import EmploymentUploadPage from "../pages/EmploymentUploadPage";
-import EmploymentManagementPage from "../pages/Admin/EmploymentManagementPage";
+import ReviewEmploymentPage from "../pages/Employment/ReviewEmploymentPage";
+import AdminEmploymentCentersPage from "../pages/Employment/AdminEmploymentCentersPage";
+import AdminEmploymentRecordsPage from "../pages/Employment/AdminEmploymentRecordsPage";
+import RejectedEmploymentUploadsPage from "../pages/Employment/RejectedEmploymentUploadsPage";
+import PartnerRejectedEmploymentCentersPage from "../pages/Employment/PartnerRejectedEmploymentCentersPage";
+import PartnerReviewEmploymentPage from "../pages/Employment/PartnerReviewEmploymentPage";
 import MyDataPage from "../pages/Partner/MyDataPage";
 import MyRequestsPage from "../pages/Partner/MyRequestsPage";
 import CertificatesPage from "../pages/Partner/CertificatesPage";
@@ -45,6 +51,7 @@ import ESSCIDataPage from "../pages/ESSCI/ESSCIDataPage";
 import ESSCIBatchDetailPage from "../pages/ESSCI/ESSCIBatchDetailPage";
 import SettingsPage from "../pages/Settings/SettingsPage";
 import HelpPage from "../pages/Help/HelpPage";
+import ReportsPage from "../pages/Reports/ReportsPage";
 
 /**
  * Placeholder page wrapper with MainLayout
@@ -64,6 +71,12 @@ const ADMIN_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
 const SUPER_ADMIN_ONLY_ROLES = [ROLES.SUPER_ADMIN];
 // Admin pages that SEIF_READONLY and SEIF_READONLY_DOWNLOAD can view (read-only)
 const ADMIN_READONLY_ROLES = [
+  ROLES.ADMIN,
+  ROLES.SUPER_ADMIN,
+  ROLES.SEIF_READONLY,
+  ROLES.SEIF_READONLY_DOWNLOAD,
+];
+const REPORTING_ROLES = [
   ROLES.ADMIN,
   ROLES.SUPER_ADMIN,
   ROLES.SEIF_READONLY,
@@ -271,6 +284,15 @@ const AppRoutes = () => {
           />
 
           <Route
+            path={ROUTES.PARTNER_ORGANIZATION_MANAGEMENT}
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.PARTNER]}>
+                <PartnerOrganizationManagementPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path={ROUTES.UPLOAD_DATA}
             element={
               <ProtectedRoute>
@@ -298,10 +320,52 @@ const AppRoutes = () => {
           />
 
           <Route
-            path={ROUTES.EMPLOYMENT_MANAGEMENT}
+            path={ROUTES.EMPLOYMENT_REVIEW}
             element={
               <ProtectedRoute allowedRoles={ADMIN_ROLES}>
-                <EmploymentManagementPage />
+                <ReviewEmploymentPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.EMPLOYMENT_REVIEW_CENTERS}
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                <AdminEmploymentCentersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.EMPLOYMENT_REVIEW_RECORDS}
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                <AdminEmploymentRecordsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Partner: Employment Edit & Resubmit Flow */}
+          <Route
+            path={ROUTES.PARTNER_REJECTED_EMPLOYMENT_UPLOADS}
+            element={
+              <ProtectedRoute>
+                <RejectedEmploymentUploadsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.PARTNER_REJECTED_EMPLOYMENT_CENTERS}
+            element={
+              <ProtectedRoute>
+                <PartnerRejectedEmploymentCentersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.PARTNER_REVIEW_EMPLOYMENT}
+            element={
+              <ProtectedRoute>
+                <PartnerReviewEmploymentPage />
               </ProtectedRoute>
             }
           />
@@ -399,8 +463,8 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.REPORTS}
             element={
-              <ProtectedRoute>
-                <PlaceholderPage title="Reports" />
+              <ProtectedRoute allowedRoles={REPORTING_ROLES}>
+                <ReportsPage />
               </ProtectedRoute>
             }
           />

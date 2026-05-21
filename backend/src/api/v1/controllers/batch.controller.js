@@ -1,5 +1,6 @@
 const batchService = require('../services/batch.service');
 const { successResponse, errorResponse } = require('../../../utils/response.util');
+const { sendExportResponse } = require('../../../utils/export.util');
 
 /**
  * Batch Controller
@@ -75,7 +76,7 @@ class BatchController {
         return errorResponse(res, 'Access denied', 403);
       }
 
-      return successResponse(res, batch, 'Batch retrieved successfully');
+      return successResponse(res, 'Batch retrieved successfully', batch);
     } catch (error) {
       console.error('Error in getBatchById controller:', error);
       return errorResponse(res, 'Failed to retrieve batch', 500);
@@ -190,7 +191,7 @@ class BatchController {
         }
       }
 
-      return successResponse(res, batches, 'Batches retrieved successfully');
+      return successResponse(res, 'Batches retrieved successfully', batches);
     } catch (error) {
       console.error('Error in getBatchesByCenter controller:', error);
       return errorResponse(res, 'Failed to retrieve batches', 500);
@@ -221,7 +222,13 @@ class BatchController {
    */
   async exportBatches(req, res) {
     try {
-      const { search = '', status = '', center_id = '', partner_id = '' } = req.query;
+      const {
+        search = '',
+        status = '',
+        center_id = '',
+        partner_id = '',
+        format = 'csv',
+      } = req.query;
 
       const { role, partner_id: userPartnerId } = req.user;
 
@@ -242,40 +249,15 @@ class BatchController {
         user_partner_id: userPartnerId,
       });
 
-      // Convert to CSV format
       if (!batches || batches.length === 0) {
         return successResponse(res, 'No batches found for export', []);
       }
-
-      // Get headers from first row
-      const headers = Object.keys(batches[0]);
-      const csvRows = [];
-
-      // Add header row
-      csvRows.push(headers.join(','));
-
-      // Add data rows
-      for (const batch of batches) {
-        const values = headers.map((header) => {
-          const value = batch[header];
-          // Handle null/undefined
-          if (value === null || value === undefined) return '';
-          // Escape quotes and wrap in quotes if contains comma/quote/newline
-          const escaped = String(value).replace(/"/g, '""');
-          return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
-        });
-        csvRows.push(values.join(','));
-      }
-
-      const csvContent = csvRows.join('\n');
-
-      // Set headers for CSV download
-      const today = new Date().toISOString().split('T')[0];
-      const filename = `batches_export_${today}.csv`;
-
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.status(200).send(csvContent);
+      return sendExportResponse(res, batches, {
+        format,
+        baseFileName: 'batches',
+        title: 'Batches Report',
+        sheetName: 'Batches',
+      });
     } catch (error) {
       console.error('Error in exportBatches controller:', error);
       return errorResponse(res, 'Failed to export batches', 500);
