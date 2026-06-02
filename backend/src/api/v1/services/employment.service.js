@@ -12,6 +12,8 @@ const VALID_EMPLOYMENT_STATUSES = [
   'NA',
 ];
 
+const EMPLOYED_STATUSES = new Set(['Employed', 'Self-Employed', 'Entrepreneur']);
+
 class EmploymentService {
   /**
    * Process employment upload from pre-parsed CSV data
@@ -951,6 +953,139 @@ class EmploymentService {
     } catch (error) {
       console.error('Error in getApprovedEmploymentRecords:', error);
       throw error;
+    }
+  }
+
+  async getEmploymentRecordById(id) {
+    const employmentId = convertToUUID(id);
+    const [rows] = await db.query(
+      `SELECT e.*, s.student_name, s.partner_student_id, s.center_id,
+              c.center_name, p.name as partner_name,
+              u.full_name as verified_by_name
+       FROM employment e
+       INNER JOIN students s ON e.student_id = s.id
+       LEFT JOIN centers c ON s.center_id = c.id
+       LEFT JOIN partners p ON e.partner_id = p.id
+       LEFT JOIN users u ON e.verified_by = u.id
+       WHERE e.id = ?
+       LIMIT 1`,
+      [employmentId]
+    );
+
+    return rows[0] || null;
+  }
+
+  async updateEmploymentRecord(id, data) {
+    const employmentId = convertToUUID(id);
+    const connection = await db.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [existingRows] = await connection.query(
+        'SELECT id, student_id, employment_status FROM employment WHERE id = ?',
+        [employmentId]
+      );
+
+      if (existingRows.length === 0) {
+        throw new Error('Employment record not found');
+      }
+
+      const fieldMap = {
+        employment_status: 'employment_status',
+        company_name: 'company_name',
+        company_location: 'company_location',
+        designation: 'designation',
+        date_of_joining: 'date_of_joining',
+        salary_per_month: 'salary_per_month',
+      };
+
+      const fields = [];
+      const values = [];
+
+      Object.entries(fieldMap).forEach(([inputKey, column]) => {
+        if (data[inputKey] !== undefined) {
+          if (inputKey === 'employment_status') {
+            const normalized = String(data[inputKey]).trim();
+            if (!VALID_EMPLOYMENT_STATUSES.includes(normalized)) {
+              throw new Error('Invalid employment status');
+            }
+            fields.push(`${column} = ?`);
+            values.push(normalized);
+            return;
+          }
+
+          fields.push(`${column} = ?`);
+          values.push(data[inputKey] === '' ? null : data[inputKey]);
+        }
+      });
+
+      if (fields.length > 0) {
+        values.push(employmentId);
+        await connection.query(
+          `UPDATE employment SET ${fields.join(', ')}, updated_at = NOW() WHERE id = ?`,
+          values
+        );
+      }
+
+      const [currentRows] = await connection.query(
+        'SELECT student_id, employment_status FROM employment WHERE id = ?',
+        [employmentId]
+      );
+
+      if (currentRows.length > 0 && currentRows[0].student_id) {
+        const nextStatus = EMPLOYED_STATUSES.has(currentRows[0].employment_status)
+          ? 'employed'
+          : null;
+        await connection.query('UPDATE students SET employment_status = ?, updated_at = NOW() WHERE id = ?', [
+          nextStatus,
+          currentRows[0].student_id,
+        ]);
+      }
+
+      await connection.commit();
+      return this.getEmploymentRecordById(id);
+    } catch (error) {
+      await connection.rollback();
+      console.error('Error in updateEmploymentRecord:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async deleteEmploymentRecord(id) {
+    const employmentId = convertToUUID(id);
+    const connection = await db.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [existingRows] = await connection.query(
+        'SELECT id, student_id FROM employment WHERE id = ?',
+        [employmentId]
+      );
+
+      if (existingRows.length === 0) {
+        throw new Error('Employment record not found');
+      }
+
+      if (existingRows[0].student_id) {
+        await connection.query(
+          'UPDATE students SET employment_status = NULL, updated_at = NOW() WHERE id = ?',
+          [existingRows[0].student_id]
+        );
+      }
+
+      await connection.query('DELETE FROM employment WHERE id = ?', [employmentId]);
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      console.error('Error in deleteEmploymentRecord:', error);
+      throw error;
+    } finally {
+      connection.release();
     }
   }
 

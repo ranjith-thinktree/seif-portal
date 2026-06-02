@@ -35,6 +35,10 @@ const EXPECTED_COLUMNS = [
   'Student State',
 ];
 
+// Expected TOT Upload columns — only the 3 required columns need to be present
+// (others like DOB, Gender, etc. are optional but included in the template)
+const EXPECTED_TOT_COLUMNS = ['TOT Center', 'Trainer Module Trained', 'First Name'];
+
 // Expected Employment Upload columns (11 columns - B5 reordered)
 // Pre-filled locked cols: Center ID, Student ID, Batch ID, Student Name, Father Name
 // Editable cols: Employment Status, Company Name, Location, Date, Designation, Salary
@@ -245,7 +249,11 @@ const validateHeaders = (headers, uploadType = 'students') => {
 
   // Choose expected columns based on upload type
   const expectedColumns =
-    uploadType === 'employment' ? EXPECTED_EMPLOYMENT_COLUMNS : EXPECTED_COLUMNS;
+    uploadType === 'employment'
+      ? EXPECTED_EMPLOYMENT_COLUMNS
+      : uploadType === 'tot'
+        ? EXPECTED_TOT_COLUMNS
+        : EXPECTED_COLUMNS;
 
   const normalizedExpected = expectedColumns.map((c) => c.trim());
 
@@ -1067,4 +1075,5 @@ module.exports = {
   validateFile,
   EXPECTED_COLUMNS,
   EXPECTED_EMPLOYMENT_COLUMNS,
+  EXPECTED_TOT_COLUMNS,
 };

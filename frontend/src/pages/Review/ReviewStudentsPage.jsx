@@ -641,25 +641,6 @@ const ReviewStudentsPage = () => {
 
   const columnDefs = useMemo(
     () => [
-      // Checkbox selection column — only in edit mode
-      ...(isEditMode
-        ? [
-            {
-              colId: "checkbox_select",
-              checkboxSelection: true,
-              headerCheckboxSelection: true,
-              width: 52,
-              minWidth: 52,
-              maxWidth: 52,
-              pinned: "left",
-              editable: false,
-              suppressHeaderMenuButton: true,
-              lockPosition: true,
-              resizable: false,
-              headerClass: "ag-checkbox-header",
-            },
-          ]
-        : []),
       {
         headerName: "S.NO",
         colId: "row_number",
@@ -1449,7 +1430,16 @@ const ReviewStudentsPage = () => {
                 rowData={filteredAndSortedStudents}
                 columnDefs={columnDefs}
                 getRowId={(params) => params.data.id}
-                rowSelection={isEditMode ? "multiple" : undefined}
+                rowSelection={
+                  isEditMode
+                    ? {
+                        mode: "multiRow",
+                        checkboxes: true,
+                        headerCheckbox: true,
+                        enableClickSelection: false,
+                      }
+                    : undefined
+                }
                 defaultColDef={{
                   sortable: false,
                   filter: false,

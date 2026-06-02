@@ -31,7 +31,6 @@ export const NotificationProvider = ({ children }) => {
     const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
 
     if (!token) {
-      console.log("No auth token, skipping socket connection");
       return;
     }
 
@@ -75,11 +74,32 @@ export const NotificationProvider = ({ children }) => {
     newSocket.on("notification:new", (data) => {
       console.log("🔔 New notification received:", data);
 
-      // Add to notifications list
-      setNotifications((prev) => [data, ...prev]);
+      Promise.all([
+        getGroupedNotifications({
+          page: 1,
+          limit: 10,
+          sortBy: "newest",
+        }),
+        getUnreadCount(),
+      ])
+        .then(([notificationsResponse, countResponse]) => {
+          if (notificationsResponse?.data) {
+            setNotifications(notificationsResponse.data);
+          }
 
-      // Increment unread count
-      setUnreadCount((prev) => prev + 1);
+          if (countResponse?.count !== undefined) {
+            setUnreadCount(countResponse.count);
+          }
+        })
+        .catch((error) => {
+          if (error?.response?.status === 401) {
+            return;
+          }
+          console.error(
+            "❌ Failed to refresh notifications after socket event:",
+            error,
+          );
+        });
 
       // Show toast notification
       toast.info(data.title, {
@@ -94,8 +114,10 @@ export const NotificationProvider = ({ children }) => {
       // Update notification in list
       setNotifications((prev) =>
         prev.map((notif) =>
-          notif.id === data.notificationId ? { ...notif, is_read: true } : notif
-        )
+          notif.id === data.notificationId
+            ? { ...notif, is_read: true }
+            : notif,
+        ),
       );
 
       // Decrement unread count
@@ -159,8 +181,8 @@ export const NotificationProvider = ({ children }) => {
   const markNotificationAsRead = useCallback((notificationId) => {
     setNotifications((prev) =>
       prev.map((notif) =>
-        notif.id === notificationId ? { ...notif, is_read: true } : notif
-      )
+        notif.id === notificationId ? { ...notif, is_read: true } : notif,
+      ),
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
   }, []);
@@ -170,7 +192,7 @@ export const NotificationProvider = ({ children }) => {
    */
   const markAllNotificationsAsRead = useCallback(() => {
     setNotifications((prev) =>
-      prev.map((notif) => ({ ...notif, is_read: true }))
+      prev.map((notif) => ({ ...notif, is_read: true })),
     );
     setUnreadCount(0);
   }, []);
@@ -216,6 +238,9 @@ export const NotificationProvider = ({ children }) => {
         setUnreadCount(countResponse.count);
       }
     } catch (error) {
+      if (error?.response?.status === 401) {
+        return;
+      }
       console.error("❌ Failed to fetch notifications:", error);
     }
   }, []);

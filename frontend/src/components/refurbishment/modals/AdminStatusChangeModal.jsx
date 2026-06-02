@@ -123,11 +123,14 @@ export default function AdminStatusChangeModal({
   };
 
   const uploadFile = async (item) => {
-    const { data: presigned } = await apiClient.post("/upload/presigned-url", {
-      fileName: item.file.name,
-      fileType: item.file.type,
-      folder: "refurbishment-admin-completion",
-    });
+    const { data: presigned } = await apiClient.post(
+      "/admin/refurbishment/upload-url",
+      {
+        fileName: item.file.name,
+        fileType: item.file.type,
+        folder: "refurbishment-admin-completion",
+      },
+    );
     await fetch(presigned.uploadUrl, {
       method: "PUT",
       body: item.file,

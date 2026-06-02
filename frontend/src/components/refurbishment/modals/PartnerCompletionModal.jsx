@@ -65,11 +65,14 @@ export default function PartnerCompletionModal({
   // ── Upload to S3 via presigned URL ──────────────────────────────────────
   const uploadFile = async (item) => {
     // Request a presigned upload URL from backend
-    const { data: presigned } = await apiClient.post("/upload/presigned-url", {
-      fileName: item.file.name,
-      fileType: item.file.type,
-      folder: "refurbishment-completion",
-    });
+    const { data: presigned } = await apiClient.post(
+      "/partner/refurbishment/upload-url",
+      {
+        fileName: item.file.name,
+        fileType: item.file.type,
+        folder: "refurbishment-completion",
+      },
+    );
     // Upload directly to S3
     await fetch(presigned.uploadUrl, {
       method: "PUT",

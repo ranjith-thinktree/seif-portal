@@ -21,6 +21,7 @@ import SuccessModal from "../../components/common/SuccessModal";
 import RejectionModal from "../../components/common/RejectionModal";
 import Breadcrumb from "../../components/common/Breadcrumb";
 import { showToast } from "../../utils/toast.util";
+import { ROUTES } from "../../constants/routes";
 
 /**
  * Review Page - Two Tab System
@@ -888,6 +889,20 @@ const ReviewPage = () => {
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() =>
+                                    navigate(
+                                      ROUTES.REVIEW_TOT_UPLOAD.replace(
+                                        ":uploadId",
+                                        upload.id,
+                                      ),
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-700 text-sm font-medium rounded-lg hover:bg-primary-100 border border-primary-200 transition-colors"
+                                >
+                                  Review Details
+                                  <ChevronRightIcon className="h-4 w-4" />
+                                </button>
                                 <button
                                   onClick={() => {
                                     setSelectedItem(upload);

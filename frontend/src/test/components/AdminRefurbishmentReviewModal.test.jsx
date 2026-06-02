@@ -281,7 +281,7 @@ describe("AdminRefurbishmentReviewModal Component", () => {
       fireEvent.click(screen.getByText("Package 3").closest("button")); // add
       await waitFor(() => screen.getByText("Admin Added"));
 
-      fireEvent.click(screen.getByRole("button", { name: /Remove/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^Remove$/i }));
       await waitFor(() =>
         expect(screen.queryByText("Admin Added")).not.toBeInTheDocument(),
       );

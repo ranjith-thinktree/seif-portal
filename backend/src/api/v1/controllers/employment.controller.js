@@ -1163,6 +1163,54 @@ exports.addEmploymentRecord = async (req, res) => {
   }
 };
 
+/**
+ * Update an approved employment record
+ * PUT /api/v1/employment/admin/records/:id
+ */
+exports.updateEmploymentRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedRecord = await employmentService.updateEmploymentRecord(id, req.body);
+
+    res.json({
+      success: true,
+      message: 'Employment record updated successfully',
+      data: updatedRecord,
+    });
+  } catch (error) {
+    console.error('Error in updateEmploymentRecord:', error);
+    const status = error.message === 'Employment record not found' ? 404 : 500;
+    res.status(status).json({
+      success: false,
+      message: error.message || 'Failed to update employment record',
+    });
+  }
+};
+
+/**
+ * Delete an approved employment record
+ * DELETE /api/v1/employment/admin/records/:id
+ */
+exports.deleteEmploymentRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await employmentService.deleteEmploymentRecord(id);
+
+    res.json({
+      success: true,
+      message: 'Employment record deleted successfully',
+      data: null,
+    });
+  } catch (error) {
+    console.error('Error in deleteEmploymentRecord:', error);
+    const status = error.message === 'Employment record not found' ? 404 : 500;
+    res.status(status).json({
+      success: false,
+      message: error.message || 'Failed to delete employment record',
+    });
+  }
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // PARTNER: Edit & Resubmit Rejected Employment Uploads
 // ────────────────────────────────────────────────────────────────────────────

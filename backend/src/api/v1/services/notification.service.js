@@ -26,6 +26,18 @@ const ALERT_TYPES = {
   ERROR: 'error',
 };
 
+const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'admin'];
+
+const buildInboxVisibilityClause = (role, alias = '') => {
+  const prefix = alias ? `${alias}.` : '';
+
+  if (ADMIN_ROLES.includes(role)) {
+    return ` AND (${prefix}alert_type NOT LIKE 'refurbishment%' OR ${prefix}alert_type IS NULL)`;
+  }
+
+  return '';
+};
+
 /**
  * Create notification for user(s)
  */
@@ -243,11 +255,13 @@ const getUserNotifications = async (userId, role, filters = {}) => {
  */
 const getUnreadCount = async (userId, role) => {
   try {
+    const inboxVisibilityClause = buildInboxVisibilityClause(role);
     const [result] = await pool.query(
       `SELECT COUNT(*) as count 
       FROM notifications 
       WHERE (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL)) AND is_read = 0 
-        AND created_at >= DATE_SUB(NOW(), INTERVAL 180 DAY)`,
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 180 DAY)
+        ${inboxVisibilityClause}`,
       [userId, role]
     );
 
@@ -359,7 +373,11 @@ const createUploadNotification = async (uploadData) => {
     const adminIds = admins.map((admin) => admin.id);
 
     const resolvedEntityType = entityType || 'data_upload';
-    const titlePrefix = resolvedEntityType === 'employment_upload' ? 'Employment ' : '';
+    const titlePrefixMap = {
+      employment_upload: 'Employment ',
+      tot_upload: 'TOT ',
+    };
+    const titlePrefix = titlePrefixMap[resolvedEntityType] || '';
 
     const notificationData = {
       recipientRole: 'admin',
@@ -456,6 +474,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
   try {
     const { page = 1, limit = 20, search, days = 180, status, sortBy = 'newest' } = filters;
     const offset = (page - 1) * limit;
+    const inboxVisibilityClause = buildInboxVisibilityClause(role, 'n');
 
     // Build where clause
     let whereClause =
@@ -488,6 +507,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
         'center' as notification_type
       FROM notifications n
       ${whereClause}
+        ${inboxVisibilityClause}
         AND n.related_entity_type = 'center'
         AND n.type IN ('center_created', 'center_approved', 'alert')
         AND (n.alert_type NOT LIKE 'refurbishment%' OR n.alert_type IS NULL)
@@ -513,6 +533,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       LEFT JOIN uploaded_centers uc ON uc.data_upload_id = n.related_entity_id
       LEFT JOIN data_uploads du ON du.id = n.related_entity_id
       ${whereClause}
+        ${inboxVisibilityClause}
         AND n.related_entity_type = 'data_upload'
         AND n.type IN ('upload', 'review')
       GROUP BY n.related_entity_id, du.version, du.parent_upload_id
@@ -548,6 +569,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
         ON rr.center_id = n.related_entity_id
         AND n.alert_type = 'refurbishment'
       ${whereClause}
+        ${inboxVisibilityClause}
         AND n.alert_type LIKE 'refurbishment%'
       ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
     `;
@@ -578,10 +600,34 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       FROM notifications n
       LEFT JOIN employment_uploads eu ON eu.id = n.related_entity_id
       ${whereClause}
+        ${inboxVisibilityClause}
         AND n.related_entity_type = 'employment_upload'
       ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
     `;
     const [employmentResults] = await pool.query(employmentQuery, params);
+
+    const totQuery = `
+      SELECT 
+        n.id,
+        n.related_entity_id as upload_id,
+        n.created_at,
+        n.type,
+        n.alert_type,
+        n.title,
+        n.message,
+        n.remark,
+        n.is_read,
+        n.payload,
+        tu.status as current_review_status,
+        'tot_upload' as notification_type
+      FROM notifications n
+      LEFT JOIN tot_uploads tu ON tu.id = n.related_entity_id
+      ${whereClause}
+        ${inboxVisibilityClause}
+        AND n.related_entity_type = 'tot_upload'
+      ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
+    `;
+    const [totResults] = await pool.query(totQuery, params);
     // Process center notifications (simple format)
     const processedfCenterNotifications = centerNotifications.map((notif) => {
       const payload = notif.payload ? JSON.parse(notif.payload) : {};
@@ -736,12 +782,50 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       };
     });
 
+    const processedTotNotifications = totResults.map((notif) => {
+      const payload = notif.payload ? JSON.parse(notif.payload) : {};
+      const normalizedStatus =
+        notif.current_review_status === 'approved'
+          ? 'approved'
+          : notif.current_review_status === 'rejected'
+            ? 'rejected'
+            : 'pending';
+      const alertType =
+        normalizedStatus === 'approved'
+          ? 'success'
+          : normalizedStatus === 'rejected'
+            ? 'error'
+            : 'info';
+
+      return {
+        id: notif.id,
+        upload_id: notif.upload_id,
+        type: notif.type,
+        alert_type: alertType,
+        aggregated_status: normalizedStatus,
+        title: notif.title,
+        message: notif.message,
+        remark: notif.remark,
+        is_read: Boolean(notif.is_read),
+        created_at: notif.created_at,
+        related_entity_type: 'tot_upload',
+        related_entity_id: notif.upload_id,
+        notification_type: 'tot_upload',
+        payload: {
+          ...payload,
+          uploadId: notif.upload_id,
+          review_status: normalizedStatus,
+        },
+      };
+    });
+
     // Merge center, refurbishment, upload and employment notifications, sort by created_at
     const allNotifications = [
       ...processedfCenterNotifications,
       ...processedRefurbishmentNotifications,
       ...processedUploadNotifications,
       ...processedEmploymentNotifications,
+      ...processedTotNotifications,
     ];
     allNotifications.sort((a, b) => {
       const dateA = new Date(a.created_at);

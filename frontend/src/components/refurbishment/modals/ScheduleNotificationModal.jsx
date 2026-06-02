@@ -238,8 +238,9 @@ function ScheduleNotificationForm({
 
   const getTitle = () => {
     if (formData.id) return "Edit Scheduled Notification";
-    if (formData.isInstantMode) return "Send Instant Notification";
-    if (formData.isManualRequest) return "Create Manual Request";
+    if (formData.isInstantMode)
+      return "Send Instant Refurbishment Notification";
+    if (formData.isManualRequest) return "Create Manual Refurbishment Request";
     return "Schedule Notification Reminder";
   };
 
@@ -742,7 +743,7 @@ function ScheduleNotificationForm({
         <button
           type="submit"
           form="schedule-notif-form"
-          disabled={loading || formData.packages.length === 0}
+          disabled={loading}
           className="px-7 py-2.5 rounded-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
         >
           {getSubmitButtonText()}

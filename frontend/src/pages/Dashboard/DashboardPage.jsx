@@ -1068,7 +1068,7 @@ const AdminDashboard = () => {
 /**
  * Partner Dashboard
  */
-const PartnerDashboard = ({ userName }) => {
+const PartnerDashboard = ({ userName, partnerName }) => {
   const [selectedYear, setSelectedYear] = useState("all");
 
   return (
@@ -1079,6 +1079,11 @@ const PartnerDashboard = ({ userName }) => {
           <h1 className="text-3xl font-bold text-foreground">
             Welcome back, {userName}!
           </h1>
+          {partnerName && (
+            <p className="text-base font-medium text-primary-600 mt-1">
+              {partnerName}
+            </p>
+          )}
           <p className="text-muted-foreground mt-2">
             Manage your centers, data uploads, and requests.
           </p>
@@ -1553,7 +1558,7 @@ const EssciDashboard = ({ userName }) => {
  * Main Dashboard Page
  */
 const DashboardPage = () => {
-  const { role, userName } = useAuth();
+  const { role, userName, partnerName } = useAuth();
 
   /**
    * Render dashboard based on role
@@ -1564,7 +1569,9 @@ const DashboardPage = () => {
       case ROLES.ADMIN:
         return <AdminDashboard />;
       case ROLES.PARTNER:
-        return <PartnerDashboard userName={userName} />;
+        return (
+          <PartnerDashboard userName={userName} partnerName={partnerName} />
+        );
       case ROLES.SEIF_READONLY:
       case ROLES.SEIF_READONLY_DOWNLOAD:
         return <SeifReadOnlyDashboard userName={userName} />;

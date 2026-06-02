@@ -14,12 +14,14 @@ class UserModel {
   static async findByEmail(email) {
     const sql = `
       SELECT 
-        id, email, password_hash, full_name, mobile_number, 
-        role, partner_id, status, last_login_at, 
-        must_change_password, first_login, password_changed_at,
-        created_at, updated_at
-      FROM users 
-      WHERE email = ?
+        u.id, u.email, u.password_hash, u.full_name, u.mobile_number, 
+        u.role, u.partner_id, u.status, u.last_login_at, 
+        u.must_change_password, u.first_login, u.password_changed_at,
+        u.created_at, u.updated_at,
+        p.name AS partner_name
+      FROM users u
+      LEFT JOIN partners p ON p.id = u.partner_id
+      WHERE u.email = ?
     `;
     const [results] = await query(sql, [email]);
     return results.length > 0 ? results[0] : null;
@@ -33,12 +35,14 @@ class UserModel {
   static async findById(id) {
     const sql = `
       SELECT 
-        id, email, password_hash, full_name, mobile_number, 
-        role, partner_id, status, last_login_at, 
-        must_change_password, first_login, password_changed_at,
-        created_at, updated_at
-      FROM users 
-      WHERE id = ?
+        u.id, u.email, u.password_hash, u.full_name, u.mobile_number, 
+        u.role, u.partner_id, u.status, u.last_login_at, 
+        u.must_change_password, u.first_login, u.password_changed_at,
+        u.created_at, u.updated_at,
+        p.name AS partner_name
+      FROM users u
+      LEFT JOIN partners p ON p.id = u.partner_id
+      WHERE u.id = ?
     `;
     const [results] = await query(sql, [id]);
     return results.length > 0 ? results[0] : null;

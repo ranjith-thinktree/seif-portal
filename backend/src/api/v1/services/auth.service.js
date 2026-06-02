@@ -50,6 +50,7 @@ class AuthService {
       role: user.role,
       partner_id: user.partner_id,
       full_name: user.full_name,
+      partner_name: user.partner_name || null,
       type: 'access',
     };
 

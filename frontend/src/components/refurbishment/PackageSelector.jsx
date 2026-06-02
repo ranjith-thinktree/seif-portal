@@ -167,7 +167,7 @@ const PackageSelector = React.memo(function PackageSelector({
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search packages..."
+            placeholder="Search packages by name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-9 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
@@ -205,7 +205,7 @@ const PackageSelector = React.memo(function PackageSelector({
                 : "border-green-200 text-green-700 bg-green-50 hover:bg-green-100"
             }`}
           >
-            {allVisibleSelected ? "Deselect All" : "Select All"}
+            {allVisibleSelected ? "Deselect All" : "Select All Visible"}
           </button>
         )}
       </div>
@@ -294,6 +294,7 @@ const PackageSelector = React.memo(function PackageSelector({
                 <div
                   key={pkg.id}
                   onClick={() => handleTogglePackage(pkg.id)}
+                  aria-label={displayName}
                   className={`px-4 py-3.5 cursor-pointer select-none transition-all duration-100 ${
                     isSelected
                       ? "bg-green-50 border-l-4 border-l-green-500"

@@ -4,6 +4,7 @@ import EnhancedDataTable, {
   StatusBadge,
 } from "../../../components/common/EnhancedDataTable";
 import { ActionDropdown } from "../../../components/common";
+import BatchForm from "../../../components/forms/BatchForm";
 import AdvancedSearchBar from "../../../components/common/AdvancedSearchBar";
 import BulkDeleteButton from "../../../components/common/BulkDeleteButton";
 import ConfirmationModal from "../../../components/common/ConfirmationModal";
@@ -11,6 +12,7 @@ import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import {
   PlusIcon,
+  EyeIcon,
   PencilIcon,
   TrashIcon,
   ArrowDownTrayIcon,
@@ -20,6 +22,7 @@ import {
   getBatchFilterOptions,
   exportBatches,
   downloadFile,
+  updateBatch,
   deleteBatch,
   bulkDeleteBatches,
 } from "../../../services/data.service";
@@ -34,7 +37,7 @@ const BatchListTab = () => {
   const navigate = useNavigate();
   const { role } = useAuth();
 
-  const canEdit = ["ADMIN", "SUPER_ADMIN", "PARTNER"].includes(role);
+  const canEdit = ["ADMIN", "SUPER_ADMIN"].includes(role);
   const canDelete = ["ADMIN", "SUPER_ADMIN"].includes(role);
 
   const [batches, setBatches] = useState([]);
@@ -53,6 +56,14 @@ const BatchListTab = () => {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [bulkDeleteResults, setBulkDeleteResults] = useState(null);
+
+  // Single delete states
+  const [showSingleDeleteModal, setShowSingleDeleteModal] = useState(false);
+  const [singleDeleteBatch, setSingleDeleteBatch] = useState(null);
+  const [singleDeleteLoading, setSingleDeleteLoading] = useState(false);
+  const [showBatchForm, setShowBatchForm] = useState(false);
+  const [editingBatch, setEditingBatch] = useState(null);
+  const [batchSaving, setBatchSaving] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -222,18 +233,54 @@ const BatchListTab = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this batch?")) {
-      return;
-    }
+  const handleDelete = (id) => {
+    const batch = batches.find((b) => b.id === id);
+    setSingleDeleteBatch(batch);
+    setShowSingleDeleteModal(true);
+  };
 
+  const handleView = (batch) => {
+    navigate(`/data/batches/${batch.id}/students`, {
+      state: { batchNumber: batch.batch_number },
+    });
+  };
+
+  const handleEdit = (batch) => {
+    setEditingBatch(batch);
+    setShowBatchForm(true);
+  };
+
+  const handleBatchSubmit = async (formData) => {
+    if (!editingBatch) return;
+    setBatchSaving(true);
     try {
-      await deleteBatch(id);
+      await updateBatch(editingBatch.id, formData);
+      toast.success("Batch updated successfully");
+      setShowBatchForm(false);
+      setEditingBatch(null);
+      fetchBatches();
+    } catch (error) {
+      console.error("Error updating batch:", error);
+      toast.error(error.response?.data?.message || "Failed to update batch");
+    } finally {
+      setBatchSaving(false);
+    }
+  };
+
+  const confirmSingleDelete = async () => {
+    if (!singleDeleteBatch) return;
+    setSingleDeleteLoading(true);
+    try {
+      await deleteBatch(singleDeleteBatch.id);
       toast.success("Batch deleted successfully");
+      setShowSingleDeleteModal(false);
+      setSingleDeleteBatch(null);
       fetchBatches();
     } catch (error) {
       console.error("Error deleting batch:", error);
       toast.error(error.response?.data?.message || "Failed to delete batch");
+    } finally {
+      setSingleDeleteLoading(false);
     }
   };
 
@@ -390,11 +437,18 @@ const BatchListTab = () => {
         const batch = row.original;
 
         const actions = [
+          {
+            label: "View Students",
+            icon: EyeIcon,
+            onClick: () => handleView(batch),
+            variant: "default",
+            show: canEdit,
+          },
           // Edit action
           {
             label: "Edit Batch",
             icon: PencilIcon,
-            onClick: () => navigate(`/batches/edit/${batch.id}`),
+            onClick: () => handleEdit(batch),
             variant: "default",
             show: canEdit,
             divider: true,
@@ -532,13 +586,64 @@ const BatchListTab = () => {
         }}
         onConfirm={handleBulkDelete}
         title="Delete Batches"
-        message={`Are you sure you want to delete ${selectedRows.length} batch(es)?`}
+        message={(() => {
+          const selectedBatches = batches.filter((b) =>
+            selectedRows.includes(b.id),
+          );
+          const totalStudents = selectedBatches.reduce(
+            (sum, b) => sum + (b.total_students || 0),
+            0,
+          );
+          const baseMsg = `Are you sure you want to delete ${selectedRows.length} batch(es)?`;
+          return totalStudents > 0
+            ? `${baseMsg} This will also permanently delete ${totalStudents} student(s) and their employment records.`
+            : baseMsg;
+        })()}
         itemCount={selectedRows.length}
         items={batches.filter((b) => selectedRows.includes(b.id))}
         loading={bulkDeleteLoading}
         results={bulkDeleteResults}
         itemType="batches"
       />
+
+      {/* Single Delete Confirmation Modal */}
+      <ConfirmationModal
+        open={showSingleDeleteModal}
+        onClose={() => {
+          if (!singleDeleteLoading) {
+            setShowSingleDeleteModal(false);
+            setSingleDeleteBatch(null);
+          }
+        }}
+        onConfirm={confirmSingleDelete}
+        title={`Delete Batch: ${singleDeleteBatch?.batch_number || ""}`}
+        message={(() => {
+          const count = singleDeleteBatch?.total_students || 0;
+          const base =
+            "Are you sure you want to delete this batch? This action cannot be undone.";
+          return count > 0
+            ? `${base} This will also permanently delete ${count} student(s) and their employment records.`
+            : base;
+        })()}
+        itemCount={1}
+        items={singleDeleteBatch ? [singleDeleteBatch] : []}
+        loading={singleDeleteLoading}
+        itemType="batches"
+      />
+
+      {showBatchForm && editingBatch && (
+        <BatchForm
+          batch={editingBatch}
+          onSubmit={handleBatchSubmit}
+          onCancel={() => {
+            setShowBatchForm(false);
+            setEditingBatch(null);
+          }}
+          isLoading={batchSaving}
+          centerId={editingBatch.center_id}
+          partnerId={editingBatch.partner_id}
+        />
+      )}
     </div>
   );
 };

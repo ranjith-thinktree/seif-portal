@@ -106,8 +106,16 @@ const NotificationDetailCard = ({
 
   const handleReviewClick = () => {
     if (notification.related_entity_id) {
+      if (notification.related_entity_type === "tot_upload") {
+        navigate(
+          ROUTES.REVIEW_TOT_UPLOAD.replace(
+            ":uploadId",
+            notification.related_entity_id,
+          ),
+        );
+      }
       // Employment upload notification — route by role
-      if (
+      else if (
         notification.related_entity_type === "employment_upload" ||
         notification.type === "employment_upload"
       ) {
@@ -148,6 +156,10 @@ const NotificationDetailCard = ({
     notification.related_entity_type === "employment_upload" ||
     notification.notification_type === "employment" ||
     notification.type === "employment_upload";
+  const isTotNotification =
+    notification.related_entity_type === "tot_upload" ||
+    notification.notification_type === "tot_upload" ||
+    notification.type === "tot_upload";
 
   return (
     <Card className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-[16px]">
@@ -159,7 +171,9 @@ const NotificationDetailCard = ({
               ? `New Center Created: ${
                   payload?.centerName || "Review Required"
                 }`
-              : `New Data uploaded: ${partnerName}`}
+              : isTotNotification
+                ? `New TOT upload: ${partnerName}`
+                : `New Data uploaded: ${partnerName}`}
           </h2>
           <div className="flex items-center gap-3">
             <Badge
@@ -229,9 +243,11 @@ const NotificationDetailCard = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {isEmploymentNotification
                 ? "Employment Upload Details"
-                : centerDetails
-                  ? "Centers Summary"
-                  : "CSV Preview"}
+                : isTotNotification
+                  ? "TOT Upload Details"
+                  : centerDetails
+                    ? "Centers Summary"
+                    : "CSV Preview"}
             </label>
             <div className="border border-gray-200 rounded-[16px] overflow-auto max-h-[400px] bg-white">
               {isEmploymentNotification ? (
@@ -285,6 +301,37 @@ const NotificationDetailCard = ({
                   {employmentAttachments.length === 0 && (
                     <p className="text-xs text-gray-400 pt-1">
                       No supporting documents attached.
+                    </p>
+                  )}
+                </div>
+              ) : isTotNotification ? (
+                <div className="p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-emerald-700 font-semibold">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    TOT Data Upload
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {notification.message ||
+                      "A TOT data file has been uploaded and is awaiting review."}
+                  </p>
+                  {payload?.totalRecords != null && (
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium text-gray-700">
+                        Records:
+                      </span>{" "}
+                      {payload.totalRecords}
+                    </p>
+                  )}
+                  {payload?.fileName && (
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium text-gray-700">File:</span>{" "}
+                      {payload.fileName}
+                    </p>
+                  )}
+                  {notification.remark && (
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium text-gray-700">Remark:</span>{" "}
+                      {notification.remark}
                     </p>
                   )}
                 </div>

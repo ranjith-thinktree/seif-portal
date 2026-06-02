@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { cn } from "../../utils/cn";
 
@@ -18,6 +19,8 @@ import { cn } from "../../utils/cn";
 const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const menuRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState({});
 
   // Filter out actions that shouldn't be shown
   const visibleActions = actions.filter((action) => action.show !== false);
@@ -25,7 +28,10 @@ const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      const clickedInsideTrigger = dropdownRef.current?.contains(event.target);
+      const clickedInsideMenu = menuRef.current?.contains(event.target);
+
+      if (!clickedInsideTrigger && !clickedInsideMenu) {
         setIsOpen(false);
       }
     };
@@ -50,6 +56,40 @@ const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
       return () => document.removeEventListener("keydown", handleEscape);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !dropdownRef.current) return;
+
+    const updatePosition = () => {
+      const button = dropdownRef.current?.querySelector("button");
+      if (!button) return;
+
+      const rect = button.getBoundingClientRect();
+      const width = 224;
+      const viewportWidth = window.innerWidth;
+      const left =
+        align === "left"
+          ? Math.max(8, rect.left)
+          : Math.max(8, Math.min(rect.right - width, viewportWidth - width - 8));
+
+      setMenuStyle({
+        position: "fixed",
+        top: `${rect.bottom + 8}px`,
+        left: `${left}px`,
+        width: `${width}px`,
+        zIndex: 9999,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen, align]);
 
   const handleActionClick = (action) => {
     if (!action.disabled && action.onClick) {
@@ -112,13 +152,16 @@ const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
         />
       </button>
 
-      {isOpen && (
-        <div
-          className={cn(
-            "absolute z-[9999] mt-2 w-56 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none",
-            alignClasses[align]
-          )}
-        >
+      {isOpen &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={menuStyle}
+            className={cn(
+              "origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none",
+              alignClasses[align],
+            )}
+          >
           <div className="py-1">
             {visibleActions.map((action, index) => (
               <React.Fragment key={index}>
@@ -145,8 +188,9 @@ const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
               </React.Fragment>
             ))}
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

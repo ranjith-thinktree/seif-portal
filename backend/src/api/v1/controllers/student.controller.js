@@ -100,6 +100,42 @@ class StudentController {
   }
 
   /**
+   * Update a student
+   * @route PUT /api/v1/students/:id
+   * @access Admin, SUPER_ADMIN
+   */
+  async updateStudent(req, res) {
+    try {
+      const { id } = req.params;
+      const updatedStudent = await studentService.updateStudent(id, req.body);
+
+      return successResponse(res, 'Student updated successfully', updatedStudent);
+    } catch (error) {
+      console.error('Error in updateStudent controller:', error);
+      const status = error.message === 'Student not found' ? 404 : 500;
+      return errorResponse(res, error.message || 'Failed to update student', status);
+    }
+  }
+
+  /**
+   * Delete a student
+   * @route DELETE /api/v1/students/:id
+   * @access Admin, SUPER_ADMIN
+   */
+  async deleteStudent(req, res) {
+    try {
+      const { id } = req.params;
+      await studentService.deleteStudent(id);
+
+      return successResponse(res, 'Student deleted successfully', null);
+    } catch (error) {
+      console.error('Error in deleteStudent controller:', error);
+      const status = error.message === 'Student not found' ? 404 : 500;
+      return errorResponse(res, error.message || 'Failed to delete student', status);
+    }
+  }
+
+  /**
    * Export students to CSV
    */
   async exportStudents(req, res) {

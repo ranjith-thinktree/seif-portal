@@ -131,6 +131,20 @@ router.get(
   employmentController.getApprovedEmploymentRecords
 );
 
+router.put(
+  '/admin/records/:id',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  employmentController.updateEmploymentRecord
+);
+
+router.delete(
+  '/admin/records/:id',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  employmentController.deleteEmploymentRecord
+);
+
 // Manual single-record add (Admin: verified; Partner: unverified)
 router.post(
   '/add',

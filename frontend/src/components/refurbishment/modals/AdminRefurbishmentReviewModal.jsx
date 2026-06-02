@@ -26,6 +26,7 @@ const AdminRefurbishmentReviewModal = ({
   onActionComplete,
 }) => {
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
   const [requestDetails, setRequestDetails] = useState(null);
   const [allPackages, setAllPackages] = useState([]);
 
@@ -79,14 +80,13 @@ const AdminRefurbishmentReviewModal = ({
       }
     } catch (err) {
       console.error("Error loading request:", err);
-      toast.error(
+      setFetchError(
         err.response?.data?.message || "Failed to load request details",
       );
-      onOpenChange(false);
     } finally {
       setLoading(false);
     }
-  }, [requestId, onOpenChange]);
+  }, [requestId]);
 
   // Fetch upgradation packages for this request (lazy – only when upgradation tab opened)
   const fetchUpgradationPackages = useCallback(async () => {
@@ -108,10 +108,12 @@ const AdminRefurbishmentReviewModal = ({
 
   useEffect(() => {
     if (open && requestId) {
+      setFetchError(null);
       fetchDetails();
     } else {
       setRequestDetails(null);
       setAllPackages([]);
+      setFetchError(null);
       setActiveCourseIdx(0);
       setActiveReviewTab("courses");
       setAdminAdded({});
@@ -189,7 +191,7 @@ const AdminRefurbishmentReviewModal = ({
         );
       });
 
-      await refurbishmentService.approveRefurbishmentRequest(requestId, "", {
+      await refurbishmentService.approveRefurbishmentRequest(requestId, null, {
         adminAddedPackages,
         removedPackageIds,
       });
@@ -296,6 +298,45 @@ const AdminRefurbishmentReviewModal = ({
         <DialogContent className="max-w-5xl" aria-describedby={undefined}>
           <div className="flex items-center justify-center py-16">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">Error</DialogTitle>
+          <div className="flex flex-col items-center justify-center gap-4 py-10 px-6 text-center">
+            <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+              <svg
+                className="h-7 w-7 text-red-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                />
+              </svg>
+            </div>
+            <div>
+              <p className="text-base font-semibold text-gray-900">
+                Request Not Found
+              </p>
+              <p className="text-sm text-gray-500 mt-1">{fetchError}</p>
+            </div>
+            <button
+              onClick={() => onOpenChange(false)}
+              className="mt-2 px-6 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-700 transition-colors"
+            >
+              Close
+            </button>
           </div>
         </DialogContent>
       </Dialog>

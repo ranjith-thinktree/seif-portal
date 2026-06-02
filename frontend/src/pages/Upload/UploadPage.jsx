@@ -1016,7 +1016,7 @@ const UploadPage = () => {
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search partnersâ€¦"
+                  placeholder="Search partners"
                   value={partnerSearch}
                   onChange={(e) => setPartnerSearch(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 border border-[#A5A5A5] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#009530]/40"
@@ -1027,7 +1027,7 @@ const UploadPage = () => {
               <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
                 {partnerList.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-8">
-                    Loading partnersâ€¦
+                    Loading partners
                   </p>
                 ) : filteredPartners.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-8">
@@ -1047,7 +1047,7 @@ const UploadPage = () => {
                         {p.name}
                       </span>
                       <span className="text-xs text-[#009530] opacity-0 group-hover:opacity-100 transition-opacity font-medium">
-                        Select â†’
+                        Select
                       </span>
                     </button>
                   ))

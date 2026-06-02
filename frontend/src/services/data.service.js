@@ -580,6 +580,32 @@ export const bulkDeleteStudents = async (ids) => {
 };
 
 /**
+ * Update a student
+ */
+export const updateStudent = async (id, data) => {
+  const payload = {
+    student_name: data.student_name,
+    gender: data.gender,
+    mobile_number: data.mobile_number,
+    email: data.email,
+    address: data.address,
+    city: data.city,
+    state: data.state,
+    course_name: data.course_name,
+  };
+  const response = await apiClient.put(`/students/${id}`, payload);
+  return response.data;
+};
+
+/**
+ * Delete a student
+ */
+export const deleteStudent = async (id) => {
+  const response = await apiClient.delete(`/students/${id}`);
+  return response.data;
+};
+
+/**
  * Get student by ID
  */
 export const getStudentById = async (id) => {
@@ -671,6 +697,8 @@ const dataService = {
   exportBatches,
   // Students
   getStudents,
+  updateStudent,
+  deleteStudent,
   getStudentById,
   getStudentsByBatch,
   getStudentFilterOptions,

@@ -12,6 +12,7 @@ export const useRefurbishmentData = (selectedYear) => {
   // Consolidated data state
   const [data, setData] = useState({
     eligibleCenters: [],
+    eligibleTotalCount: 0,
     lastRefurbishedData: [],
     allCentersData: [],
     alerts: [],
@@ -46,7 +47,7 @@ export const useRefurbishmentData = (selectedYear) => {
     setLoadingState("eligibleCenters", true);
     try {
       const response = await refurbishmentService.getEligibleCenters({
-        limit: 100,
+        limit: 5000,
         offset: 0,
       });
 
@@ -55,13 +56,17 @@ export const useRefurbishmentData = (selectedYear) => {
         const centers = Array.isArray(response.data)
           ? response.data
           : response.data?.centers || [];
+        const totalCount = response.data?.totalCount ?? centers.length;
         setDataState("eligibleCenters", centers);
+        setDataState("eligibleTotalCount", totalCount);
       } else {
         setDataState("eligibleCenters", []);
+        setDataState("eligibleTotalCount", 0);
       }
     } catch (error) {
       console.error("Error loading eligible centers:", error);
       setDataState("eligibleCenters", []);
+      setDataState("eligibleTotalCount", 0);
     } finally {
       setLoadingState("eligibleCenters", false);
     }
@@ -93,7 +98,7 @@ export const useRefurbishmentData = (selectedYear) => {
     setLoadingState("allCentersData", true);
     try {
       const response = await refurbishmentService.getAllCenters({
-        limit: 100,
+        limit: 5000,
         offset: 0,
       });
       if (response.success) {

@@ -9,6 +9,26 @@ import {
 } from "@testing-library/react";
 
 // --- Mocks ---
+vi.mock("react-redux", () => ({
+  useSelector: vi.fn((selector) =>
+    selector({ auth: { user: { role: "ADMIN" } } }),
+  ),
+}));
+vi.mock("../../components/ui/dialog", () => ({
+  Dialog: ({ open, onOpenChange, children }) =>
+    open ? (
+      <div role="dialog" aria-modal="true">
+        {children}
+      </div>
+    ) : null,
+  DialogContent: ({ children, className }) => (
+    <div className={className}>{children}</div>
+  ),
+  DialogHeader: ({ children }) => <div>{children}</div>,
+  DialogTitle: ({ children }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }) => <p>{children}</p>,
+  DialogFooter: ({ children }) => <div>{children}</div>,
+}));
 vi.mock("react-toastify", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));

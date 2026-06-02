@@ -296,4 +296,11 @@ router.get(
   RefurbishmentController.getNotificationHistory
 );
 
+/**
+ * POST /api/v1/admin/refurbishment/upload-url
+ * Generate a presigned PUT URL for direct browser upload to S3.
+ * Used by AdminStatusChangeModal for completion file uploads.
+ */
+router.post('/upload-url', RefurbishmentController.generateUploadUrl);
+
 module.exports = router;

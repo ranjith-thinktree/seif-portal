@@ -12,6 +12,49 @@ vi.mock("react-toastify", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
+vi.mock("../../components/ui/dialog", () => ({
+  Dialog: ({ open, onOpenChange, children }) =>
+    open ? (
+      <div role="dialog" aria-modal="true">
+        {children}
+      </div>
+    ) : null,
+  DialogContent: ({ children, className }) => (
+    <div className={className}>{children}</div>
+  ),
+  DialogHeader: ({ children }) => <div>{children}</div>,
+  DialogTitle: ({ children }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }) => <p>{children}</p>,
+  DialogFooter: ({ children }) => <div>{children}</div>,
+}));
+
+vi.mock("../../components/ui/checkbox", () => ({
+  Checkbox: ({ checked, onCheckedChange, id, className, disabled }) => (
+    <input
+      type="checkbox"
+      id={id}
+      className={className}
+      disabled={disabled}
+      checked={checked === true}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+    />
+  ),
+}));
+
+vi.mock("../../components/ui/label", () => ({
+  Label: ({ children, htmlFor, className }) => {
+    const textOnly = React.Children.toArray(children)
+      .filter((c) => typeof c === "string" || typeof c === "number")
+      .join("")
+      .trim();
+    return (
+      <label htmlFor={htmlFor} className={className}>
+        {textOnly}
+      </label>
+    );
+  },
+}));
+
 vi.mock("../../components/layout/MainLayout", () => ({
   default: ({ children }) => <div data-testid="main-layout">{children}</div>,
 }));

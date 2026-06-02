@@ -32,6 +32,7 @@ export const ROUTES = {
   REVIEW_STUDENTS: "/review-centers/:uploadId/students/:centerId",
   REVIEW_PENDING_CENTERS: "/review/pending-centers",
   REJECTED_UPLOAD: "/rejected/:uploadId",
+  REVIEW_TOT_UPLOAD: "/review/tot-uploads/:uploadId",
 
   // Partner Routes
   MY_CENTERS: "/my-centers",

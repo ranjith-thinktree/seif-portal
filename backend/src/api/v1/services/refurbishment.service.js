@@ -2,6 +2,7 @@ const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
 const { emitToUser, emitToRole } = require('../../../websocket/socket');
 const emailService = require('../../../utils/email.util');
+const { NotFoundError } = require('../../../utils/error.util');
 
 /**
  * Refurbishment Service
@@ -11,18 +12,19 @@ class RefurbishmentService {
   /**
    * Get centers eligible for refurbishment based on time-based criteria
    *
-   * Eligibility Formula:
-   * - For centers with previous refurbishment:
-   *   (CURRENT_DATE - last_refurbishment_date) >= refurbishment_frequency_months
-   * - For new centers (never refurbished):
-   *   (CURRENT_DATE - year_of_establishment) >= refurbishment_frequency_months
+   * Eligibility Rules:
+   * - New centers (never refurbished): eligible after 5 years (60 months) from year_of_establishment
+   * - Previously refurbished centers: eligible again after 3 years (36 months) from last_refurbishment_date
+   *   (repeats every 3 years for all subsequent cycles)
    *
    * @returns {Promise<Object>} Object with centers array and totalCount
    */
   static async getEligibleCenters(limit = 50, offset = 0) {
     try {
-      // Default refurbishment frequency: 36 months (3 years) if not set
-      const DEFAULT_FREQUENCY = 36;
+      // First refurbishment: 5 years (60 months) from establishment
+      const FIRST_CYCLE_MONTHS = 60;
+      // Subsequent refurbishments: every 3 years (36 months) from last refurbishment
+      const REPEAT_CYCLE_MONTHS = 36;
 
       // First, get total count of eligible centers
       const countQuery = `
@@ -31,11 +33,11 @@ class RefurbishmentService {
         WHERE c.status = 'active'
         AND c.year_of_establishment IS NOT NULL
         AND (
-          (c.last_refurbishment_date IS NOT NULL 
-            AND TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) >= COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY}))
+          (c.last_refurbishment_date IS NOT NULL
+            AND TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) >= ${REPEAT_CYCLE_MONTHS})
           OR
-          (c.last_refurbishment_date IS NULL 
-            AND TIMESTAMPDIFF(MONTH, DATE(CONCAT(c.year_of_establishment, '-01-01')), CURDATE()) >= COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY}))
+          (c.last_refurbishment_date IS NULL
+            AND TIMESTAMPDIFF(MONTH, DATE(CONCAT(c.year_of_establishment, '-01-01')), CURDATE()) >= ${FIRST_CYCLE_MONTHS})
         )
       `;
 
@@ -43,14 +45,17 @@ class RefurbishmentService {
 
       // Then get paginated results
       const query = `
-        SELECT 
+        SELECT
           c.id,
           c.center_name,
           c.partner_id,
           p.name as partner_name,
           c.year_of_establishment,
           c.last_refurbishment_date,
-          COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY}) as refurbishment_frequency_months,
+          CASE
+            WHEN c.last_refurbishment_date IS NOT NULL THEN ${REPEAT_CYCLE_MONTHS}
+            ELSE ${FIRST_CYCLE_MONTHS}
+          END as refurbishment_frequency_months,
           c.city,
           c.state,
           c.region,
@@ -66,9 +71,9 @@ class RefurbishmentService {
           END as months_since_last_refurbishment,
           CASE
             WHEN c.last_refurbishment_date IS NOT NULL THEN
-              TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) >= COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY})
+              TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) >= ${REPEAT_CYCLE_MONTHS}
             ELSE
-              TIMESTAMPDIFF(MONTH, DATE(CONCAT(c.year_of_establishment, '-01-01')), CURDATE()) >= COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY})
+              TIMESTAMPDIFF(MONTH, DATE(CONCAT(c.year_of_establishment, '-01-01')), CURDATE()) >= ${FIRST_CYCLE_MONTHS}
           END as is_eligible
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
@@ -89,7 +94,7 @@ class RefurbishmentService {
       const [centers] = await db.query(query, []);
 
       console.log(
-        `[RefurbishmentService] Retrieved ${centers.length} eligible centers (total: ${total}, using default frequency: ${DEFAULT_FREQUENCY} months for centers without frequency set)`
+        `[RefurbishmentService] Retrieved ${centers.length} eligible centers (total: ${total})`
       );
 
       return {
@@ -109,18 +114,23 @@ class RefurbishmentService {
    */
   static async getAllCentersWithStatus() {
     try {
-      // Default refurbishment frequency: 36 months (3 years) if not set
-      const DEFAULT_FREQUENCY = 36;
+      // First refurbishment: 5 years (60 months) from establishment
+      const FIRST_CYCLE_MONTHS = 60;
+      // Subsequent refurbishments: every 3 years (36 months) from last refurbishment
+      const REPEAT_CYCLE_MONTHS = 36;
 
       const query = `
-        SELECT 
+        SELECT
           c.id,
           c.center_name,
           c.partner_id,
           p.name as organization_name,
           c.year_of_establishment,
           c.last_refurbishment_date,
-          COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY}) as refurbishment_frequency_months,
+          CASE
+            WHEN c.last_refurbishment_date IS NOT NULL THEN ${REPEAT_CYCLE_MONTHS}
+            ELSE ${FIRST_CYCLE_MONTHS}
+          END as refurbishment_frequency_months,
           c.city,
           c.state,
           c.region,
@@ -136,9 +146,9 @@ class RefurbishmentService {
           CASE
             WHEN c.year_of_establishment IS NULL THEN 0
             WHEN c.last_refurbishment_date IS NOT NULL THEN
-              TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) >= COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY})
+              TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) >= ${REPEAT_CYCLE_MONTHS}
             ELSE
-              TIMESTAMPDIFF(MONTH, DATE(CONCAT(c.year_of_establishment, '-01-01')), CURDATE()) >= COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY})
+              TIMESTAMPDIFF(MONTH, DATE(CONCAT(c.year_of_establishment, '-01-01')), CURDATE()) >= ${FIRST_CYCLE_MONTHS}
           END as is_eligible
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
@@ -1053,8 +1063,9 @@ class RefurbishmentService {
           rr.id,
           CONCAT('REQ-', YEAR(rr.created_at), '-', UPPER(SUBSTRING(rr.id, 1, 8))) AS requestId,
           rr.refurbishment_type                      AS type,
-          c.center_name                              AS centerName,
-          rr.updated_at                              AS lastUpdated,
+          c.center_name,
+          rr.created_at,
+          rr.updated_at,
           rr.status,
           rr.approved_at,
           rr.completed_at,
@@ -1561,7 +1572,7 @@ class RefurbishmentService {
       );
 
       if (!requestData || requestData.length === 0) {
-        throw new Error('Refurbishment request not found');
+        throw new NotFoundError('Refurbishment request not found');
       }
 
       const request = requestData[0];
@@ -1907,7 +1918,7 @@ class RefurbishmentService {
       );
 
       if (!request || request.length === 0) {
-        throw new Error('Refurbishment request not found');
+        throw new NotFoundError('Refurbishment request not found');
       }
 
       if (request[0].status !== 'submitted') {
@@ -1972,7 +1983,7 @@ class RefurbishmentService {
         'SELECT center_id FROM refurbishment_requests WHERE id = ?',
         [requestId]
       );
-      if (!req) throw new Error('Refurbishment request not found');
+      if (!req) throw new NotFoundError('Refurbishment request not found');
 
       // Get all courses for this center
       const [centerCourses] = await connection.query(
@@ -2068,7 +2079,7 @@ class RefurbishmentService {
         'SELECT id, status FROM refurbishment_requests WHERE id = ?',
         [requestId]
       );
-      if (!request) throw new Error('Refurbishment request not found');
+      if (!request) throw new NotFoundError('Refurbishment request not found');
 
       // Delete current admin selections for this request
       await connection.query(
@@ -2147,7 +2158,7 @@ class RefurbishmentService {
       );
 
       if (!request || request.length === 0) {
-        throw new Error('Refurbishment request not found');
+        throw new NotFoundError('Refurbishment request not found');
       }
 
       if (request[0].status !== 'submitted') {
@@ -2313,7 +2324,7 @@ class RefurbishmentService {
       );
 
       if (!request || request.length === 0) {
-        throw new Error('Refurbishment request not found');
+        throw new NotFoundError('Refurbishment request not found');
       }
 
       if (request[0].status !== 'submitted') {
@@ -2433,7 +2444,7 @@ class RefurbishmentService {
       );
 
       if (!request || request.length === 0) {
-        throw new Error('Refurbishment request not found');
+        throw new NotFoundError('Refurbishment request not found');
       }
 
       if (request[0].status !== 'approved') {
@@ -2523,7 +2534,7 @@ class RefurbishmentService {
       );
 
       if (!request || request.length === 0) {
-        throw new Error('Refurbishment request not found');
+        throw new NotFoundError('Refurbishment request not found');
       }
 
       const completableStatuses = [
@@ -2688,7 +2699,7 @@ class RefurbishmentService {
     const [rows] = await db.query('SELECT id, status FROM refurbishment_requests WHERE id = ?', [
       requestId,
     ]);
-    if (!rows || rows.length === 0) throw new Error('Refurbishment request not found');
+    if (!rows || rows.length === 0) throw new NotFoundError('Refurbishment request not found');
 
     const current = rows[0].status;
     const allowed = VALID_TRANSITIONS[current] || [];

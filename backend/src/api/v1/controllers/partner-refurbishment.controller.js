@@ -98,7 +98,7 @@ const getMyRequests = async (req, res, next) => {
       status,
     });
 
-    return ApiResponse.success(res, 'Refurbishment requests retrieved successfully', requests);
+    return ApiResponse.success(res, requests, 'Refurbishment requests retrieved successfully');
   } catch (error) {
     console.error('Error getting partner requests:', error);
     next(error);
@@ -127,7 +127,7 @@ const getPartnerPastRequests = async (req, res, next) => {
       excludeStatus: 'submitted',
     });
 
-    return ApiResponse.success(res, 'Past requests retrieved successfully', data);
+    return ApiResponse.success(res, data, 'Past requests retrieved successfully');
   } catch (error) {
     console.error('Error getting partner past requests:', error);
     next(error);

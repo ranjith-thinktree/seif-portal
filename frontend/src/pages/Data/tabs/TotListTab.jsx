@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import AdvancedSearchBar from "../../../components/common/AdvancedSearchBar";
-import EnhancedDataTable from "../../../components/common/EnhancedDataTable";
 import { ActionDropdown } from "../../../components/common";
-import { Badge } from "../../../components/ui/badge";
+import EnhancedDataTable from "../../../components/common/EnhancedDataTable";
+import ConfirmationModal from "../../../components/common/ConfirmationModal";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { SearchableSelect } from "../../../components/ui/searchable-select";
@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
-import { PlusIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, EyeIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../hooks";
 import {
@@ -23,7 +23,8 @@ import {
 } from "../../../services/data.service";
 import {
   createTotTrainer,
-  getTotDocumentUrl,
+  deleteTotTrainer,
+  updateTotTrainer,
   getTotTrainerFilterOptions,
   getTotTrainers,
 } from "../../../services/tot.service";
@@ -41,6 +42,29 @@ const defaultFormState = {
   email: "",
 };
 
+const normalizeTrainerRow = (trainer) => {
+  const firstName = trainer.first_name || "";
+  const lastName = trainer.last_name || "";
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  return {
+    ...trainer,
+    trainer_name: fullName || trainer.trainer_name || "N/A",
+    course_name: trainer.course_name || trainer.trainer_module_trained || "N/A",
+    training_centre_name:
+      trainer.training_centre_name || trainer.tot_center || "N/A",
+    mobile_no: trainer.mobile_no || trainer.contact_number || "N/A",
+    email: trainer.email || trainer.email_id || "N/A",
+    date_of_joining:
+      trainer.date_of_joining ||
+      trainer.approved_at ||
+      trainer.created_at ||
+      null,
+    document_count:
+      Number(trainer.document_count ?? trainer.documents_count ?? 0) || 0,
+  };
+};
+
 const TotListTab = () => {
   const { role, partnerId } = useAuth();
   const canCreate = ["ADMIN", "SUPER_ADMIN", "PARTNER"].includes(role);
@@ -51,21 +75,25 @@ const TotListTab = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedTrainer, setSelectedTrainer] = useState(null);
+  const [trainerModalMode, setTrainerModalMode] = useState("view");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
   const [activeFilters, setActiveFilters] = useState({
     partner_id: [],
-    training_centre_name: [],
-    course_name: [],
-    document_status: "",
+    tot_center: [],
+    trainer_module_trained: [],
+    state: [],
   });
   const [filterOptions, setFilterOptions] = useState({
     partners: [],
     centers: [],
-    courses: [],
-    documentStatuses: [],
+    modules: [],
+    states: [],
   });
 
   const [pagination, setPagination] = useState({
@@ -83,6 +111,7 @@ const TotListTab = () => {
     qualificationCertificate: null,
     idProof: null,
   });
+  const [editFormData, setEditFormData] = useState(null);
 
   const partnerSelectOptions = (filterOptions.partners || []).map(
     (partner) => ({
@@ -119,14 +148,14 @@ const TotListTab = () => {
         limit: pagination.limit,
         search: searchTerm,
         partner_id: activeFilters.partner_id,
-        training_centre_name: activeFilters.training_centre_name,
-        course_name: activeFilters.course_name,
-        document_status: activeFilters.document_status,
+        tot_center: activeFilters.tot_center,
+        trainer_module_trained: activeFilters.trainer_module_trained,
+        state: activeFilters.state,
         sort_by: sortBy,
         sort_order: sortOrder,
       });
 
-      setTrainers(response.data || []);
+      setTrainers((response.data || []).map(normalizeTrainerRow));
       setPagination((prev) => ({
         ...prev,
         total: response.pagination?.total || 0,
@@ -239,9 +268,9 @@ const TotListTab = () => {
   const handleClearFilters = () => {
     setActiveFilters({
       partner_id: [],
-      training_centre_name: [],
-      course_name: [],
-      document_status: "",
+      tot_center: [],
+      trainer_module_trained: [],
+      state: [],
     });
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
@@ -269,6 +298,66 @@ const TotListTab = () => {
       idProof: null,
     });
     setShowAddModal(true);
+  };
+
+  const openViewOrEditModal = (trainer, mode = "view") => {
+    setSelectedTrainer(trainer);
+    setTrainerModalMode(mode);
+    setEditFormData({
+      tot_center: trainer.tot_center || "",
+      trainer_module_trained: trainer.trainer_module_trained || trainer.course_name || "",
+      first_name: trainer.first_name || "",
+      last_name: trainer.last_name || "",
+      contact_number: trainer.contact_number || trainer.mobile_no || "",
+      email_id: trainer.email_id || trainer.email || "",
+      qualification: trainer.qualification || "",
+      language_knows: trainer.language_knows || "",
+      contact_address: trainer.contact_address || "",
+      city: trainer.city || "",
+      state: trainer.state || "",
+      gender: trainer.gender || "",
+      dob: trainer.dob ? String(trainer.dob).slice(0, 10) : "",
+    });
+    setShowEditModal(true);
+  };
+
+  const handleDeleteTrainer = (trainer) => {
+    setSelectedTrainer(trainer);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteTrainer = async () => {
+    if (!selectedTrainer) return;
+    setSaving(true);
+    try {
+      await deleteTotTrainer(selectedTrainer.id);
+      toast.success("Trainer deleted successfully");
+      setShowDeleteModal(false);
+      setSelectedTrainer(null);
+      fetchTrainers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete trainer");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedTrainer || !editFormData) return;
+    try {
+      setSaving(true);
+      await updateTotTrainer(selectedTrainer.id, editFormData);
+      toast.success("Trainer updated successfully");
+      setShowEditModal(false);
+      setSelectedTrainer(null);
+      setEditFormData(null);
+      fetchTrainers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update trainer");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCreateTrainer = async (e) => {
@@ -310,13 +399,6 @@ const TotListTab = () => {
     }
   };
 
-  const getDocumentStatus = (trainer) => {
-    const count = Number(trainer.document_count || 0);
-    if (count >= 3) return { label: "Complete", variant: "success" };
-    if (count > 0) return { label: "Partial", variant: "warning" };
-    return { label: "Missing", variant: "secondary" };
-  };
-
   const filterGroups = [
     {
       label: "Partner",
@@ -326,29 +408,33 @@ const TotListTab = () => {
     },
     {
       label: "Center",
-      key: "training_centre_name",
+      key: "tot_center",
       options: filterOptions.centers || [],
       multi: true,
     },
     {
       label: "Course",
-      key: "course_name",
-      options: filterOptions.courses || [],
+      key: "trainer_module_trained",
+      options: filterOptions.modules || [],
       multi: true,
     },
     {
-      label: "Document Status",
-      key: "document_status",
-      options: filterOptions.documentStatuses || [],
+      label: "State",
+      key: "state",
+      options: filterOptions.states || [],
+      multi: true,
     },
   ];
 
   const sortOptions = [
-    { label: "Trainer Name", value: "trainer_name" },
+    { label: "Trainer Name", value: "first_name" },
     { label: "Partner", value: "partner_name" },
-    { label: "Center", value: "training_centre_name" },
-    { label: "Course", value: "course_name" },
-    { label: "Date of Joining", value: "date_of_joining" },
+    { label: "Center", value: "tot_center" },
+    { label: "Course", value: "trainer_module_trained" },
+    { label: "Date of Joining", value: "approved_at" },
+    { label: "Mobile", value: "contact_number" },
+    { label: "Email", value: "email_id" },
+    { label: "State", value: "state" },
     { label: "Created Date", value: "created_at" },
   ];
 
@@ -415,68 +501,68 @@ const TotListTab = () => {
       cell: ({ row }) => row.original.email || "N/A",
       size: 240,
     },
-    {
-      id: "document_status",
-      header: "Documents",
-      cell: ({ row }) => {
-        const status = getDocumentStatus(row.original);
-        return <Badge variant={status.variant}>{status.label}</Badge>;
-      },
-      size: 130,
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => {
-        const trainer = row.original;
+    ...(isAdmin
+      ? [
+          {
+            id: "actions",
+            header: "Actions",
+            cell: ({ row }) => {
+              const trainer = row.original;
+              const actions = [
+                {
+                  label: "View",
+                  icon: EyeIcon,
+                  onClick: () => openViewOrEditModal(trainer, "view"),
+                  variant: "default",
+                  show: true,
+                },
+                {
+                  label: "Edit",
+                  icon: PencilIcon,
+                  onClick: () => {
+                    setSelectedTrainer(trainer);
+                    setEditFormData({
+                      tot_center: trainer.tot_center || "",
+                      trainer_module_trained:
+                        trainer.trainer_module_trained || trainer.course_name || "",
+                      first_name: trainer.first_name || "",
+                      last_name: trainer.last_name || "",
+                      contact_number: trainer.contact_number || trainer.mobile_no || "",
+                      email_id: trainer.email_id || trainer.email || "",
+                      qualification: trainer.qualification || "",
+                      language_knows: trainer.language_knows || "",
+                      contact_address: trainer.contact_address || "",
+                      city: trainer.city || "",
+                      state: trainer.state || "",
+                      gender: trainer.gender || "",
+                      dob: trainer.dob ? String(trainer.dob).slice(0, 10) : "",
+                    });
+                    setTrainerModalMode("edit");
+                    setShowEditModal(true);
+                  },
+                  variant: "default",
+                  show: true,
+                },
+                {
+                  label: "Delete",
+                  icon: TrashIcon,
+                  onClick: () => handleDeleteTrainer(trainer),
+                  variant: "danger",
+                  show: true,
+                },
+              ];
 
-        const actions = [
-          {
-            label: "View Resume",
-            icon: DocumentTextIcon,
-            onClick: () =>
-              window.open(getTotDocumentUrl(trainer.resume_file_url), "_blank"),
-            show: !!trainer.resume_file_url,
-            divider: true,
+              return (
+                <div onClick={(e) => e.stopPropagation()} className="flex justify-center">
+                  <ActionDropdown actions={actions} align="right" size="sm" />
+                </div>
+              );
+            },
+            size: 170,
+            enableHiding: false,
           },
-          {
-            label: "View Qualification",
-            icon: DocumentTextIcon,
-            onClick: () =>
-              window.open(
-                getTotDocumentUrl(trainer.qualification_certificate_url),
-                "_blank",
-              ),
-            show: !!trainer.qualification_certificate_url,
-            divider: true,
-          },
-          {
-            label: "View ID Proof",
-            icon: DocumentTextIcon,
-            onClick: () =>
-              window.open(
-                getTotDocumentUrl(trainer.id_proof_file_url),
-                "_blank",
-              ),
-            show: !!trainer.id_proof_file_url,
-          },
-        ];
-
-        return (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex justify-center"
-          >
-            <ActionDropdown actions={actions} align="right" size="sm" />
-          </div>
-        );
-      },
-      size: 180,
-      minSize: 150,
-      maxSize: 250,
-      enableHiding: false,
-      enableResizing: false,
-    },
+        ]
+      : []),
   ];
 
   return (
@@ -739,6 +825,142 @@ const TotListTab = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{trainerModalMode === "view" ? "View Trainer" : "Edit Trainer"}</DialogTitle>
+          </DialogHeader>
+
+          {editFormData && (
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-sm font-medium">TOT Center</label>
+                  <Input
+                    value={editFormData.tot_center}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, tot_center: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">First Name</label>
+                  <Input
+                    value={editFormData.first_name}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, first_name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Last Name</label>
+                  <Input
+                    value={editFormData.last_name}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, last_name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-sm font-medium">Trainer Module Trained</label>
+                  <SearchableSelect
+                    options={courseSelectOptions}
+                    value={editFormData.trainer_module_trained}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(value) => setEditFormData((prev) => ({ ...prev, trainer_module_trained: value }))}
+                    placeholder="Select course"
+                    searchPlaceholder="Search course..."
+                    emptyMessage="No course found."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Contact Number</label>
+                  <Input
+                    value={editFormData.contact_number}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, contact_number: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    type="email"
+                    value={editFormData.email_id}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, email_id: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Qualification</label>
+                  <Input
+                    value={editFormData.qualification}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, qualification: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Gender</label>
+                  <Input
+                    value={editFormData.gender}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, gender: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">City</label>
+                  <Input
+                    value={editFormData.city}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, city: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">State</label>
+                  <Input
+                    value={editFormData.state}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, state: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-sm font-medium">Contact Address</label>
+                  <Input
+                    value={editFormData.contact_address}
+                    disabled={trainerModalMode === "view"}
+                    onChange={(e) => setEditFormData((prev) => ({ ...prev, contact_address: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowEditModal(false)} disabled={saving}>
+                  Cancel
+                </Button>
+                {trainerModalMode !== "view" && (
+                  <Button type="submit" disabled={saving}>
+                    {saving ? "Saving..." : "Update Trainer"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmationModal
+        open={showDeleteModal}
+        onClose={() => {
+          if (!saving) {
+            setShowDeleteModal(false);
+            setSelectedTrainer(null);
+          }
+        }}
+        onConfirm={confirmDeleteTrainer}
+        title={`Delete Trainer: ${selectedTrainer?.trainer_name || selectedTrainer?.first_name || ""}`}
+        message="Are you sure you want to delete this TOT trainer? This action cannot be undone."
+        loading={saving}
+        itemCount={1}
+        items={selectedTrainer ? [selectedTrainer] : []}
+        itemType="trainers"
+      />
     </div>
   );
 };

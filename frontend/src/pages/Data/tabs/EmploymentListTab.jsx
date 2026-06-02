@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
 import EnhancedDataTable from "../../../components/common/EnhancedDataTable";
 import AdvancedSearchBar from "../../../components/common/AdvancedSearchBar";
+import { ActionDropdown } from "../../../components/common";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, EyeIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import ConfirmationModal from "../../../components/common/ConfirmationModal";
 import {
   getApprovedEmploymentRecords,
   addEmploymentRecord,
+  updateEmploymentRecord,
+  deleteEmploymentRecord,
 } from "../../../services/employment.service";
 import { getStudents } from "../../../services/data.service";
 import { toast } from "react-toastify";
@@ -66,10 +70,35 @@ const EmploymentListTab = () => {
 
   // Add modal
   const [showAddModal, setShowAddModal] = useState(false);
+  const [formMode, setFormMode] = useState("create");
   const [form, setForm] = useState(EMPTY_FORM);
   const [formLoading, setFormLoading] = useState(false);
   const [studentOptions, setStudentOptions] = useState([]);
   const [studentSearch, setStudentSearch] = useState("");
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const mapRecordToForm = (record) => ({
+    partnerStudentId: record.partner_student_id || "",
+    employmentStatus: record.employment_status || "Employed",
+    companyName: record.company_name || "",
+    companyLocation: record.company_location || "",
+    dateOfJoining: record.date_of_joining ? String(record.date_of_joining).slice(0, 10) : "",
+    designation: record.designation || "",
+    salaryPerMonth: record.salary_per_month || "",
+    industry: record.industry || "",
+  });
+
+  const mapFormToPayload = (currentForm) => ({
+    partnerStudentId: currentForm.partnerStudentId,
+    employmentStatus: currentForm.employmentStatus,
+    companyName: currentForm.companyName,
+    companyLocation: currentForm.companyLocation,
+    dateOfJoining: currentForm.dateOfJoining,
+    designation: currentForm.designation,
+    salaryPerMonth: currentForm.salaryPerMonth,
+    industry: currentForm.industry,
+  });
 
   // ── Fetch records ────────────────────────────────────────────────────────
   const fetchRecords = useCallback(async () => {
@@ -125,7 +154,12 @@ const EmploymentListTab = () => {
   // ── Load students for add modal (partner's own students) ─────────────────
   useEffect(() => {
     if (!showAddModal) return;
-    getStudents({ limit: 500, search: studentSearch })
+    const params = { limit: 100 };
+    if (studentSearch?.trim()) {
+      params.search = studentSearch.trim();
+    }
+
+    getStudents(params)
       .then((res) => setStudentOptions(res?.data?.data || []))
       .catch(() => {});
   }, [showAddModal, studentSearch]);
@@ -151,17 +185,63 @@ const EmploymentListTab = () => {
     e.preventDefault();
     setFormLoading(true);
     try {
-      await addEmploymentRecord(form);
-      toast.success("Employment record added successfully");
+      if (formMode === "edit" && selectedRecord) {
+        await updateEmploymentRecord(selectedRecord.id, {
+          employment_status: form.employmentStatus,
+          company_name: form.companyName,
+          company_location: form.companyLocation,
+          designation: form.designation,
+          date_of_joining: form.dateOfJoining || null,
+          salary_per_month: form.salaryPerMonth || null,
+        });
+        toast.success("Employment record updated successfully");
+      } else {
+        await addEmploymentRecord(mapFormToPayload(form));
+        toast.success("Employment record added successfully");
+      }
       setShowAddModal(false);
       setForm(EMPTY_FORM);
+      setSelectedRecord(null);
       fetchRecords();
     } catch (err) {
       toast.error(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Failed to add employment record",
+        err?.response?.data?.message || err?.message || "Failed to save employment record",
       );
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const openCreateModal = () => {
+    setFormMode("create");
+    setSelectedRecord(null);
+    setForm(EMPTY_FORM);
+    setShowAddModal(true);
+  };
+
+  const openViewOrEditModal = (record, mode) => {
+    setFormMode(mode);
+    setSelectedRecord(record);
+    setForm(mapRecordToForm(record));
+    setShowAddModal(true);
+  };
+
+  const handleDeleteRecord = (record) => {
+    setSelectedRecord(record);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteRecord = async () => {
+    if (!selectedRecord) return;
+    setFormLoading(true);
+    try {
+      await deleteEmploymentRecord(selectedRecord.id);
+      toast.success("Employment record deleted successfully");
+      setShowDeleteModal(false);
+      setSelectedRecord(null);
+      fetchRecords();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete employment record");
     } finally {
       setFormLoading(false);
     }
@@ -330,6 +410,45 @@ const EmploymentListTab = () => {
       },
       size: 130,
     },
+    ...(isAdmin
+      ? [
+          {
+            id: "actions",
+            header: "Actions",
+            cell: ({ row }) => {
+              const record = row.original;
+              const actions = [
+                {
+                  label: "View",
+                  icon: EyeIcon,
+                  onClick: () => openViewOrEditModal(record, "view"),
+                  show: true,
+                },
+                {
+                  label: "Edit",
+                  icon: PencilIcon,
+                  onClick: () => openViewOrEditModal(record, "edit"),
+                  show: true,
+                },
+                {
+                  label: "Delete",
+                  icon: TrashIcon,
+                  onClick: () => handleDeleteRecord(record),
+                  variant: "danger",
+                  show: true,
+                },
+              ];
+
+              return (
+                <div onClick={(e) => e.stopPropagation()} className="flex justify-center">
+                  <ActionDropdown actions={actions} align="right" size="sm" />
+                </div>
+              );
+            },
+            size: 160,
+          },
+        ]
+      : []),
   ];
 
   const filterGroups = [
@@ -362,7 +481,7 @@ const EmploymentListTab = () => {
         </div>
         {canAdd && (
           <Button
-            onClick={() => setShowAddModal(true)}
+            onClick={openCreateModal}
             className="gap-2 bg-primary-500 hover:bg-primary-600 text-white"
           >
             <PlusIcon className="h-4 w-4" />
@@ -410,12 +529,17 @@ const EmploymentListTab = () => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold text-gray-900">
-                Add Employment Record
+                {formMode === "edit"
+                  ? "Edit Employment Record"
+                  : formMode === "view"
+                    ? "View Employment Record"
+                    : "Add Employment Record"}
               </h2>
               <button
                 onClick={() => {
                   setShowAddModal(false);
                   setForm(EMPTY_FORM);
+                  setSelectedRecord(null);
                 }}
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
               >
@@ -432,6 +556,7 @@ const EmploymentListTab = () => {
                 <input
                   type="text"
                   required
+                    disabled={formMode === "view"}
                   value={form.partnerStudentId}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, partnerStudentId: e.target.value }))
@@ -448,6 +573,7 @@ const EmploymentListTab = () => {
                 </label>
                 <select
                   required
+                    disabled={formMode === "view"}
                   value={form.employmentStatus}
                   onChange={(e) =>
                     setForm((f) => ({
@@ -475,7 +601,7 @@ const EmploymentListTab = () => {
                   <input
                     type="text"
                     required={!isNA}
-                    disabled={isNA}
+                    disabled={isNA || formMode === "view"}
                     value={form.companyName}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, companyName: e.target.value }))
@@ -490,7 +616,7 @@ const EmploymentListTab = () => {
                   </label>
                   <input
                     type="text"
-                    disabled={isNA}
+                    disabled={isNA || formMode === "view"}
                     value={form.companyLocation}
                     onChange={(e) =>
                       setForm((f) => ({
@@ -512,7 +638,7 @@ const EmploymentListTab = () => {
                   </label>
                   <input
                     type="text"
-                    disabled={isNA}
+                    disabled={isNA || formMode === "view"}
                     value={form.designation}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, designation: e.target.value }))
@@ -527,7 +653,7 @@ const EmploymentListTab = () => {
                   </label>
                   <input
                     type="text"
-                    disabled={isNA}
+                    disabled={isNA || formMode === "view"}
                     value={form.industry}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, industry: e.target.value }))
@@ -546,7 +672,7 @@ const EmploymentListTab = () => {
                   </label>
                   <input
                     type="date"
-                    disabled={isNA}
+                    disabled={isNA || formMode === "view"}
                     value={form.dateOfJoining}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, dateOfJoining: e.target.value }))
@@ -561,7 +687,7 @@ const EmploymentListTab = () => {
                   <input
                     type="number"
                     min="0"
-                    disabled={isNA}
+                    disabled={isNA || formMode === "view"}
                     value={form.salaryPerMonth}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, salaryPerMonth: e.target.value }))
@@ -572,7 +698,7 @@ const EmploymentListTab = () => {
                 </div>
               </div>
 
-              {!isAdmin && (
+              {!isAdmin && formMode === "create" && (
                 <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-100 rounded-lg px-3 py-2">
                   This record will be added as unverified and will require admin
                   verification.
@@ -593,16 +719,39 @@ const EmploymentListTab = () => {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={formLoading}
+                  disabled={formLoading || formMode === "view"}
                   className="bg-primary-500 hover:bg-primary-600 text-white min-w-[120px]"
                 >
-                  {formLoading ? "Saving..." : "Add Record"}
+                  {formLoading
+                    ? "Saving..."
+                    : formMode === "edit"
+                      ? "Update Record"
+                      : formMode === "view"
+                        ? "Close"
+                        : "Add Record"}
                 </Button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        open={showDeleteModal}
+        onClose={() => {
+          if (!formLoading) {
+            setShowDeleteModal(false);
+            setSelectedRecord(null);
+          }
+        }}
+        onConfirm={confirmDeleteRecord}
+        title={`Delete Employment Record${selectedRecord?.student_name ? `: ${selectedRecord.student_name}` : ""}`}
+        message="Are you sure you want to delete this employment record? This action cannot be undone."
+        itemCount={1}
+        items={selectedRecord ? [selectedRecord] : []}
+        loading={formLoading}
+        itemType="employment records"
+      />
     </div>
   );
 };

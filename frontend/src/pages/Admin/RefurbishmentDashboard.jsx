@@ -83,6 +83,7 @@ const RefurbishmentDashboard = () => {
       eligibleCenters: Array.isArray(refurbishmentData?.eligibleCenters)
         ? refurbishmentData.eligibleCenters
         : [],
+      eligibleTotalCount: refurbishmentData?.eligibleTotalCount ?? 0,
       lastRefurbishedData: Array.isArray(refurbishmentData?.lastRefurbishedData)
         ? refurbishmentData.lastRefurbishedData
         : [],
@@ -107,6 +108,7 @@ const RefurbishmentDashboard = () => {
 
   // Destructure data from safe object
   const eligibleCenters = safeRefurbishmentData.eligibleCenters;
+  const eligibleTotalCount = safeRefurbishmentData.eligibleTotalCount;
   const lastRefurbishedData = safeRefurbishmentData.lastRefurbishedData;
   const allCentersData = safeRefurbishmentData.allCentersData;
   const alerts = safeRefurbishmentData.alerts;
@@ -1867,7 +1869,7 @@ const RefurbishmentDashboard = () => {
           <OverviewTab
             selectedCard={selectedOverviewCard}
             onCardClick={setSelectedOverviewCard}
-            eligibleCount={eligibleCenters.length}
+            eligibleCount={eligibleTotalCount || eligibleCenters.length}
             lastRefurbishedCount={lastRefurbishedData.length}
             allCentersCount={allCentersData.length}
             loading={loading}

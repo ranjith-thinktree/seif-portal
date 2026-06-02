@@ -230,6 +230,19 @@ vi.mock("lucide-react", () => ({
   Check: () => null,
   ChevronsUpDown: () => null,
   Package: () => null,
+  Bell: () => null,
+  Zap: () => null,
+  ClipboardList: () => null,
+  CalendarDays: () => null,
+  User: () => null,
+  Building2: () => null,
+  MessageSquare: () => null,
+  X: () => null,
+  Search: () => null,
+  ChevronDown: () => null,
+  CalendarIcon: () => null,
+  Clock: () => null,
+  RefreshCw: () => null,
 }));
 
 vi.mock("@/lib/utils", () => ({
@@ -270,6 +283,18 @@ vi.mock("../../services/data.service", () => ({
       { id: "course-2", course_name: "Plumbing Lab" },
     ],
   }),
+}));
+
+// Calendar (react-day-picker based) — not needed for these tests
+vi.mock("@/components/ui/calendar", () => ({
+  Calendar: () => null,
+}));
+
+// refurbishmentService — used in ScheduleNotificationForm to load upgradation packages
+vi.mock("@/services/refurbishment.service", () => ({
+  default: {
+    getPackages: vi.fn().mockResolvedValue({ data: { packages: [] } }),
+  },
 }));
 
 // ─── Test Data ────────────────────────────────────────────────────────────────

@@ -5,17 +5,42 @@ const ALL_REPORTING_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SEIF_READONLY', 'SEIF_READ
 
 const DATASETS = {
   core_joined: {
-    fromClause: `
-      FROM partners p
-      LEFT JOIN centers c ON c.partner_id = p.id
-      LEFT JOIN batches b ON b.center_id = c.id
-      LEFT JOIN students s ON s.batch_id = b.id
-      LEFT JOIN employment e ON e.student_id = s.id
-      LEFT JOIN trainers t ON t.center_id = c.id
-      LEFT JOIN center_courses cc ON cc.center_id = c.id
-      LEFT JOIN courses cr ON cr.id = cc.course_id
-      LEFT JOIN refurbishment_requests rr ON rr.center_id = c.id
-    `,
+    baseFrom: 'FROM partners p',
+    joinOrder: ['c', 'b', 's', 'e', 't', 'cc', 'cr', 'rr'],
+    joins: {
+      c: {
+        sql: 'LEFT JOIN centers c ON c.partner_id = p.id',
+        dependsOn: [],
+      },
+      b: {
+        sql: 'LEFT JOIN batches b ON b.center_id = c.id',
+        dependsOn: ['c'],
+      },
+      s: {
+        sql: 'LEFT JOIN students s ON s.batch_id = b.id',
+        dependsOn: ['b'],
+      },
+      e: {
+        sql: 'LEFT JOIN employment e ON e.student_id = s.id',
+        dependsOn: ['s'],
+      },
+      t: {
+        sql: 'LEFT JOIN trainers t ON t.center_id = c.id',
+        dependsOn: ['c'],
+      },
+      cc: {
+        sql: 'LEFT JOIN center_courses cc ON cc.center_id = c.id',
+        dependsOn: ['c'],
+      },
+      cr: {
+        sql: 'LEFT JOIN courses cr ON cr.id = cc.course_id',
+        dependsOn: ['cc'],
+      },
+      rr: {
+        sql: 'LEFT JOIN refurbishment_requests rr ON rr.center_id = c.id',
+        dependsOn: ['c'],
+      },
+    },
     fields: {
       partner_id: 'p.id',
       partner_name: 'p.name',
@@ -61,6 +86,42 @@ const normalizeArray = (value, fallback = []) => {
   }
 };
 
+const sanitizeSqlAlias = (value, fallback) => {
+  const normalized = String(value || fallback || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return normalized || fallback;
+};
+
+const addJoinAlias = (dataset, alias, target) => {
+  if (!alias || alias === 'p' || target.has(alias)) {
+    return;
+  }
+
+  const joinMeta = dataset.joins?.[alias];
+  if (!joinMeta) {
+    return;
+  }
+
+  (joinMeta.dependsOn || []).forEach((dependencyAlias) => {
+    addJoinAlias(dataset, dependencyAlias, target);
+  });
+
+  target.add(alias);
+};
+
+const getExpressionAlias = (expression) => {
+  if (!expression || typeof expression !== 'string') {
+    return null;
+  }
+
+  const match = expression.match(/^([a-z_]+)\./i);
+  return match ? match[1] : null;
+};
+
 const parseJsonColumn = (row) => ({
   ...row,
   selected_fields: normalizeArray(row.selected_fields),
@@ -89,18 +150,13 @@ class ReportService {
     );
 
     const parsed = (rows || []).map(parseJsonColumn);
-    const { role, id: userId } = currentUser;
+    const { role } = currentUser;
 
     if (role === 'SUPER_ADMIN' || role === 'ADMIN') {
       return parsed;
     }
 
-    return parsed.filter(
-      (row) =>
-        row.is_published &&
-        row.visible_roles.includes(role) &&
-        (row.owner_user_id === userId || row.is_published)
-    );
+    return parsed.filter((row) => row.is_published && row.visible_roles.includes(role));
   }
 
   static sanitizeDefinitionPayload(payload, currentUser, existing = null) {
@@ -126,7 +182,7 @@ class ReportService {
       throw new Error('At least one selected field is required');
     }
 
-    const groupByFields = normalizeArray(
+    const requestedGroupByFields = normalizeArray(
       payload.group_by_fields,
       existing?.group_by_fields || []
     ).filter((field) => !!dataset.fields[field]);
@@ -140,8 +196,12 @@ class ReportService {
       .map((m, idx) => ({
         type: String(m.type).toLowerCase(),
         field: m.field,
-        alias: m.alias || `${String(m.type).toLowerCase()}_${m.field}_${idx + 1}`,
+        alias: sanitizeSqlAlias(m.alias, `${String(m.type).toLowerCase()}_${m.field}_${idx + 1}`),
       }));
+
+    const groupByFields = metrics.length
+      ? Array.from(new Set([...requestedGroupByFields, ...selectedFields]))
+      : requestedGroupByFields;
 
     const rawFilters = normalizeArray(payload.filters, existing?.filters || []);
     const filters = rawFilters
@@ -322,7 +382,7 @@ class ReportService {
 
     const metricColumns = (definition.metrics || []).map((metric) => {
       const sourceCol = dataset.fields[metric.field];
-      const alias = metric.alias || `${metric.type}_${metric.field}`;
+      const alias = sanitizeSqlAlias(metric.alias, `${metric.type}_${metric.field}`);
       const type = metric.type.toLowerCase();
 
       if (type === 'count') return `COUNT(${sourceCol}) AS \`${alias}\``;
@@ -333,6 +393,30 @@ class ReportService {
     });
 
     return [...dimensionColumns, ...metricColumns];
+  }
+
+  static buildFromClause(definition, dataset) {
+    const requiredFields = [
+      ...(definition.selected_fields || []),
+      ...(definition.group_by_fields || []),
+      ...(definition.metrics || []).map((metric) => metric.field),
+      ...(definition.filters || []).map((filter) => filter.field),
+    ];
+
+    const requiredJoinAliases = new Set();
+
+    requiredFields.forEach((field) => {
+      const expression = dataset.fields[field];
+      const alias = getExpressionAlias(expression);
+      addJoinAlias(dataset, alias, requiredJoinAliases);
+    });
+
+    const joins = (dataset.joinOrder || [])
+      .filter((alias) => requiredJoinAliases.has(alias))
+      .map((alias) => dataset.joins[alias].sql)
+      .join('\n      ');
+
+    return joins ? `${dataset.baseFrom}\n      ${joins}` : dataset.baseFrom;
   }
 
   static async runDefinition(id, currentUser) {
@@ -347,6 +431,7 @@ class ReportService {
     }
 
     const { whereSql, params } = this.buildWhereClause(definition, dataset);
+    const fromClause = this.buildFromClause(definition, dataset);
 
     const groupBy = (definition.group_by_fields || [])
       .map((field) => dataset.fields[field])
@@ -356,7 +441,7 @@ class ReportService {
 
     const sql = `
       SELECT ${selectCols.join(', ')}
-      ${dataset.fromClause}
+      ${fromClause}
       ${whereSql}
       ${groupBySql}
       LIMIT 5000
@@ -450,7 +535,7 @@ class AnalyticsService {
            JOIN students s ON e.student_id = s.id
            LEFT JOIN batches b ON s.batch_id = b.id
            WHERE e.employment_status IN ('Employed','Self-Employed','Entrepreneur') ${yw}) AS youth_employed,
-        (SELECT COUNT(*) FROM trainers WHERE status = 'active') AS trainers_trained,
+        (SELECT COUNT(*) FROM trainer_profiles WHERE status = 'active') AS trainers_trained,
         ${edpSql} AS edp,
         (SELECT COUNT(DISTINCT s2.state) FROM students s2
            LEFT JOIN batches b2 ON s2.batch_id = b2.id

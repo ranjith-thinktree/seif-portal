@@ -18,6 +18,7 @@ import {
   CommandLineIcon,
   WrenchScrewdriverIcon,
   QuestionMarkCircleIcon,
+  BriefcaseIcon,
 } from "@heroicons/react/24/outline";
 import { ROLES } from "./roles";
 import { ROUTES } from "./routes";
@@ -134,6 +135,12 @@ export const SIDEBAR_MENU = [
     path: ROUTES.ESSCI_DATA,
     icon: CircleStackIcon,
     roles: [ROLES.ESSCI],
+  },
+  {
+    name: "Employment",
+    path: ROUTES.EMPLOYMENT_REVIEW,
+    icon: BriefcaseIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {
     name: "Refurbishment",

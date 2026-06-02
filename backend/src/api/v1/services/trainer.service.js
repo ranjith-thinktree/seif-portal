@@ -105,7 +105,7 @@ class TrainerService {
       const validSortOrder = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
       // Get total count
-      let countQuery = `SELECT COUNT(*) as total FROM trainers t ${whereClause}`;
+      let countQuery = `SELECT COUNT(*) as total FROM trainer_profiles t ${whereClause}`;
       const [countResult] = await db.query(countQuery, queryParams);
       const total = countResult[0]?.total || 0;
 
@@ -115,7 +115,7 @@ class TrainerService {
           t.*,
           p.name AS partner_name,
           c.center_name AS center_name
-        FROM trainers t
+        FROM trainer_profiles t
         LEFT JOIN partners p ON t.partner_id = p.id
         LEFT JOIN centers c ON t.center_id = c.id
         ${whereClause}
@@ -153,7 +153,7 @@ class TrainerService {
           t.*,
           p.name AS partner_name,
           c.center_name AS center_name
-        FROM trainers t
+        FROM trainer_profiles t
         LEFT JOIN partners p ON t.partner_id = p.id
         LEFT JOIN centers c ON t.center_id = c.id
         WHERE t.id = ?
@@ -183,7 +183,7 @@ class TrainerService {
       const documents = data.documents || {};
 
       const query = `
-        INSERT INTO trainers (
+        INSERT INTO trainer_profiles (
           id,
           partner_id,
           center_id,
@@ -247,7 +247,7 @@ class TrainerService {
   static async updateTrainer(trainerId, data, userRole) {
     try {
       // Check if trainer exists
-      const [existing] = await db.query('SELECT id FROM trainers WHERE id = ?', [trainerId]);
+      const [existing] = await db.query('SELECT id FROM trainer_profiles WHERE id = ?', [trainerId]);
 
       if (existing.length === 0) {
         throw new Error('Trainer not found');
@@ -287,7 +287,7 @@ class TrainerService {
       values.push(trainerId);
 
       const query = `
-        UPDATE trainers 
+        UPDATE trainer_profiles
         SET ${fields.join(', ')}, updated_at = NOW()
         WHERE id = ?
       `;
@@ -308,7 +308,7 @@ class TrainerService {
   static async deleteTrainer(trainerId, userRole) {
     try {
       // Check if trainer exists
-      const [existing] = await db.query('SELECT id, partner_id FROM trainers WHERE id = ?', [
+      const [existing] = await db.query('SELECT id, partner_id FROM trainer_profiles WHERE id = ?', [
         trainerId,
       ]);
 
@@ -324,7 +324,7 @@ class TrainerService {
         ]);
       } else {
         // Hard delete for ADMIN/SUPER_ADMIN
-        await db.query('DELETE FROM trainers WHERE id = ?', [trainerId]);
+        await db.query('DELETE FROM trainer_profiles WHERE id = ?', [trainerId]);
       }
     } catch (error) {
       console.error('[TrainerService.deleteTrainer] Error:', error);

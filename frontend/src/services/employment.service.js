@@ -253,6 +253,16 @@ export const getCenterEmploymentRecords = async (uploadId, centerId) => {
   return response.data;
 };
 
+export const updateEmploymentRecord = async (id, data) => {
+  const response = await apiClient.put(`/employment/admin/records/${id}`, data);
+  return response.data;
+};
+
+export const deleteEmploymentRecord = async (id) => {
+  const response = await apiClient.delete(`/employment/admin/records/${id}`);
+  return response.data;
+};
+
 export const approveEmploymentUpload = async (uploadId, remarks = "") => {
   const response = await apiClient.post(
     `/employment/admin/review-uploads/${uploadId}/approve`,

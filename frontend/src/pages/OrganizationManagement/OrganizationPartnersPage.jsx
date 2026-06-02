@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { flushSync } from "react-dom";
 import { useSelector } from "react-redux";
 import MainLayout from "../../components/layout/MainLayout";
 import EnhancedDataTable from "../../components/common/EnhancedDataTable";
@@ -69,7 +70,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
   const [showBlockedDeleteDialog, setShowBlockedDeleteDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [table, setTable] = useState(null);
-  const [sortBy, setSortBy] = useState("name");
+  const [sortBy, setSortBy] = useState(null);
   const [sortOrder, setSortOrder] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -281,8 +282,10 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
   }, [filteredAndSortedPartners.length, currentPage, pageSize]);
 
   const handleViewPartner = useCallback((partner) => {
-    setSelectedPartner(partner);
-    setShowViewDialog(true);
+    flushSync(() => {
+      setSelectedPartner(partner);
+      setShowViewDialog(true);
+    });
   }, []);
 
   const handleEdit = useCallback(async (partner) => {
@@ -403,7 +406,12 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleViewPartner(row.original)}>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedPartner(row.original);
+                  setShowViewDialog(true);
+                }}
+              >
                 <Eye className="w-4 h-4 mr-2" />
                 View Details
               </DropdownMenuItem>
@@ -435,7 +443,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         ),
       },
     ],
-    [handleEdit, handleViewPartner],
+    [handleEdit],
   );
 
   const filterGroups = useMemo(

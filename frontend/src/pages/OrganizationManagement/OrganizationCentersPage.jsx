@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { flushSync } from "react-dom";
 import MainLayout from "../../components/layout/MainLayout";
 import EnhancedDataTable from "../../components/common/EnhancedDataTable";
 import AdvancedSearchBar from "../../components/common/AdvancedSearchBar";
@@ -64,7 +65,7 @@ const OrganizationCentersPage = ({ embedded = false }) => {
     state: [],
     status: [],
   });
-  const [sortBy, setSortBy] = useState("center_name");
+  const [sortBy, setSortBy] = useState(null);
   const [sortOrder, setSortOrder] = useState("asc");
   const [selectedCenter, setSelectedCenter] = useState(null);
   const [editingCenter, setEditingCenter] = useState(null);
@@ -252,24 +253,10 @@ const OrganizationCentersPage = ({ embedded = false }) => {
     setShowForm(true);
   }, []);
 
-  const handleViewDetails = useCallback(
-    async (center) => {
-      try {
-        setLoadingCenterDetails(true);
-        setSelectedCenter(null);
-        setShowViewDialog(true);
-        const detailedCenter = await fetchCenterDetails(center.id);
-        setSelectedCenter(detailedCenter);
-      } catch (error) {
-        console.error("Error fetching center details:", error);
-        toast.error(error.message || "Failed to load center details");
-        setShowViewDialog(false);
-      } finally {
-        setLoadingCenterDetails(false);
-      }
-    },
-    [fetchCenterDetails],
-  );
+  const handleViewDetails = useCallback((center) => {
+    setSelectedCenter(center);
+    setShowViewDialog(true);
+  }, []);
 
   const handleEdit = useCallback(
     async (center) => {
@@ -402,40 +389,39 @@ const OrganizationCentersPage = ({ embedded = false }) => {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleViewDetails(row.original)}>
-                <Eye className="w-4 h-4 mr-2" />
-                View Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleEdit(row.original)}>
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-red-600 focus:text-red-600"
-                onClick={() => {
-                  setSelectedCenter(row.original);
-                  setShowDeleteDialog(true);
-                }}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setSelectedCenter(row.original);
+                setShowViewDialog(true);
+              }}
+              className="h-8 w-8 p-0 inline-flex items-center justify-center rounded hover:bg-gray-100"
+              title="View Details"
+            >
+              <Eye className="w-4 h-4 text-gray-600" />
+            </button>
+            <button
+              onClick={() => handleEdit(row.original)}
+              className="h-8 w-8 p-0 inline-flex items-center justify-center rounded hover:bg-gray-100"
+              title="Edit"
+            >
+              <Edit className="w-4 h-4 text-gray-600" />
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCenter(row.original);
+                setShowDeleteDialog(true);
+              }}
+              className="h-8 w-8 p-0 inline-flex items-center justify-center rounded hover:bg-gray-100"
+              title="Delete"
+            >
+              <Trash2 className="w-4 h-4 text-red-500" />
+            </button>
+          </div>
         ),
       },
     ],
-    [handleEdit, handleViewDetails],
+    [handleEdit],
   );
 
   const filterGroups = useMemo(

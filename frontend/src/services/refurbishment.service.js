@@ -32,9 +32,9 @@ const refurbishmentService = {
     try {
       const { limit = 50, offset = 0, region } = params;
 
-      // Use correct /all-centers endpoint and respect backend limit (max 100)
+      // Use correct /all-centers endpoint
       const response = await api.get("/admin/refurbishment/all-centers", {
-        params: { limit: Math.min(limit, 100), offset },
+        params: { limit, offset },
       });
 
       if (response.data?.success) {

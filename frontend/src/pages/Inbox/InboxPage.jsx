@@ -401,6 +401,7 @@ const InboxPage = () => {
     // Fetch center details for this upload (student data uploads only, not employment)
     if (
       notification.upload_id &&
+      notification.related_entity_type !== "tot_upload" &&
       notification.related_entity_type !== "employment_upload" &&
       notification.notification_type !== "employment"
     ) {

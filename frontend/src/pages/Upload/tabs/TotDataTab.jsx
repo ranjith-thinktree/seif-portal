@@ -69,11 +69,7 @@ const TotDataTab = ({
           <div className="bg-amber-50 px-4 pb-4 pt-1 border-t border-amber-200">
             <p className="text-amber-700 text-sm">
               Upload trainer records with all required columns:{" "}
-              <strong>
-                Training partner, Centre name, Trainer name, Course name,
-                Qualification, Date of Joining, Mobile no, Email
-              </strong>
-              .
+              <strong>TOT Center, Trainer Module Trained, First Name</strong>.
             </p>
             <p className="text-amber-700 text-sm mt-2">
               👉 Download the template below to ensure your file has the correct

@@ -6,16 +6,18 @@ const BASE = "/tot";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "/");
 
 /**
- * Download TOT CSV template
+ * Download TOT Excel (.xlsx) template
+ * @param {string|null} partnerId — optional, pre-populates center list sheet
  */
-export const downloadTotTemplate = async () => {
+export const downloadTotTemplate = async (partnerId = null) => {
   const response = await apiClient.get(`${BASE}/template`, {
     responseType: "blob",
+    params: partnerId ? { partnerId } : {},
   });
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement("a");
   link.href = url;
-  link.setAttribute("download", "TOT_Upload_Template.csv");
+  link.setAttribute("download", "TOT_Upload_Template.xlsx");
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -66,30 +68,23 @@ export const getTotTrainerFilterOptions = async () => {
   return response.data;
 };
 
+export const getTotTrainerById = async (id) => {
+  const response = await apiClient.get(`${BASE}/trainers/${id}`);
+  return response.data;
+};
+
 export const createTotTrainer = async (payload) => {
-  const formData = new FormData();
+  const response = await apiClient.post(`${BASE}/trainers`, payload);
+  return response.data;
+};
 
-  Object.entries(payload || {}).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") return;
+export const updateTotTrainer = async (id, payload) => {
+  const response = await apiClient.put(`${BASE}/trainers/${id}`, payload);
+  return response.data;
+};
 
-    if (
-      key === "resume" ||
-      key === "qualificationCertificate" ||
-      key === "idProof"
-    ) {
-      if (value instanceof File) {
-        formData.append(key, value);
-      }
-      return;
-    }
-
-    formData.append(key, value);
-  });
-
-  const response = await apiClient.post(`${BASE}/trainers`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-
+export const deleteTotTrainer = async (id) => {
+  const response = await apiClient.delete(`${BASE}/trainers/${id}`);
   return response.data;
 };
 
@@ -150,6 +145,17 @@ export const rejectTotUpload = async (uploadId, remarks = "") => {
   const response = await apiClient.post(
     `${BASE}/admin/uploads/${uploadId}/reject`,
     { remarks },
+  );
+  return response.data;
+};
+
+/**
+ * Admin: save edits to uploaded_tots rows before approval
+ */
+export const saveTotAdminEdits = async (uploadId, rows, changes = []) => {
+  const response = await apiClient.post(
+    `${BASE}/admin/uploads/${uploadId}/save-edits`,
+    { rows, changes },
   );
   return response.data;
 };

@@ -1,5 +1,19 @@
 const { param, query } = require('express-validator');
 
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const isUuidOrUuidArray = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every((entry) => typeof entry === 'string' && uuidRegex.test(entry));
+  }
+
+  return typeof value === 'string' && uuidRegex.test(value);
+};
+
 /**
  * Validator for student ID parameter
  */
@@ -37,18 +51,18 @@ const listStudentsValidator = [
 
   query('center_id')
     .optional({ checkFalsy: true })
-    .matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .withMessage('Center ID must be a valid UUID'),
+    .custom(isUuidOrUuidArray)
+    .withMessage('Center ID must be a valid UUID or list of UUIDs'),
 
   query('batch_id')
     .optional({ checkFalsy: true })
-    .matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .withMessage('Batch ID must be a valid UUID'),
+    .custom(isUuidOrUuidArray)
+    .withMessage('Batch ID must be a valid UUID or list of UUIDs'),
 
   query('partner_id')
     .optional({ checkFalsy: true })
-    .matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    .withMessage('Partner ID must be a valid UUID'),
+    .custom(isUuidOrUuidArray)
+    .withMessage('Partner ID must be a valid UUID or list of UUIDs'),
 ];
 
 module.exports = {

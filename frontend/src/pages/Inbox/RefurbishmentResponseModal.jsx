@@ -270,16 +270,6 @@ const RefurbishmentResponseModal = ({
       return;
     }
 
-    if (!refurbishmentDoc) {
-      toast.error("Please upload the refurbishment report before submitting");
-      return;
-    }
-
-    if (upgradationRequested && !upgradationDoc) {
-      toast.error("Please upload the upgradation report before submitting");
-      return;
-    }
-
     try {
       setSubmitting(true);
 
@@ -301,6 +291,15 @@ const RefurbishmentResponseModal = ({
         });
       }
 
+      // Upload upgradation photos if requested
+      let upgradationPhotoUrls = [];
+      if (upgradationRequested && upgradationPhotoFiles.length > 0) {
+        upgradationPhotoUrls = await uploadImagesToS3(
+          upgradationPhotoFiles,
+          "refurbishment/upgradation",
+        );
+      }
+
       await apiClient.post(
         `/notifications/${notificationId}/refurbishment-response`,
         {
@@ -314,6 +313,11 @@ const RefurbishmentResponseModal = ({
             : null,
           upgradation: upgradationRequested
             ? {
+                length_feet: upgradationDetails.length_feet,
+                breadth_feet: upgradationDetails.breadth_feet,
+                height_feet: upgradationDetails.height_feet,
+                justification: upgradationDetails.justification,
+                photos: upgradationPhotoUrls,
                 package_ids: Object.keys(upgradationSelections).filter(
                   (id) => upgradationSelections[id],
                 ),
@@ -513,7 +517,7 @@ const RefurbishmentResponseModal = ({
                 <button
                   onClick={() => {
                     setUpgradationRequested(true);
-                    setUpgradationStep("packages");
+                    setUpgradationStep("room");
                   }}
                   className="flex-1 px-10 py-3.5 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-bold transition-colors"
                 >
@@ -538,6 +542,135 @@ const RefurbishmentResponseModal = ({
                   Back
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+    );
+  }
+
+  // ============================================================
+  // Upgradation Room Dimension Step — collect room details
+  // ============================================================
+  if (upgradationStep === "room") {
+    const handleRoomContinue = () => {
+      const { length_feet, breadth_feet, height_feet } = upgradationDetails;
+      if (!length_feet || !breadth_feet || !height_feet) {
+        toast.error("Please fill in all room dimensions");
+        return;
+      }
+      setUpgradationStep("packages");
+    };
+
+    return (
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <div className="fixed inset-0 bg-black/50 z-50" onClick={onClose}></div>
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-5 right-5 z-10 text-gray-400 hover:text-gray-600"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">
+                ROOM DIMENSION (IN FEET)
+              </p>
+              <div className="flex gap-4 mb-6">
+                <input
+                  type="number"
+                  placeholder="LENGHT"
+                  value={upgradationDetails.length_feet}
+                  onChange={(e) =>
+                    setUpgradationDetails((prev) => ({
+                      ...prev,
+                      length_feet: e.target.value,
+                    }))
+                  }
+                  className="border rounded-lg px-3 py-2 text-sm w-1/3"
+                />
+                <input
+                  type="number"
+                  placeholder="BREADTH"
+                  value={upgradationDetails.breadth_feet}
+                  onChange={(e) =>
+                    setUpgradationDetails((prev) => ({
+                      ...prev,
+                      breadth_feet: e.target.value,
+                    }))
+                  }
+                  className="border rounded-lg px-3 py-2 text-sm w-1/3"
+                />
+                <input
+                  type="number"
+                  placeholder="HEIGHT"
+                  value={upgradationDetails.height_feet}
+                  onChange={(e) =>
+                    setUpgradationDetails((prev) => ({
+                      ...prev,
+                      height_feet: e.target.value,
+                    }))
+                  }
+                  className="border rounded-lg px-3 py-2 text-sm w-1/3"
+                />
+              </div>
+
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
+                JUSTIFICATION
+              </p>
+              <textarea
+                placeholder="WRITE HERE"
+                value={upgradationDetails.justification}
+                onChange={(e) =>
+                  setUpgradationDetails((prev) => ({
+                    ...prev,
+                    justification: e.target.value,
+                  }))
+                }
+                rows={4}
+                className="w-full border rounded-lg px-3 py-2 text-sm mb-6 resize-none"
+              />
+
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
+                UPLOAD ROOM PICTURES
+              </p>
+              <label className="cursor-pointer inline-flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) =>
+                    setUpgradationPhotoFiles((prev) => [
+                      ...prev,
+                      ...Array.from(e.target.files),
+                    ])
+                  }
+                />
+                Attach file
+              </label>
+            </div>
+
+            {/* Footer */}
+            <div className="px-8 py-4 border-t border-gray-100 bg-white flex items-center justify-between">
+              <button
+                onClick={() => setUpgradationStep("prompt")}
+                className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleRoomContinue}
+                className="px-8 py-2.5 rounded-full bg-green-600 hover:bg-green-700 text-white text-sm font-semibold"
+              >
+                Continue
+              </button>
             </div>
           </div>
         </div>

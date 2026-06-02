@@ -7,7 +7,9 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest --coverage",
+    "test:smoke": "jest tests/unit --runInBand --coverage=false",
     "lint": "eslint src/**/*.js",
+    "lint:smoke": "node scripts/syntax-check.js",
     "format": "prettier --write \"src/**/*.js\"",
     "db:migrate": "node src/database/migrations/run-migrations.js",
     "db:seed": "node src/database/seeds/run-seeds.js"

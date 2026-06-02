@@ -211,6 +211,64 @@ class StudentService {
   }
 
   /**
+   * Update a single student record
+   * @param {string} id - Student ID
+   * @param {Object} data - Fields to update
+   * @returns {Promise<Object>} Updated student row
+   */
+  async updateStudent(id, data) {
+    try {
+      const studentId = convertToUUID(id);
+      const [existing] = await db.query('SELECT id FROM students WHERE id = ?', [studentId]);
+
+      if (existing.length === 0) {
+        throw new Error('Student not found');
+      }
+
+      const fieldMap = {
+        partner_id: 'partner_id',
+        center_id: 'center_id',
+        batch_id: 'batch_id',
+        student_name: 'student_name',
+        date_of_birth: 'date_of_birth',
+        gender: 'gender',
+        mobile_number: 'mobile_number',
+        email: 'email',
+        address: 'address',
+        city: 'city',
+        state: 'state',
+        course_name: 'course_name',
+      };
+
+      const fields = [];
+      const values = [];
+
+      Object.entries(fieldMap).forEach(([inputKey, column]) => {
+        if (data[inputKey] !== undefined) {
+          fields.push(`${column} = ?`);
+          values.push(data[inputKey] === '' ? null : data[inputKey]);
+        }
+      });
+
+      if (fields.length === 0) {
+        return this.getStudentById(id);
+      }
+
+      values.push(studentId);
+
+      await db.query(
+        `UPDATE students SET ${fields.join(', ')}, updated_at = NOW() WHERE id = ?`,
+        values
+      );
+
+      return this.getStudentById(id);
+    } catch (error) {
+      console.error('Error in updateStudent:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Export students for file generation
    * @param {Object} options - Filter options
    * @returns {Promise<Array>} Student rows
@@ -587,6 +645,36 @@ class StudentService {
     } catch (error) {
       console.error('Error in bulkDeleteStudents:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Delete a single student and linked employment rows
+   * @param {string} id - Student ID
+   * @returns {Promise<void>}
+   */
+  async deleteStudent(id) {
+    const studentId = convertToUUID(id);
+    const connection = await db.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [studentRows] = await connection.query('SELECT id FROM students WHERE id = ?', [studentId]);
+      if (studentRows.length === 0) {
+        throw new Error('Student not found');
+      }
+
+      await connection.query('DELETE FROM employment WHERE student_id = ?', [studentId]);
+      await connection.query('DELETE FROM students WHERE id = ?', [studentId]);
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      console.error('Error in deleteStudent:', error);
+      throw error;
+    } finally {
+      connection.release();
     }
   }
 }

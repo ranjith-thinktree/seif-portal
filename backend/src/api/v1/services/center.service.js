@@ -880,16 +880,19 @@ class CenterService {
           p.name as 'Partner Name',
           c.center_type as 'Center Type',
           c.region as 'Region',
-          c.city as 'City',
-          c.state as 'State',
-          c.address as 'Address',
-          c.year_of_establishment as 'Year of Establishment',
           c.center_head as 'Center Head',
           c.mobile_number as 'Mobile Number',
           c.email as 'Email',
-          c.status as 'Status',
-          c.approval_status as 'Approval Status',
-          c.created_at as 'Created At'
+          c.address as 'Address',
+          c.city as 'City',
+          c.state as 'State',
+          (SELECT GROUP_CONCAT(cr.course_name ORDER BY cr.course_name SEPARATOR ', ')
+           FROM center_courses cc
+           JOIN courses cr ON cr.id = cc.course_id
+           WHERE cc.center_id = c.id) as 'Courses Offered',
+          c.year_of_establishment as 'Year of Establishment',
+          (SELECT COUNT(*) FROM students WHERE center_id = c.id) as 'Total Students',
+          c.status as 'Status'
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
         ${whereClause}

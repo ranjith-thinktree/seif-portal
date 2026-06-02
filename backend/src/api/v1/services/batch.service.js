@@ -256,9 +256,9 @@ class BatchService {
   }
 
   /**
-   * Delete batch
+   * Delete batch (cascade-deletes linked students, employment records, and comments)
    * @param {string} id - Batch ID
-   * @returns {Promise<boolean>} Success status
+   * @returns {Promise<{studentsDeleted: number}>} Deletion summary
    */
   async deleteBatch(id) {
     try {
@@ -269,20 +269,43 @@ class BatchService {
         throw new Error('Batch not found');
       }
 
-      // Check if batch has students
-      const students = await db.query('SELECT COUNT(*) as count FROM students WHERE batch_id = ?', [
-        batchId,
-      ]);
+      const result = await db.transaction(async (connection) => {
+        // Fetch student IDs that belong to this batch
+        const [studentRows] = await connection.query('SELECT id FROM students WHERE batch_id = ?', [
+          batchId,
+        ]);
 
-      if (students[0].count > 0) {
-        throw new Error(
-          'Cannot delete batch with enrolled students. Please remove all students first.'
-        );
-      }
+        let studentsDeleted = 0;
 
-      await db.query('DELETE FROM batches WHERE id = ?', [batchId]);
+        if (studentRows.length > 0) {
+          const studentIds = studentRows.map((s) => s.id);
+          const placeholders = studentIds.map(() => '?').join(',');
 
-      return true;
+          // Delete employment records linked to these students
+          await connection.query(
+            `DELETE FROM employment WHERE student_id IN (${placeholders})`,
+            studentIds
+          );
+
+          // Delete student comments linked to these students
+          await connection.query(
+            `DELETE FROM student_comments WHERE student_id IN (${placeholders})`,
+            studentIds
+          );
+
+          // Delete the students themselves
+          await connection.query(`DELETE FROM students WHERE batch_id = ?`, [batchId]);
+
+          studentsDeleted = studentRows.length;
+        }
+
+        // Delete the batch
+        await connection.query('DELETE FROM batches WHERE id = ?', [batchId]);
+
+        return { studentsDeleted };
+      });
+
+      return result;
     } catch (error) {
       console.error('Error in deleteBatch:', error);
       throw error;
@@ -494,24 +517,30 @@ class BatchService {
             continue;
           }
 
-          // Check for dependencies (students)
-          const students = await db.query(
-            'SELECT COUNT(*) as count FROM students WHERE batch_id = ?',
-            [batchId]
-          );
+          // Cascade-delete students, employment records, and comments for this batch
+          await db.transaction(async (connection) => {
+            const [studentRows] = await connection.query(
+              'SELECT id FROM students WHERE batch_id = ?',
+              [batchId]
+            );
 
-          if (students[0].count > 0) {
-            results.failed.push({
-              id: batchId,
-              readable_id: batch.batch_number,
-              name: batch.batch_number,
-              reason: `Cannot delete batch with ${students[0].count} enrolled student(s). Please remove all students first.`,
-            });
-            continue;
-          }
+            if (studentRows.length > 0) {
+              const studentIds = studentRows.map((s) => s.id);
+              const placeholders = studentIds.map(() => '?').join(',');
 
-          // All checks passed - safe to delete
-          await db.query('DELETE FROM batches WHERE id = ?', [batchId]);
+              await connection.query(
+                `DELETE FROM employment WHERE student_id IN (${placeholders})`,
+                studentIds
+              );
+              await connection.query(
+                `DELETE FROM student_comments WHERE student_id IN (${placeholders})`,
+                studentIds
+              );
+              await connection.query('DELETE FROM students WHERE batch_id = ?', [batchId]);
+            }
+
+            await connection.query('DELETE FROM batches WHERE id = ?', [batchId]);
+          });
 
           results.success.push({
             id: batchId,

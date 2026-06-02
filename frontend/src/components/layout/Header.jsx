@@ -21,7 +21,7 @@ import {
 const Header = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { role, userName, userEmail } = useAuth();
+  const { role, userName, userEmail, partnerName } = useAuth();
   const { unreadCount, updateUnreadCount } = useNotifications();
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const settingsMenuRef = useRef(null);
@@ -33,6 +33,9 @@ const Header = () => {
         const response = await getUnreadCount();
         updateUnreadCount(response.count);
       } catch (error) {
+        if (error?.response?.status === 401) {
+          return;
+        }
         console.error("Failed to fetch unread count:", error);
       }
     };
@@ -55,8 +58,13 @@ const Header = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Show only the first two words of the username
-  const shortName = userName ? userName.split(" ").slice(0, 2).join(" ") : "";
+  // For PARTNER role show partner org name, otherwise show first two words of username
+  const shortName =
+    role === "PARTNER" && partnerName
+      ? partnerName
+      : userName
+        ? userName.split(" ").slice(0, 2).join(" ")
+        : "";
 
   return (
     <header className="bg-white border-b border-border sticky top-0 z-30">
@@ -104,8 +112,15 @@ const Header = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate">
-                        {userName}
+                        {role === "PARTNER" && partnerName
+                          ? partnerName
+                          : userName}
                       </p>
+                      {role === "PARTNER" && partnerName && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {userName}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground truncate">
                         {userEmail}
                       </p>

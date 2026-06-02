@@ -179,7 +179,7 @@ class PartnerService {
       const partner = partners[0];
 
       const [statePresenceRows] = await db.query(
-        `SELECT state_id FROM partner_state_presence WHERE partner_id = ? ORDER BY state_id ASC`,
+        'SELECT state_id FROM partner_state_presence WHERE partner_id = ? ORDER BY state_id ASC',
         [partnerId]
       );
 
@@ -688,13 +688,33 @@ class PartnerService {
     }
   }
 
+  async deletePartnerDependencies(partnerId, executor) {
+    await executor.query(
+      `DELETE FROM notifications WHERE recipient_id IN (
+         SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
+       )`,
+      [partnerId]
+    );
+
+    await executor.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
+    await executor.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [
+      partnerId,
+    ]);
+    await executor.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
+    await executor.query('DELETE FROM partners WHERE id = ?', [partnerId]);
+  }
+
   /**
    * Delete partner
    * @param {string} id - Partner ID
    * @returns {Promise<boolean>} Success status
    */
   async deletePartner(id) {
+    const connection = await db.getConnection();
+
     try {
+      await connection.beginTransaction();
+
       const partnerId = convertToUUID(id);
 
       // Check if partner exists
@@ -704,7 +724,7 @@ class PartnerService {
       }
 
       // Check if partner has centers
-      const [centers] = await db.query(
+      const [centers] = await connection.query(
         'SELECT COUNT(*) as count FROM centers WHERE partner_id = ?',
         [partnerId]
       );
@@ -715,32 +735,16 @@ class PartnerService {
         );
       }
 
-      // Delete in correct dependency order:
-      // 1. Notifications for this partner's users
-      await db.query(
-        `DELETE FROM notifications WHERE recipient_id IN (
-           SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
-         )`,
-        [partnerId]
-      );
-
-      // 2. Notification queue entries for this partner
-      await db.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
-
-      // 3. Delete associated user accounts (partner login accounts are automatically created)
-      // This only deletes users with role='PARTNER' linked to this partner
-      await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [partnerId]);
-
-      // 4. Delete partner state presence
-      await db.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
-
-      // 5. Delete the partner
-      await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
+      await this.deletePartnerDependencies(partnerId, connection);
+      await connection.commit();
 
       return true;
     } catch (error) {
+      await connection.rollback();
       console.error('Error in deletePartner:', error);
       throw error;
+    } finally {
+      connection.release();
     }
   }
 
@@ -853,21 +857,19 @@ class PartnerService {
       const [partners] = await db.query(
         `SELECT 
           name as 'Partner Name',
+          partner_id as 'Partner ID',
           organization_type as 'Organization Type',
           contact_person as 'Contact Person',
           contact_email as 'Contact Email',
           contact_phone as 'Contact Phone',
-          address_line1 as 'Address Line 1',
+          address_line1 as 'Address',
           address_line2 as 'Address Line 2',
           city as 'City',
           state as 'State',
-          country as 'Country',
           postal_code as 'Postal Code',
-          status as 'Status',
-          approval_status as 'Approval Status',
-          registration_date as 'Registration Date',
-          created_at as 'Created At'
-        FROM partners
+          (SELECT COUNT(*) FROM centers c WHERE c.partner_id = p.id AND c.approval_status = 'approved') as 'Total Centers',
+          status as 'Status'
+        FROM partners p
         ${whereClause}
         ORDER BY created_at DESC`,
         queryParams
@@ -954,9 +956,13 @@ class PartnerService {
                 u.full_name as uploaded_by_name
          FROM data_uploads du
          LEFT JOIN users u ON du.uploaded_by = u.id
-         WHERE du.id = ?`,
-        [uploadId]
+         WHERE du.id = ? AND du.partner_id = ?`,
+        [uploadId, partnerId]
       );
+
+      if (!uploadRows.length) {
+        throw new Error('Upload not found or unauthorized');
+      }
 
       const [centers] = await connection.query(
         `SELECT uc.* FROM uploaded_centers uc
@@ -2011,28 +2017,18 @@ class PartnerService {
             continue;
           }
 
-          // All checks passed - safe to delete
-          // 1. Notifications for this partner's users
-          await db.query(
-            `DELETE FROM notifications WHERE recipient_id IN (
-               SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
-             )`,
-            [partnerId]
-          );
+          const connection = await db.getConnection();
 
-          // 2. Notification queue entries for this partner
-          await db.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
-
-          // 3. Delete associated user accounts first
-          await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [
-            partnerId,
-          ]);
-
-          // 4. Delete partner_state_presence records
-          await db.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
-
-          // 5. Delete the partner
-          await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
+          try {
+            await connection.beginTransaction();
+            await this.deletePartnerDependencies(partnerId, connection);
+            await connection.commit();
+          } catch (error) {
+            await connection.rollback();
+            throw error;
+          } finally {
+            connection.release();
+          }
 
           results.success.push({
             id: partnerId,

@@ -2,6 +2,8 @@ const RefurbishmentService = require('../services/refurbishment.service');
 const ScheduledNotificationService = require('../services/scheduledNotification.service');
 const ApiResponse = require('../../../utils/response.util');
 const { ValidationError } = require('../../../utils/error.util');
+const { generatePutPresignedUrl } = require('../../../utils/s3.util');
+const { v4: uuidv4 } = require('uuid');
 
 /**
  * Refurbishment Controller
@@ -29,8 +31,8 @@ class RefurbishmentController {
       const offset = parseInt(req.query.offset) || 0;
 
       // Validate pagination parameters
-      if (limit < 1 || limit > 100) {
-        throw new ValidationError('Limit must be between 1 and 100');
+      if (limit < 1 || limit > 5000) {
+        throw new ValidationError('Limit must be between 1 and 5000');
       }
       if (offset < 0) {
         throw new ValidationError('Offset must be non-negative');
@@ -77,8 +79,8 @@ class RefurbishmentController {
       const offset = parseInt(req.query.offset) || 0;
 
       // Validate pagination parameters
-      if (limit < 1 || limit > 100) {
-        throw new ValidationError('Limit must be between 1 and 100');
+      if (limit < 1 || limit > 5000) {
+        throw new ValidationError('Limit must be between 1 and 5000');
       }
       if (offset < 0) {
         throw new ValidationError('Offset must be non-negative');
@@ -1175,6 +1177,46 @@ class RefurbishmentController {
       return ApiResponse.success(res, result, 'Notification history retrieved');
     } catch (error) {
       console.error('[RefurbishmentController] Error fetching notification history:', error);
+      return ApiResponse.error(res, error.message, 500);
+    }
+  }
+
+  /**
+   * POST /api/v1/admin/refurbishment/upload-url
+   * Generate a short-lived S3 presigned PUT URL for direct browser upload.
+   * Used by AdminStatusChangeModal for completion file uploads.
+   * Body: { fileName: string, fileType: string, folder?: string }
+   * Returns: { uploadUrl, fileUrl, key }
+   */
+  static async generateUploadUrl(req, res) {
+    try {
+      const { fileName, fileType, folder } = req.body;
+
+      if (!fileName || !fileType) {
+        return ApiResponse.error(res, 'fileName and fileType are required', 400);
+      }
+
+      const allowedTypes = [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ];
+      if (!allowedTypes.includes(fileType)) {
+        return ApiResponse.error(res, 'File type not allowed', 400);
+      }
+
+      const ext = fileName.split('.').pop().toLowerCase();
+      const safeFolder = (folder || 'refurbishment/admin').replace(/[^a-zA-Z0-9/_-]/g, '');
+      const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext}`;
+
+      const { uploadUrl, fileUrl } = await generatePutPresignedUrl(key, fileType, 300);
+
+      return ApiResponse.success(res, { uploadUrl, fileUrl, key }, 'Upload URL generated');
+    } catch (error) {
+      console.error('[RefurbishmentController] Error generating upload URL:', error);
       return ApiResponse.error(res, error.message, 500);
     }
   }

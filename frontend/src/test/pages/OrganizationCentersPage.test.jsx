@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import React from "react";
 import {
   render,
   screen,
@@ -17,6 +18,21 @@ vi.mock("../../services/data.service", () => ({
 }));
 vi.mock("../../components/layout/MainLayout", () => ({
   default: ({ children }) => <div data-testid="main-layout">{children}</div>,
+}));
+vi.mock("../../components/ui/dialog", () => ({
+  Dialog: ({ open, onOpenChange, children }) =>
+    open ? (
+      <div role="dialog" aria-modal="true">
+        {children}
+      </div>
+    ) : null,
+  DialogContent: ({ children, className }) => (
+    <div className={className}>{children}</div>
+  ),
+  DialogHeader: ({ children }) => <div>{children}</div>,
+  DialogTitle: ({ children }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }) => <p>{children}</p>,
+  DialogFooter: ({ children }) => <div>{children}</div>,
 }));
 vi.mock("../../components/common/EnhancedDataTable", () => ({
   default: ({ columns, data, isLoading }) => (

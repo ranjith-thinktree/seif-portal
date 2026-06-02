@@ -374,7 +374,14 @@ const CenterDetailsPage = () => {
             setSelectedBatch(null);
           }}
           title={`Delete Batch: ${selectedBatch?.batch_number || ""}`}
-          description="Are you sure you want to delete this batch? This action cannot be undone and will affect all associated student records."
+          description={(() => {
+            const count = selectedBatch?.enrolled_students || 0;
+            const base =
+              "Are you sure you want to delete this batch? This action cannot be undone.";
+            return count > 0
+              ? `${base} This will also permanently delete ${count} student(s) and their employment records.`
+              : base;
+          })()}
           onSubmit={confirmDeleteBatch}
           isLoading={isDeleting}
           reasonLabel="Reason for Deletion"

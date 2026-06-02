@@ -3,11 +3,7 @@ const router = express.Router();
 const totController = require('../controllers/tot.controller');
 const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
-const {
-  uploadCSV,
-  uploadTotTrainerDocuments,
-  handleUploadError,
-} = require('../../../middleware/upload.middleware');
+const { uploadCSV, handleUploadError } = require('../../../middleware/upload.middleware');
 
 /**
  * TOT Routes
@@ -71,22 +67,39 @@ router.get(
   totController.getTrainerFilterOptions
 );
 
+router.get(
+  '/trainers/:id',
+  authenticate,
+  checkRole([
+    'PARTNER',
+    'ADMIN',
+    'SUPER_ADMIN',
+    'ESSCI',
+    'SEIF_READONLY',
+    'SEIF_READONLY_DOWNLOAD',
+  ]),
+  totController.getTrainerById
+);
+
 router.post(
   '/trainers',
   authenticate,
   checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
-  uploadTotTrainerDocuments,
-  handleUploadError,
   totController.createTrainer
 );
 
-router.post(
-  '/uploads/:id/trainers/:trainerId/documents',
+router.put(
+  '/trainers/:id',
   authenticate,
-  checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
-  uploadTotTrainerDocuments,
-  handleUploadError,
-  totController.uploadTrainerDocuments
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  totController.updateTrainer
+);
+
+router.delete(
+  '/trainers/:id',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  totController.deleteTrainer
 );
 
 // Admin: all uploads
@@ -111,6 +124,14 @@ router.post(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   totController.rejectUpload
+);
+
+// Admin: save edits before approval
+router.post(
+  '/admin/uploads/:id/save-edits',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  totController.saveTotAdminEdits
 );
 
 module.exports = router;

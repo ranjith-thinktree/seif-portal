@@ -15,6 +15,7 @@ import {
   ReviewPage,
   ReviewCentersPage,
   ReviewStudentsPage,
+  ReviewTotUploadPage,
   RejectedUploadsPage as ReviewRejectedUploadsPage,
 } from "../pages/Review";
 import PendingCentersReviewPage from "../pages/Review/PendingCentersReviewPage";
@@ -420,6 +421,15 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute>
                 <ReviewRejectedUploadsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.REVIEW_TOT_UPLOAD}
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                <ReviewTotUploadPage />
               </ProtectedRoute>
             }
           />

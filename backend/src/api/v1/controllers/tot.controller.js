@@ -1,48 +1,41 @@
 const totService = require('../services/tot.service');
 const { parseExcelFile } = require('../../../utils/excelHandler');
+const notificationService = require('../services/notification.service');
+const { emitToRole } = require('../../../websocket/socket');
 const fs = require('fs');
-const path = require('path');
-
-const toFileUrl = (filePath) => {
-  if (!filePath) return null;
-  return `/uploads/${path.relative(path.join(__dirname, '../../../../uploads'), filePath).replace(/\\/g, '/')}`;
-};
-
-const cleanupFile = (filePath) => {
-  if (!filePath) return;
-
-  try {
-    fs.unlinkSync(filePath);
-  } catch (_) {
-    // Ignore cleanup failures for temp files.
-  }
-};
-
-const cleanupUploadedDocumentFiles = (files = {}) => {
-  Object.values(files)
-    .flat()
-    .forEach((file) => cleanupFile(file?.path));
-};
 
 /**
  * TOT Controller
- * POST /api/v1/tot/upload  — partner uploads TOT CSV
- * GET  /api/v1/tot/template — download CSV template
- * GET  /api/v1/tot/uploads  — partner history
- * GET  /api/v1/tot/uploads/:id — detail
- * GET  /api/v1/tot/admin/uploads — admin list
- * POST /api/v1/tot/admin/uploads/:id/approve
- * POST /api/v1/tot/admin/uploads/:id/reject
+ * GET  /api/v1/tot/template                      — download xlsx template
+ * POST /api/v1/tot/upload                        — partner uploads TOT file
+ * GET  /api/v1/tot/uploads                       — partner history
+ * GET  /api/v1/tot/uploads/:id                   — upload details
+ * GET  /api/v1/tot/admin/uploads                 — admin list
+ * POST /api/v1/tot/admin/uploads/:id/approve     — approve
+ * POST /api/v1/tot/admin/uploads/:id/reject      — reject
+ * POST /api/v1/tot/admin/uploads/:id/save-edits  — save edits before approve
+ * GET  /api/v1/tot/trainers                      — approved trainer list
+ * GET  /api/v1/tot/trainers/filter-options       — filter options
+ * POST /api/v1/tot/trainers                      — create single trainer
  */
 
 /**
- * Download TOT CSV template
+ * Download TOT Excel (.xlsx) template
  */
-exports.downloadTemplate = (req, res) => {
-  const csv = totService.getTemplateCSV();
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename="TOT_Upload_Template.csv"');
-  res.send(csv);
+exports.downloadTemplate = async (req, res) => {
+  try {
+    const partnerId = req.user.partner_id || req.query.partnerId || null;
+    const buffer = await totService.generateTemplateExcel(partnerId);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="TOT_Upload_Template.xlsx"');
+    return res.send(buffer);
+  } catch (error) {
+    console.error('downloadTemplate error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to generate template.' });
+  }
 };
 
 /**
@@ -57,12 +50,27 @@ exports.uploadTot = async (req, res) => {
   try {
     const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
     const targetPartnerId = req.body.targetPartnerId || null;
-    let partnerId = req.user.partner_id || req.user.id;
-    if (isAdmin && targetPartnerId) partnerId = targetPartnerId;
+    let partnerId = req.user.partner_id;
+    if (isAdmin) {
+      if (!targetPartnerId) {
+        if (dataFile && dataFile.path) fs.unlink(dataFile.path, () => {});
+        return res.status(400).json({
+          success: false,
+          message: 'Partner ID is required for admin uploads. Please select a partner.',
+        });
+      }
+      partnerId = targetPartnerId;
+    }
+    if (!partnerId) {
+      if (dataFile && dataFile.path) fs.unlink(dataFile.path, () => {});
+      return res.status(400).json({
+        success: false,
+        message: 'Partner ID not found. Please ensure you are logged in as a partner user.',
+      });
+    }
 
     const uploadedBy = req.user.id;
 
-    // Parse file
     const { rows } = await parseExcelFile(dataFile.path, dataFile.originalname, 'tot');
 
     if (!rows || rows.length === 0) {
@@ -72,7 +80,6 @@ exports.uploadTot = async (req, res) => {
         .json({ success: false, message: 'File is empty or has no data rows.' });
     }
 
-    // Validate rows
     const validationErrors = [];
     const cleanedRows = [];
 
@@ -95,26 +102,45 @@ exports.uploadTot = async (req, res) => {
       });
     }
 
-    const fileUrl = dataFile.path; // local path (S3 optional)
-
     const result = await totService.createUpload(
       partnerId,
       uploadedBy,
       dataFile.originalname,
-      fileUrl,
+      dataFile.path,
       cleanedRows
     );
 
     fs.unlink(dataFile.path, () => {});
 
+    try {
+      const partnerName = req.user.partner_name || req.user.full_name || 'Partner';
+      await notificationService.createUploadNotification({
+        uploadId: result.uploadId,
+        partnerId,
+        partnerName,
+        fileName: dataFile.originalname,
+        totalRecords: result.processed,
+        entityType: 'tot_upload',
+      });
+
+      emitToRole('admin', 'notification:new', {
+        type: 'tot_upload',
+        alert_type: 'info',
+        title: 'New TOT Data Upload',
+        message: `${partnerName} uploaded TOT data: ${dataFile.originalname} (${result.processed} records)`,
+        uploadId: result.uploadId,
+        totalRecords: result.processed,
+        related_entity_type: 'tot_upload',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (notifError) {
+      console.warn('Failed to send TOT upload notification:', notifError.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: `Successfully uploaded ${result.processed} TOT records. Awaiting admin approval.`,
-      data: {
-        uploadId: result.uploadId,
-        total: result.total,
-        processed: result.processed,
-      },
+      data: { uploadId: result.uploadId, total: result.total, processed: result.processed },
     });
   } catch (error) {
     if (dataFile && dataFile.path) fs.unlink(dataFile.path, () => {});
@@ -140,7 +166,7 @@ exports.getMyUploads = async (req, res) => {
 };
 
 /**
- * Get upload details (partner view)
+ * Get upload details
  */
 exports.getUploadDetails = async (req, res) => {
   try {
@@ -200,7 +226,20 @@ exports.rejectUpload = async (req, res) => {
 };
 
 /**
- * Get approved TOT trainers for data pages.
+ * Admin: save edits to uploaded_tots rows (before approval)
+ */
+exports.saveTotAdminEdits = async (req, res) => {
+  try {
+    const { rows = [], changes = [] } = req.body;
+    const result = await totService.saveTotAdminEdits(req.params.id, rows, changes, req.user.id);
+    return res.json({ success: true, message: 'Changes saved.', data: result });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Get approved TOT trainers
  */
 exports.getTrainers = async (req, res) => {
   try {
@@ -209,15 +248,14 @@ exports.getTrainers = async (req, res) => {
       limit: parseInt(req.query.limit, 10) || 10,
       search: req.query.search || '',
       partner_id: req.query.partner_id || '',
-      training_centre_name: req.query.training_centre_name || '',
-      course_name: req.query.course_name || '',
-      document_status: req.query.document_status || '',
+      trainer_module_trained: req.query.trainer_module_trained || '',
+      tot_center: req.query.tot_center || '',
+      state: req.query.state || '',
       sort_by: req.query.sort_by || 'created_at',
       sort_order: req.query.sort_order || 'desc',
       role: req.user.role,
       user_partner_id: req.user.partner_id || req.user.id,
     });
-
     return res.json({ success: true, ...result });
   } catch (error) {
     return res
@@ -226,8 +264,41 @@ exports.getTrainers = async (req, res) => {
   }
 };
 
+exports.getTrainerById = async (req, res) => {
+  try {
+    const trainer = await totService.getTrainerById(req.params.id);
+    if (!trainer) {
+      return res.status(404).json({ success: false, message: 'Trainer not found' });
+    }
+
+    return res.json({ success: true, data: trainer });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to load trainer' });
+  }
+};
+
+exports.updateTrainer = async (req, res) => {
+  try {
+    const trainer = await totService.updateTrainer(req.params.id, req.body || {});
+    return res.json({ success: true, message: 'Trainer updated successfully', data: trainer });
+  } catch (error) {
+    const status = error.message === 'Trainer not found' ? 404 : 500;
+    return res.status(status).json({ success: false, message: error.message || 'Failed to update trainer' });
+  }
+};
+
+exports.deleteTrainer = async (req, res) => {
+  try {
+    await totService.deleteTrainer(req.params.id);
+    return res.json({ success: true, message: 'Trainer deleted successfully', data: null });
+  } catch (error) {
+    const status = error.message === 'Trainer not found' ? 404 : 500;
+    return res.status(status).json({ success: false, message: error.message || 'Failed to delete trainer' });
+  }
+};
+
 /**
- * Get filter options for TOT trainer data tab.
+ * Get filter options for TOT trainer data tab
  */
 exports.getTrainerFilterOptions = async (req, res) => {
   try {
@@ -235,7 +306,6 @@ exports.getTrainerFilterOptions = async (req, res) => {
       role: req.user.role,
       user_partner_id: req.user.partner_id || req.user.id,
     });
-
     return res.json({ success: true, data: result });
   } catch (error) {
     return res
@@ -245,129 +315,28 @@ exports.getTrainerFilterOptions = async (req, res) => {
 };
 
 /**
- * Create a single trainer directly in approved TOT data.
+ * Create a single trainer directly in approved TOT data (minimal form)
  */
 exports.createTrainer = async (req, res) => {
-  const files = req.files || {};
-
   try {
     const actor = {
       id: req.user.id,
       role: req.user.role,
       partnerId: req.user.partner_id || req.user.id,
-    };
-
-    const documentPayload = {
-      resume: files.resume?.[0]
-        ? {
-            fileUrl: toFileUrl(files.resume[0].path),
-            fileName: files.resume[0].originalname,
-          }
-        : null,
-      qualificationCertificate: files.qualificationCertificate?.[0]
-        ? {
-            fileUrl: toFileUrl(files.qualificationCertificate[0].path),
-            fileName: files.qualificationCertificate[0].originalname,
-          }
-        : null,
-      idProof: files.idProof?.[0]
-        ? {
-            fileUrl: toFileUrl(files.idProof[0].path),
-            fileName: files.idProof[0].originalname,
-          }
-        : null,
     };
 
     const trainer = await totService.createTrainer({
       actor,
       targetPartnerId: req.body.targetPartnerId || null,
-      trainerData: {
-        trainer_name: req.body.trainer_name,
-        course_name: req.body.course_name,
-        training_partner: req.body.training_partner,
-        training_centre_name: req.body.training_centre_name,
-        qualification: req.body.qualification,
-        date_of_joining: req.body.date_of_joining,
-        mobile_no: req.body.mobile_no,
-        email: req.body.email,
-      },
-      documents: documentPayload,
+      trainerData: req.body,
     });
 
-    return res.status(201).json({
-      success: true,
-      message: 'Trainer added successfully.',
-      data: trainer,
-    });
+    return res
+      .status(201)
+      .json({ success: true, message: 'Trainer added successfully.', data: trainer });
   } catch (error) {
-    cleanupUploadedDocumentFiles(files);
     return res
       .status(400)
       .json({ success: false, message: error.message || 'Failed to add trainer.' });
-  }
-};
-
-/**
- * Upload trainer documents for a staged TOT row.
- */
-exports.uploadTrainerDocuments = async (req, res) => {
-  const files = req.files || {};
-
-  try {
-    const actor = {
-      id: req.user.id,
-      role: req.user.role,
-      partnerId: req.user.partner_id || req.user.id,
-    };
-
-    const documentPayload = {
-      resume: files.resume?.[0]
-        ? {
-            fileUrl: toFileUrl(files.resume[0].path),
-            fileName: files.resume[0].originalname,
-          }
-        : null,
-      qualificationCertificate: files.qualificationCertificate?.[0]
-        ? {
-            fileUrl: toFileUrl(files.qualificationCertificate[0].path),
-            fileName: files.qualificationCertificate[0].originalname,
-          }
-        : null,
-      idProof: files.idProof?.[0]
-        ? {
-            fileUrl: toFileUrl(files.idProof[0].path),
-            fileName: files.idProof[0].originalname,
-          }
-        : null,
-    };
-
-    if (
-      !documentPayload.resume &&
-      !documentPayload.qualificationCertificate &&
-      !documentPayload.idProof
-    ) {
-      cleanupUploadedDocumentFiles(files);
-      return res
-        .status(400)
-        .json({ success: false, message: 'Upload at least one trainer document.' });
-    }
-
-    const trainer = await totService.attachTrainerDocuments(
-      req.params.id,
-      req.params.trainerId,
-      actor,
-      documentPayload
-    );
-
-    return res.json({
-      success: true,
-      message: 'Trainer documents uploaded successfully.',
-      data: trainer,
-    });
-  } catch (error) {
-    cleanupUploadedDocumentFiles(files);
-    return res
-      .status(400)
-      .json({ success: false, message: error.message || 'Failed to upload trainer documents.' });
   }
 };

@@ -40,6 +40,7 @@ const AlertsTab = ({
   const [selectedRow, setSelectedRow] = useState(null);
   const [requestDetails, setRequestDetails] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(table.searchTerm || "");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -85,12 +86,14 @@ const AlertsTab = ({
     if (!requestId) return;
     setDetailLoading(true);
     setRequestDetails(null);
+    setDetailError(false);
     try {
       const res =
         await refurbishmentService.getRefurbishmentRequestForReview(requestId);
       setRequestDetails(res.data || res);
     } catch (err) {
       console.error("Error loading refurbishment request:", err);
+      setDetailError(true);
     } finally {
       setDetailLoading(false);
     }
@@ -112,6 +115,7 @@ const AlertsTab = ({
   const handleDismiss = () => {
     setSelectedRow(null);
     setRequestDetails(null);
+    setDetailError(false);
   };
 
   const handleSearchChange = (value) => {
@@ -476,6 +480,59 @@ const AlertsTab = ({
                     <div className="h-8 bg-gray-100 rounded w-28" />
                   </div>
                 </div>
+              ) : detailError ? (
+                /* ── Error state ─── */
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-lg font-bold text-gray-900 leading-snug">
+                      Refurbishment Request
+                    </h2>
+                    <button
+                      onClick={handleDismiss}
+                      className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                    >
+                      <XMarkIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                      <svg
+                        className="h-6 w-6 text-red-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800">
+                      Request Not Found
+                    </p>
+                    <p className="text-xs text-gray-500 max-w-[260px]">
+                      This refurbishment request could not be loaded. The data
+                      may have been removed or is no longer available.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-auto">
+                    <button
+                      onClick={handleDismiss}
+                      className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      disabled
+                      className="px-7 py-2.5 bg-gray-300 text-white text-sm font-semibold rounded-full cursor-not-allowed"
+                    >
+                      Review
+                    </button>
+                  </div>
+                </>
               ) : (
                 <>
                   {/* Title */}

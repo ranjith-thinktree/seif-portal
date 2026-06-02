@@ -192,7 +192,6 @@ describe('Upload Service - Unit Tests', () => {
         uploadService.processUpload(mockPartnerId, mockUploadId, invalidData)
       ).rejects.toThrow();
     });
-
   });
 
   describe('soft delete - version system', () => {

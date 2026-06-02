@@ -106,6 +106,12 @@ router.get(
   studentController.getStudentById
 );
 
+// Update student
+router.put('/:id', authenticate, checkRole(['ADMIN', 'SUPER_ADMIN']), studentController.updateStudent);
+
+// Delete student
+router.delete('/:id', authenticate, checkRole(['ADMIN', 'SUPER_ADMIN']), studentController.deleteStudent);
+
 /**
  * @route   POST /api/v1/students/bulk-delete
  * @desc    Bulk delete students
