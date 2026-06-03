@@ -204,6 +204,14 @@ const OrganizationCentersPage = ({ embedded = false }) => {
         toast.warn("No data to export.");
         return;
       }
+
+      const escapeCsvValue = (value) => {
+        const normalized =
+          value === null || value === undefined ? "" : String(value);
+        const escaped = normalized.replace(/"/g, '""');
+        return `"${escaped}"`;
+      };
+
       // Prepare CSV data
       const csvData = filteredAndSortedCenters.map((center) => ({
         "Center Name": center.center_name,
@@ -223,8 +231,10 @@ const OrganizationCentersPage = ({ embedded = false }) => {
       }));
 
       // Convert to CSV
-      const headers = Object.keys(csvData[0]).join(",");
-      const rows = csvData.map((row) => Object.values(row).join(","));
+      const headers = Object.keys(csvData[0]).map(escapeCsvValue).join(",");
+      const rows = csvData.map((row) =>
+        Object.values(row).map(escapeCsvValue).join(","),
+      );
       const csv = [headers, ...rows].join("\n");
 
       // Create blob and download

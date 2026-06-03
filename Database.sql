@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 02, 2026 at 07:33 AM
+-- Generation Time: Jun 03, 2026 at 08:09 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -150588,16 +150588,21 @@ CREATE TABLE `notifications` (
 INSERT INTO `notifications` (`id`, `recipient_id`, `recipient_role`, `type`, `alert_type`, `title`, `message`, `remark`, `payload`, `related_entity_type`, `related_entity_id`, `is_read`, `read_at`, `sent_via`, `email_sent_at`, `created_at`) VALUES
 ('086b25b4-5d86-11f1-9865-00410e2b5e6e', 'a0000000-0000-0000-0000-000000000002', 'admin', 'upload', 'info', 'New Data Upload', 'Sachin Alatagi has uploaded a new data file: Gram_Vikas_Society_student_upload.xlsx (15 records)', 'Requires review and approval', '{\"uploadId\":\"085d0ab2-5d86-11f1-9865-00410e2b5e6e\",\"partnerId\":\"1041639e-83e3-445c-9b06-df34897a44cd\",\"partnerName\":\"Sachin Alatagi\",\"fileName\":\"Gram_Vikas_Society_student_upload.xlsx\",\"totalRecords\":15}', 'data_upload', '085d0ab2-5d86-11f1-9865-00410e2b5e6e', 0, NULL, 'platform', NULL, '2026-06-01 06:49:27'),
 ('086b5837-5d86-11f1-9865-00410e2b5e6e', 'a0000000-0000-0000-0000-000000000001', 'admin', 'upload', 'info', 'New Data Upload', 'Sachin Alatagi has uploaded a new data file: Gram_Vikas_Society_student_upload.xlsx (15 records)', 'Requires review and approval', '{\"uploadId\":\"085d0ab2-5d86-11f1-9865-00410e2b5e6e\",\"partnerId\":\"1041639e-83e3-445c-9b06-df34897a44cd\",\"partnerName\":\"Sachin Alatagi\",\"fileName\":\"Gram_Vikas_Society_student_upload.xlsx\",\"totalRecords\":15}', 'data_upload', '085d0ab2-5d86-11f1-9865-00410e2b5e6e', 0, NULL, 'platform', NULL, '2026-06-01 06:49:27'),
+('0ffd334b-714a-42cf-9524-e52295eb0fda', 'e900d2e8-2285-400f-a014-2838fa67c7d8', NULL, 'alert', 'refurbishment', 'Refurbishment Eligibility Notification', 'Refurbishment notification for Gram Vikas Society-North Karnatka.', NULL, NULL, 'center', '8bc57f1d-3f16-458e-a3f3-e01d1ee0d76b', 0, NULL, 'in_app', NULL, '2026-06-02 12:02:52'),
 ('1bbb3cbb-5d99-11f1-9865-00410e2b5e6e', 'a0000000-0000-0000-0000-000000000002', 'admin', 'upload', 'info', 'New TOT Data Upload', 'Gram Vikas Society has uploaded a new data file: Gram_Vikas_Society_tot_upload.xlsx (6 records)', 'Requires review and approval', '{\"uploadId\":\"cfb87a2f-df81-44bd-953a-6f59f4730c0e\",\"partnerId\":\"1041639e-83e3-445c-9b06-df34897a44cd\",\"partnerName\":\"Gram Vikas Society\",\"fileName\":\"Gram_Vikas_Society_tot_upload.xlsx\",\"totalRecords\":6}', 'tot_upload', 'cfb87a2f-df81-44bd-953a-6f59f4730c0e', 0, NULL, 'platform', NULL, '2026-06-01 09:06:00'),
 ('1bbb9fb8-5d99-11f1-9865-00410e2b5e6e', 'a0000000-0000-0000-0000-000000000001', 'admin', 'upload', 'info', 'New TOT Data Upload', 'Gram Vikas Society has uploaded a new data file: Gram_Vikas_Society_tot_upload.xlsx (6 records)', 'Requires review and approval', '{\"uploadId\":\"cfb87a2f-df81-44bd-953a-6f59f4730c0e\",\"partnerId\":\"1041639e-83e3-445c-9b06-df34897a44cd\",\"partnerName\":\"Gram Vikas Society\",\"fileName\":\"Gram_Vikas_Society_tot_upload.xlsx\",\"totalRecords\":6}', 'tot_upload', 'cfb87a2f-df81-44bd-953a-6f59f4730c0e', 0, NULL, 'platform', NULL, '2026-06-01 09:06:00'),
 ('38b26084-173e-42c0-881b-575750d38dfd', NULL, 'ADMIN', 'alert', 'refurbishment_response', 'Partner Response - RQ-000001', 'Test Partner Ltd has submitted their package selections for Test Center Delhi. 2 package(s) selected.', NULL, NULL, 'refurbishment_request', '1b986b6b-31cc-4d44-b9c5-21ee958ded00', 0, NULL, 'in_app', NULL, '2026-06-01 13:17:59'),
 ('4c7ba32a-9b87-4b0d-a1f4-4476fa938f6e', 'e900d2e8-2285-400f-a014-2838fa67c7d8', 'PARTNER', 'review', 'success', 'Center Approved', 'Center \"Govt ITI Bhalki\" has been approved and is now active.', NULL, NULL, 'data_upload', '085d0ab2-5d86-11f1-9865-00410e2b5e6e', 1, '2026-06-01 06:57:16', 'in_app', NULL, '2026-06-01 06:52:56'),
 ('a2188c26-18db-4562-a975-7ca368546e09', NULL, 'ADMIN', 'alert', 'refurbishment_response', 'Partner Response - RQ-000001', 'Test Partner Ltd has submitted their package selections for Test Center Delhi. 2 package(s) selected.', NULL, NULL, 'refurbishment_request', '6bba6fa0-9c92-40f1-8439-50002ef7d62c', 0, NULL, 'in_app', NULL, '2026-06-01 13:19:04'),
+('ac90f648-e443-4ca0-99f0-42f485863aad', 'e900d2e8-2285-400f-a014-2838fa67c7d8', NULL, 'alert', 'refurbishment', 'Refurbishment Eligibility Notification', 'Refurbishment notification for Gram Vikas Society.', NULL, NULL, 'center', 'aadc7efa-a670-4d8a-bcad-928eda243a05', 1, '2026-06-02 11:14:53', 'in_app', NULL, '2026-06-02 11:04:06'),
 ('b7b09687-647e-43d8-a874-9e1404a249ba', 'e900d2e8-2285-400f-a014-2838fa67c7d8', 'PARTNER', 'review', 'success', 'Upload Approved', 'Your data upload has been fully approved. All centers and students are now active.', NULL, NULL, 'data_upload', '085d0ab2-5d86-11f1-9865-00410e2b5e6e', 1, '2026-06-01 06:57:16', 'in_app', NULL, '2026-06-01 06:54:05'),
 ('bbf8f432-5d86-11f1-9865-00410e2b5e6e', 'a0000000-0000-0000-0000-000000000002', 'admin', 'upload', 'info', 'New Employment Data Upload', 'Gram Vikas Society has uploaded a new data file: Gram_Vikas_Society_employment_upload.xlsx (15 records)', 'Requires review and approval', '{\"uploadId\":\"7b595a17-8765-4c35-b4d1-878992d6718b\",\"partnerId\":\"1041639e-83e3-445c-9b06-df34897a44cd\",\"partnerName\":\"Gram Vikas Society\",\"fileName\":\"Gram_Vikas_Society_employment_upload.xlsx\",\"totalRecords\":15}', 'employment_upload', '7b595a17-8765-4c35-b4d1-878992d6718b', 0, NULL, 'platform', NULL, '2026-06-01 06:54:28'),
 ('bbf9244a-5d86-11f1-9865-00410e2b5e6e', 'a0000000-0000-0000-0000-000000000001', 'admin', 'upload', 'info', 'New Employment Data Upload', 'Gram Vikas Society has uploaded a new data file: Gram_Vikas_Society_employment_upload.xlsx (15 records)', 'Requires review and approval', '{\"uploadId\":\"7b595a17-8765-4c35-b4d1-878992d6718b\",\"partnerId\":\"1041639e-83e3-445c-9b06-df34897a44cd\",\"partnerName\":\"Gram Vikas Society\",\"fileName\":\"Gram_Vikas_Society_employment_upload.xlsx\",\"totalRecords\":15}', 'employment_upload', '7b595a17-8765-4c35-b4d1-878992d6718b', 0, NULL, 'platform', NULL, '2026-06-01 06:54:28'),
+('c2334edd-ab4c-4526-a8fd-ec244791df1a', 'e900d2e8-2285-400f-a014-2838fa67c7d8', NULL, 'alert', 'refurbishment_approved', 'Refurbishment Request Approved - REF-891E716E', 'Your refurbishment request for Gram Vikas Society has been approved by Admin User.', NULL, NULL, 'center', 'aadc7efa-a670-4d8a-bcad-928eda243a05', 0, NULL, 'in_app', NULL, '2026-06-02 11:20:23'),
 ('c95fba4f-1308-49e2-a3b9-20893380808d', 'e900d2e8-2285-400f-a014-2838fa67c7d8', 'PARTNER', 'review', 'success', 'Center Approved', 'Center \"GOVT ITI KALWAKURTHY\" has been approved and is now active.', NULL, NULL, 'data_upload', '085d0ab2-5d86-11f1-9865-00410e2b5e6e', 1, '2026-06-01 06:57:16', 'in_app', NULL, '2026-06-01 06:54:05'),
+('d04b3d46-72e0-402f-9232-40be63cd8e45', NULL, 'ADMIN', 'alert', 'refurbishment_response', 'Partner Response - RQ-4A1931B2', 'Gram Vikas Society has submitted their package selections for Gram Vikas Society. 6 package(s) selected. Upgradation request included.', NULL, NULL, 'refurbishment_request', '891e716e-17f1-4b37-ab7b-5aa9b742be02', 1, '2026-06-02 11:20:23', 'in_app', NULL, '2026-06-02 11:14:53'),
 ('e827554f-5d86-11f1-9865-00410e2b5e6e', 'e900d2e8-2285-400f-a014-2838fa67c7d8', 'partner', 'review', 'success', 'Employment Upload Approved', 'Your upload \"Gram_Vikas_Society_employment_upload.xlsx\" has been approved by Admin User', NULL, '{\"uploadId\":\"7b595a17-8765-4c35-b4d1-878992d6718b\",\"status\":\"approved\",\"reviewerName\":\"Admin User\",\"remarks\":null}', 'employment_upload', '7b595a17-8765-4c35-b4d1-878992d6718b', 1, '2026-06-01 06:57:16', 'platform', NULL, '2026-06-01 06:55:42'),
+('f3606955-d878-4dcc-a762-77aa7b78cbc3', 'e900d2e8-2285-400f-a014-2838fa67c7d8', NULL, 'alert', 'refurbishment_completed', 'Refurbishment Completed - REF-891E716E', 'The refurbishment work for Gram Vikas Society has been completed. This is completed...', NULL, NULL, 'center', 'aadc7efa-a670-4d8a-bcad-928eda243a05', 0, NULL, 'in_app', NULL, '2026-06-02 11:23:09'),
 ('f39ef894-357d-4115-bd1c-5d2dae3d9a7b', NULL, 'ADMIN', 'alert', 'refurbishment_response', 'Partner Response - RQ-000001', 'Test Partner Ltd has submitted their package selections for Test Center Delhi. 2 package(s) selected.', NULL, NULL, 'refurbishment_request', 'cd805519-f328-4a5b-8ef8-38caed40d4d8', 0, NULL, 'in_app', NULL, '2026-06-01 07:18:27');
 
 -- --------------------------------------------------------
@@ -151024,6 +151029,13 @@ CREATE TABLE `refurbishment_requests` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci COMMENT='Main refurbishment request details';
 
+--
+-- Dumping data for table `refurbishment_requests`
+--
+
+INSERT INTO `refurbishment_requests` (`id`, `request_id`, `center_id`, `refurbishment_type`, `status`, `approved_by`, `approved_at`, `rejected_by`, `rejected_at`, `rejection_reason`, `started_by`, `started_at`, `completed_by`, `completed_at`, `completion_statement`, `partner_completion_description`, `partner_completed_at`, `completion_notified_at`, `admin_remarks`, `is_upgradation_requested`, `estimated_cost`, `approved_cost`, `justification`, `created_at`, `updated_at`) VALUES
+('891e716e-17f1-4b37-ab7b-5aa9b742be02', '4a1931b2-ca60-4956-ab1e-ab40672f6f92', 'aadc7efa-a670-4d8a-bcad-928eda243a05', 'package_selection', 'completed', 'a0000000-0000-0000-0000-000000000002', '2026-06-02 16:50:23', NULL, NULL, NULL, NULL, NULL, 'a0000000-0000-0000-0000-000000000002', '2026-06-02 16:53:09', 'This is completed', NULL, NULL, NULL, NULL, 1, NULL, NULL, 'Partner package selection response', '2026-06-02 11:14:53', '2026-06-02 11:23:09');
+
 -- --------------------------------------------------------
 
 --
@@ -151059,6 +151071,15 @@ CREATE TABLE `refurbishment_request_course_packages` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci COMMENT='Partner final selections per course with justification. One row per package per course.';
+
+--
+-- Dumping data for table `refurbishment_request_course_packages`
+--
+
+INSERT INTO `refurbishment_request_course_packages` (`id`, `refurbishment_request_id`, `course_id`, `package_id`, `quantity`, `justification`, `created_at`, `updated_at`) VALUES
+('03774428-7218-4b64-9c96-faa62881f7dd', '891e716e-17f1-4b37-ab7b-5aa9b742be02', '6275ba97-c89b-11f0-94bf-00410e2b5e6e', 'e224ac10-0897-11f1-90b6-00410e2b5e6e', 1, NULL, '2026-06-02 11:14:53', '2026-06-02 11:14:53'),
+('730b9b40-07e2-4d75-ad98-094a74484fe0', '891e716e-17f1-4b37-ab7b-5aa9b742be02', '6276774f-c89b-11f0-94bf-00410e2b5e6e', 'e225f4fa-0897-11f1-90b6-00410e2b5e6e', 1, NULL, '2026-06-02 11:14:53', '2026-06-02 11:14:53'),
+('c90214aa-6589-473a-9831-c68e969b99a5', '891e716e-17f1-4b37-ab7b-5aa9b742be02', '6275ba97-c89b-11f0-94bf-00410e2b5e6e', 'e22455b2-0897-11f1-90b6-00410e2b5e6e', 1, NULL, '2026-06-02 11:14:53', '2026-06-02 11:14:53');
 
 -- --------------------------------------------------------
 
@@ -151105,6 +151126,13 @@ CREATE TABLE `refurbishment_upgradation_request_packages` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci COMMENT='Partner-selected upgradation packages per refurbishment request';
 
+--
+-- Dumping data for table `refurbishment_upgradation_request_packages`
+--
+
+INSERT INTO `refurbishment_upgradation_request_packages` (`id`, `refurbishment_request_id`, `package_id`, `created_at`) VALUES
+('f6acb712-e496-47bc-9511-1942ce21642f', '891e716e-17f1-4b37-ab7b-5aa9b742be02', 'pkg-upgr-003', '2026-06-02 11:20:12');
+
 -- --------------------------------------------------------
 
 --
@@ -151121,6 +151149,13 @@ CREATE TABLE `refurbishment_upgradation_rooms` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci COMMENT='Room dimension details when partner opts for upgradation. Currently one room per request.';
+
+--
+-- Dumping data for table `refurbishment_upgradation_rooms`
+--
+
+INSERT INTO `refurbishment_upgradation_rooms` (`id`, `refurbishment_request_id`, `length_feet`, `breadth_feet`, `height_feet`, `justification`, `created_at`, `updated_at`) VALUES
+('52021b34-b83b-4ee2-9804-f9f4b2f575b7', '891e716e-17f1-4b37-ab7b-5aa9b742be02', 10.00, 20.00, 30.00, 'Nothing', '2026-06-02 11:14:53', '2026-06-02 11:14:53');
 
 -- --------------------------------------------------------
 
@@ -151287,6 +151322,14 @@ CREATE TABLE `scheduled_refurbishment_notifications` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `is_manual_request` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'TRUE for manual requests created by admin, FALSE for scheduled notifications'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+--
+-- Dumping data for table `scheduled_refurbishment_notifications`
+--
+
+INSERT INTO `scheduled_refurbishment_notifications` (`id`, `request_number`, `partner_id`, `center_id`, `scheduled_at`, `frequency`, `custom_interval_days`, `custom_day`, `custom_time`, `message`, `packages`, `upgradation_packages`, `auto_send`, `status`, `last_sent_at`, `next_send_at`, `send_count`, `max_occurrences`, `partner_responded`, `response_received_at`, `created_by`, `created_at`, `updated_at`, `is_manual_request`) VALUES
+('091da619-7743-4a24-978f-27a5467edf52', NULL, '1041639e-83e3-445c-9b06-df34897a44cd', '8bc57f1d-3f16-458e-a3f3-e01d1ee0d76b', '2026-06-02 12:02:52', 'instant', NULL, NULL, NULL, 'Refurbishment notification for Gram Vikas Society-North Karnatka.', '[{\"packageId\":\"e22455b2-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224704d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224719d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224ac10-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224ba7f-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224bb41-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2250311-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2250e6c-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2250f1d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2255202-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2255f2a-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2255fd5-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e22589b2-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2258e95-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2259075-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225bd2e-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225c703-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225c7a1-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225f4fa-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e226789d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null}]', '[{\"packageId\":\"pkg-upgr-001\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-002\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-003\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-004\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-005\",\"quantity\":1,\"notes\":null}]', 1, 'completed', '2026-06-02 17:32:52', '2026-06-02 17:32:52', 1, NULL, 0, NULL, 'a0000000-0000-0000-0000-000000000002', '2026-06-02 12:02:52', '2026-06-02 12:02:52', 0),
+('4a1931b2-ca60-4956-ab1e-ab40672f6f92', NULL, '1041639e-83e3-445c-9b06-df34897a44cd', 'aadc7efa-a670-4d8a-bcad-928eda243a05', '2026-06-02 11:04:05', 'instant', NULL, NULL, NULL, 'Refurbishment notification for Gram Vikas Society.', '[{\"packageId\":\"e22455b2-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224704d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224719d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224ac10-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224ba7f-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e224bb41-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2250311-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2250e6c-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2250f1d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2255202-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2255f2a-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2255fd5-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e22589b2-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2258e95-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e2259075-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225bd2e-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225c703-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225c7a1-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e225f4fa-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null},{\"packageId\":\"e226789d-0897-11f1-90b6-00410e2b5e6e\",\"quantity\":1,\"notes\":null}]', '[{\"packageId\":\"pkg-upgr-001\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-002\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-003\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-004\",\"quantity\":1,\"notes\":null},{\"packageId\":\"pkg-upgr-005\",\"quantity\":1,\"notes\":null}]', 1, 'completed', '2026-06-02 16:34:06', '2026-06-02 16:34:06', 1, NULL, 1, '2026-06-02 16:44:53', 'a0000000-0000-0000-0000-000000000002', '2026-06-02 11:04:06', '2026-06-02 11:14:53', 0);
 
 -- --------------------------------------------------------
 
@@ -156873,9 +156916,9 @@ INSERT INTO `users` (`id`, `email`, `password_hash`, `full_name`, `mobile_number
 ('9f449034-4734-45d3-8172-30596a5bc460', 'autogen+pssc@seif.local', '$2a$10$ai0GN4Cat7ZibhOw323aw.jhYGNYlRk2/j.K9YY3090kKPy5q7KUy', 'Auto Import (PSSC)', '9102465683', 'PARTNER', '7c7bd56e-396a-4319-b6dd-7c402717a42e', 'active', NULL, '2026-05-04 07:36:26', '2026-05-04 07:36:26', 0, NULL, 1),
 ('9f5c4499-0766-489a-8fc8-2fca46ff6584', 'apjsbt@gmail.com', '$2a$10$zwfPKpog2fWDOVO3fVmL0OjCP4Zmd2fEHrRbzOHJ7FHhIT9628WMG', 'C.Ravindra Reddy', '8309031720', 'PARTNER', 'e00c0969-9e0b-4e65-9cd4-0f221e7ff8ff', 'active', NULL, '2026-04-28 12:27:57', '2026-04-28 12:27:57', 0, NULL, 1),
 ('a0000000-0000-0000-0000-000000000001', 'superadmin@seif.org', '$2a$10$7L7Q8ttF1yx3Vg/DOBLI.OppXXf6oFvQP/jQJNILjygV00Il6QbXO', 'Super Admin', '9876543210', 'SUPER_ADMIN', NULL, 'active', '2026-05-13 12:59:57', '2025-11-11 08:55:35', '2026-05-13 12:59:57', 0, '2026-02-24 13:03:12', 0),
-('a0000000-0000-0000-0000-000000000002', 'admin@seif.org', '$2a$12$eDKrD/pQZejoobxlTvEybOGTKJU4xMPMsfJBuo2SeXqOwgq5GUQsW', 'Admin User', '9876543211', 'ADMIN', NULL, 'active', '2026-06-01 06:00:20', '2025-11-11 08:55:35', '2026-06-01 06:00:20', 0, '2026-05-12 05:42:10', 0),
+('a0000000-0000-0000-0000-000000000002', 'admin@seif.org', '$2a$12$eDKrD/pQZejoobxlTvEybOGTKJU4xMPMsfJBuo2SeXqOwgq5GUQsW', 'Admin User', '9876543211', 'ADMIN', NULL, 'active', '2026-06-02 09:43:09', '2025-11-11 08:55:35', '2026-06-02 09:43:09', 0, '2026-05-12 05:42:10', 0),
 ('a0000000-0000-0000-0000-000000000003', 'readonly@seif.org', '$2a$10$.5m.f9.i8MS7Xo4TrvvCiumgKNSg487NLhwIcMaM7X/KPzFZLkFj.', 'Read Only User', '9876543212', 'SEIF_READONLY', NULL, 'active', '2026-05-12 13:45:24', '2025-11-11 08:55:35', '2026-05-13 12:59:27', 0, '2026-04-14 20:21:56', 0),
-('a0000000-0000-0000-0000-000000000004', 'essci@seif.org', '$2a$10$.5m.f9.i8MS7Xo4TrvvCiumgKNSg487NLhwIcMaM7X/KPzFZLkFj.', 'ESSCI User', '9876543213', 'ESSCI', NULL, 'active', '2026-05-13 12:53:06', '2025-11-11 08:55:35', '2026-05-13 12:59:27', 0, NULL, 1),
+('a0000000-0000-0000-0000-000000000004', 'essci@seif.org', '$2a$10$.5m.f9.i8MS7Xo4TrvvCiumgKNSg487NLhwIcMaM7X/KPzFZLkFj.', 'ESSCI User', '9876543213', 'ESSCI', NULL, 'active', '2026-06-02 12:24:10', '2025-11-11 08:55:35', '2026-06-02 12:24:10', 0, NULL, 1),
 ('a77df73b-40e1-4bff-a545-c406ccdc5794', 'mohd.nazir@srf.com', '$2a$10$44KX8lr6Bg3uGILZCCL3Q.CtfPoaC3qzB1q2KcCqBmf6MAKU5eavK', 'Mohd Nazir', '9897060747', 'PARTNER', '2e89eec4-723e-40d3-a71d-a5a97ce79b6e', 'active', NULL, '2026-04-28 12:09:58', '2026-04-28 12:09:58', 0, NULL, 1),
 ('aac0fb74-e13f-40c0-811e-7659cc6da204', 'sadhna@prayaschildren.org', '$2a$10$tuu6uRXbQUI4UYmAmcFPR.FXFowRtvHtM94.o2uo7DH00S6m9oo1W', 'Sadhna Srivastava', '9650135113', 'PARTNER', 'c75e6131-5f92-4798-b39a-cc0c19fec2f4', 'active', NULL, '2026-04-28 12:10:01', '2026-04-28 12:10:01', 0, NULL, 1),
 ('ae4db9e5-4dce-47a8-91ae-a67dc207e164', 'principalbose@rediffmail.com', '$2a$10$Moewm8kyeZG1Wm5C81G9f.4dZkbqWGprdKlPl7rLYU4GABM1plhT2', 'Mr.Dilip Kumar Sahoo', '8984121390', 'PARTNER', 'f9651591-5c10-45e1-91f0-405f694d1117', 'active', NULL, '2026-04-28 12:27:57', '2026-04-28 12:27:57', 0, NULL, 1),
@@ -156894,7 +156937,7 @@ INSERT INTO `users` (`id`, `email`, `password_hash`, `full_name`, `mobile_number
 ('dfbcf4d3-f7ee-4663-a194-0dbb60b8d3e6', 'autogen+giti-cuttack@seif.local', '$2a$10$mCtAa94suqIsWC4J.oE20ur3eFCc7I8.shwgtiS7Ld9xstzi.kYKm', 'Auto Import (GITI Cuttack)', '9583669253', 'PARTNER', 'acb9b3b1-a1b7-41d9-b70d-79ee575768d2', 'active', NULL, '2026-05-04 07:35:42', '2026-05-04 07:35:42', 0, NULL, 1),
 ('e060147a-f84e-4ac9-a0ae-ac091563434a', 'kanakaraju.n@cemsindia.org', '$2a$10$y6niLQuMFlW0NAwhCAxNHeqK7UfNlMMA24DME4OB0yf.H6RntL4u6', 'N. Kanaka Raju', '9703386981', 'PARTNER', 'f8370822-54cb-4925-8b59-7987bd386335', 'active', NULL, '2026-04-28 12:10:01', '2026-04-28 12:10:01', 0, NULL, 1),
 ('e2a173d4-b5a0-41a8-b06f-98d0581fdab8', 'vivekanandacc@gmail.com', '$2a$10$NSCPjB1TniS6I6.77ZE2TOnXpR03GZKLcNfBMmPP6NBcF5CsbbCHG', 'GV Sriram', '9655849859', 'PARTNER', '2503f667-3dbe-4781-a0e7-e56d3f8df3a0', 'active', NULL, '2026-04-28 12:09:58', '2026-04-28 12:09:58', 0, NULL, 1),
-('e900d2e8-2285-400f-a014-2838fa67c7d8', 'sachin.alatagi@outlook.com', '$2a$10$c8VIdwcXOX4F1jEMRT7cuuhGp1MlbJiKnWCO6HzMd1uJpFRegUQ9y', 'Sachin Alatagi', '8217816807', 'PARTNER', '1041639e-83e3-445c-9b06-df34897a44cd', 'active', '2026-06-01 06:25:55', '2026-04-28 12:10:00', '2026-06-01 06:25:55', 0, '2026-06-01 06:16:44', 0),
+('e900d2e8-2285-400f-a014-2838fa67c7d8', 'sachin.alatagi@outlook.com', '$2a$10$c8VIdwcXOX4F1jEMRT7cuuhGp1MlbJiKnWCO6HzMd1uJpFRegUQ9y', 'Sachin Alatagi', '8217816807', 'PARTNER', '1041639e-83e3-445c-9b06-df34897a44cd', 'active', '2026-06-02 12:00:29', '2026-04-28 12:10:00', '2026-06-02 12:00:29', 0, '2026-06-01 06:16:44', 0),
 ('ecf54379-dc6b-4cfd-8799-362c8b8cfbed', 'renu@nsic.co.in', '$2a$10$rsoXp/pgO2RK4OfBvhmwC.UNhNuEJKLPG3.Te7eekunr3Gryz0Dpe', 'Renu', '9555086791', 'PARTNER', '56f3a758-8f31-4b3d-a9f2-42077a0a8857', 'active', NULL, '2026-04-28 12:09:59', '2026-04-28 12:09:59', 0, NULL, 1),
 ('efa7e76c-a02e-4f43-ab9a-92e347b37a3f', 'deepak.chaturvedi@ildindia.org', '$2a$10$x3r3YzQ02K19gMryw01Lu.IweIJYRfY9Mupn7Kd1w.lfh7764zv7G', 'Col.Deepak Chaturvedi /Shobhit Gour', '7078762376', 'PARTNER', 'bea387ed-087f-4d98-9651-1d36a28a5512', 'active', NULL, '2026-05-04 07:35:41', '2026-05-04 07:35:41', 0, NULL, 1),
 ('f486aa22-1341-408c-8f50-736143bd45eb', 'csr.pal@navalimited.com', '$2a$10$krgwDmh4X/Odg3sAnb0m9O352Q4CxMJQEH.6nHKw374cLjcMYEgxu', 'Srinivas Rao', '8096999384', 'PARTNER', '2a42b946-3c83-4caf-b75c-5469ca32fddb', 'active', NULL, '2026-04-28 12:09:59', '2026-04-28 12:09:59', 0, NULL, 1),

@@ -273,7 +273,9 @@ exports.getTrainerById = async (req, res) => {
 
     return res.json({ success: true, data: trainer });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message || 'Failed to load trainer' });
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || 'Failed to load trainer' });
   }
 };
 
@@ -283,7 +285,9 @@ exports.updateTrainer = async (req, res) => {
     return res.json({ success: true, message: 'Trainer updated successfully', data: trainer });
   } catch (error) {
     const status = error.message === 'Trainer not found' ? 404 : 500;
-    return res.status(status).json({ success: false, message: error.message || 'Failed to update trainer' });
+    return res
+      .status(status)
+      .json({ success: false, message: error.message || 'Failed to update trainer' });
   }
 };
 
@@ -293,7 +297,9 @@ exports.deleteTrainer = async (req, res) => {
     return res.json({ success: true, message: 'Trainer deleted successfully', data: null });
   } catch (error) {
     const status = error.message === 'Trainer not found' ? 404 : 500;
-    return res.status(status).json({ success: false, message: error.message || 'Failed to delete trainer' });
+    return res
+      .status(status)
+      .json({ success: false, message: error.message || 'Failed to delete trainer' });
   }
 };
 

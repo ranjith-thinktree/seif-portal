@@ -13,7 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
-import { PlusIcon, EyeIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import {
+  PlusIcon,
+  EyeIcon,
+  PencilIcon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../hooks";
 import {
@@ -305,7 +310,8 @@ const TotListTab = () => {
     setTrainerModalMode(mode);
     setEditFormData({
       tot_center: trainer.tot_center || "",
-      trainer_module_trained: trainer.trainer_module_trained || trainer.course_name || "",
+      trainer_module_trained:
+        trainer.trainer_module_trained || trainer.course_name || "",
       first_name: trainer.first_name || "",
       last_name: trainer.last_name || "",
       contact_number: trainer.contact_number || trainer.mobile_no || "",
@@ -524,10 +530,13 @@ const TotListTab = () => {
                     setEditFormData({
                       tot_center: trainer.tot_center || "",
                       trainer_module_trained:
-                        trainer.trainer_module_trained || trainer.course_name || "",
+                        trainer.trainer_module_trained ||
+                        trainer.course_name ||
+                        "",
                       first_name: trainer.first_name || "",
                       last_name: trainer.last_name || "",
-                      contact_number: trainer.contact_number || trainer.mobile_no || "",
+                      contact_number:
+                        trainer.contact_number || trainer.mobile_no || "",
                       email_id: trainer.email_id || trainer.email || "",
                       qualification: trainer.qualification || "",
                       language_knows: trainer.language_knows || "",
@@ -553,7 +562,10 @@ const TotListTab = () => {
               ];
 
               return (
-                <div onClick={(e) => e.stopPropagation()} className="flex justify-center">
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex justify-center"
+                >
                   <ActionDropdown actions={actions} align="right" size="sm" />
                 </div>
               );
@@ -829,7 +841,9 @@ const TotListTab = () => {
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{trainerModalMode === "view" ? "View Trainer" : "Edit Trainer"}</DialogTitle>
+            <DialogTitle>
+              {trainerModalMode === "view" ? "View Trainer" : "Edit Trainer"}
+            </DialogTitle>
           </DialogHeader>
 
           {editFormData && (
@@ -840,7 +854,12 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.tot_center}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, tot_center: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        tot_center: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -848,7 +867,12 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.first_name}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, first_name: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        first_name: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -856,16 +880,28 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.last_name}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, last_name: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        last_name: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1 md:col-span-2">
-                  <label className="text-sm font-medium">Trainer Module Trained</label>
+                  <label className="text-sm font-medium">
+                    Trainer Module Trained
+                  </label>
                   <SearchableSelect
                     options={courseSelectOptions}
                     value={editFormData.trainer_module_trained}
                     disabled={trainerModalMode === "view"}
-                    onChange={(value) => setEditFormData((prev) => ({ ...prev, trainer_module_trained: value }))}
+                    onChange={(value) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        trainer_module_trained: value,
+                      }))
+                    }
                     placeholder="Select course"
                     searchPlaceholder="Search course..."
                     emptyMessage="No course found."
@@ -876,7 +912,12 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.contact_number}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, contact_number: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        contact_number: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -885,7 +926,12 @@ const TotListTab = () => {
                     type="email"
                     value={editFormData.email_id}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, email_id: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        email_id: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -893,7 +939,12 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.qualification}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, qualification: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        qualification: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -901,7 +952,12 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.gender}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, gender: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        gender: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -909,7 +965,12 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.city}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, city: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        city: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1">
@@ -917,7 +978,12 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.state}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, state: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        state: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1 md:col-span-2">
@@ -925,13 +991,23 @@ const TotListTab = () => {
                   <Input
                     value={editFormData.contact_address}
                     disabled={trainerModalMode === "view"}
-                    onChange={(e) => setEditFormData((prev) => ({ ...prev, contact_address: e.target.value }))}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        contact_address: e.target.value,
+                      }))
+                    }
                   />
                 </div>
               </div>
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowEditModal(false)} disabled={saving}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditModal(false)}
+                  disabled={saving}
+                >
                   Cancel
                 </Button>
                 {trainerModalMode !== "view" && (

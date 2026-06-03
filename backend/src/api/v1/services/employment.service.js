@@ -1037,10 +1037,10 @@ class EmploymentService {
         const nextStatus = EMPLOYED_STATUSES.has(currentRows[0].employment_status)
           ? 'employed'
           : null;
-        await connection.query('UPDATE students SET employment_status = ?, updated_at = NOW() WHERE id = ?', [
-          nextStatus,
-          currentRows[0].student_id,
-        ]);
+        await connection.query(
+          'UPDATE students SET employment_status = ?, updated_at = NOW() WHERE id = ?',
+          [nextStatus, currentRows[0].student_id]
+        );
       }
 
       await connection.commit();

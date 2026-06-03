@@ -174,6 +174,13 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         return;
       }
 
+      const escapeCsvValue = (value) => {
+        const normalized =
+          value === null || value === undefined ? "" : String(value);
+        const escaped = normalized.replace(/"/g, '""');
+        return `"${escaped}"`;
+      };
+
       const csvData = filteredAndSortedPartners.map((partner) => ({
         "Partner Name": partner.name,
         "Partner ID": partner.partner_id || "",
@@ -190,8 +197,10 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         Status: partner.status,
       }));
 
-      const headers = Object.keys(csvData[0]).join(",");
-      const rows = csvData.map((row) => Object.values(row).join(","));
+      const headers = Object.keys(csvData[0]).map(escapeCsvValue).join(",");
+      const rows = csvData.map((row) =>
+        Object.values(row).map(escapeCsvValue).join(","),
+      );
       const csv = [headers, ...rows].join("\n");
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });

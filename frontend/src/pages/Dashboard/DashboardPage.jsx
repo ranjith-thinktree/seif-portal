@@ -1436,13 +1436,6 @@ const EssciDashboard = ({ userName }) => {
 
   const quickActions = [
     {
-      label: "View Certification Data",
-      description: "Browse and filter all certification uploads",
-      icon: ClipboardDocumentListIcon,
-      action: () => navigate(ROUTES.ESSCI_DATA),
-      variant: "primary",
-    },
-    {
       label: "Upload Certificate PDF",
       description: "Submit a new certificate PDF for a batch",
       icon: ArrowDownTrayIcon,

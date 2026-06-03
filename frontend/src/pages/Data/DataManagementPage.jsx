@@ -19,6 +19,7 @@ const DataManagementPage = () => {
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
   const [activeTab, setActiveTab] = useState("overview");
+  const isEssci = user?.role === "ESSCI";
 
   // Set active tab from navigation state
   useEffect(() => {
@@ -31,21 +32,26 @@ const DataManagementPage = () => {
   const isAdmin =
     user?.role === "ADMIN" ||
     user?.role === "SUPER_ADMIN" ||
-    user?.role === "ESSCI" ||
     user?.role === "SEIF_READONLY" ||
     user?.role === "SEIF_READONLY_DOWNLOAD";
 
   const tabs = [
-    { id: "overview", label: "Overview", visible: true },
+    { id: "overview", label: "Overview", visible: !isEssci },
     { id: "partners", label: "Partner List", visible: isAdmin },
     { id: "centers", label: "Center List", visible: true },
     { id: "batches", label: "Batch List", visible: true },
     { id: "students", label: "Students List", visible: true },
-    { id: "tot", label: "TOT", visible: true },
-    { id: "employment", label: "Employment", visible: true },
+    { id: "tot", label: "TOT", visible: !isEssci },
+    { id: "employment", label: "Employment", visible: !isEssci },
   ];
 
   const visibleTabs = tabs.filter((tab) => tab.visible);
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(visibleTabs[0]?.id || "centers");
+    }
+  }, [activeTab, visibleTabs]);
 
   return (
     <MainLayout>
@@ -84,13 +90,13 @@ const DataManagementPage = () => {
 
         {/* Tab Content */}
         <div className="mt-6">
-          {activeTab === "overview" && <OverviewTab />}
+          {activeTab === "overview" && !isEssci && <OverviewTab />}
           {activeTab === "partners" && isAdmin && <PartnerListTab />}
           {activeTab === "centers" && <CenterListTab />}
           {activeTab === "batches" && <BatchListTab />}
           {activeTab === "students" && <StudentListTab />}
-          {activeTab === "tot" && <TotListTab />}
-          {activeTab === "employment" && <EmploymentListTab />}
+          {activeTab === "tot" && !isEssci && <TotListTab />}
+          {activeTab === "employment" && !isEssci && <EmploymentListTab />}
         </div>
       </div>
     </MainLayout>

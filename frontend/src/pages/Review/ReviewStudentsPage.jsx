@@ -1105,7 +1105,12 @@ const ReviewStudentsPage = () => {
       GRID_MAX_VISIBLE_ROWS,
     );
 
-    return GRID_HEADER_HEIGHT + GRID_PAGINATION_HEIGHT + visibleRows * GRID_ROW_HEIGHT + 2;
+    return (
+      GRID_HEADER_HEIGHT +
+      GRID_PAGINATION_HEIGHT +
+      visibleRows * GRID_ROW_HEIGHT +
+      2
+    );
   }, [filteredAndSortedStudents.length]);
 
   if (loading) {

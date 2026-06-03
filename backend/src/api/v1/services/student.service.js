@@ -660,7 +660,9 @@ class StudentService {
     try {
       await connection.beginTransaction();
 
-      const [studentRows] = await connection.query('SELECT id FROM students WHERE id = ?', [studentId]);
+      const [studentRows] = await connection.query('SELECT id FROM students WHERE id = ?', [
+        studentId,
+      ]);
       if (studentRows.length === 0) {
         throw new Error('Student not found');
       }

@@ -131,12 +131,6 @@ export const SIDEBAR_MENU = [
     ],
   },
   {
-    name: "ESSCI Data",
-    path: ROUTES.ESSCI_DATA,
-    icon: CircleStackIcon,
-    roles: [ROLES.ESSCI],
-  },
-  {
     name: "Employment",
     path: ROUTES.EMPLOYMENT_REVIEW,
     icon: BriefcaseIcon,

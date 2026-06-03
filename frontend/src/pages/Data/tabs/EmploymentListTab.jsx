@@ -4,7 +4,12 @@ import AdvancedSearchBar from "../../../components/common/AdvancedSearchBar";
 import { ActionDropdown } from "../../../components/common";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
-import { PlusIcon, EyeIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import {
+  PlusIcon,
+  EyeIcon,
+  PencilIcon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
 import ConfirmationModal from "../../../components/common/ConfirmationModal";
 import {
   getApprovedEmploymentRecords,
@@ -83,7 +88,9 @@ const EmploymentListTab = () => {
     employmentStatus: record.employment_status || "Employed",
     companyName: record.company_name || "",
     companyLocation: record.company_location || "",
-    dateOfJoining: record.date_of_joining ? String(record.date_of_joining).slice(0, 10) : "",
+    dateOfJoining: record.date_of_joining
+      ? String(record.date_of_joining).slice(0, 10)
+      : "",
     designation: record.designation || "",
     salaryPerMonth: record.salary_per_month || "",
     industry: record.industry || "",
@@ -205,7 +212,9 @@ const EmploymentListTab = () => {
       fetchRecords();
     } catch (err) {
       toast.error(
-        err?.response?.data?.message || err?.message || "Failed to save employment record",
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to save employment record",
       );
     } finally {
       setFormLoading(false);
@@ -241,7 +250,9 @@ const EmploymentListTab = () => {
       setSelectedRecord(null);
       fetchRecords();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to delete employment record");
+      toast.error(
+        error.response?.data?.message || "Failed to delete employment record",
+      );
     } finally {
       setFormLoading(false);
     }
@@ -440,7 +451,10 @@ const EmploymentListTab = () => {
               ];
 
               return (
-                <div onClick={(e) => e.stopPropagation()} className="flex justify-center">
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex justify-center"
+                >
                   <ActionDropdown actions={actions} align="right" size="sm" />
                 </div>
               );
@@ -556,7 +570,7 @@ const EmploymentListTab = () => {
                 <input
                   type="text"
                   required
-                    disabled={formMode === "view"}
+                  disabled={formMode === "view"}
                   value={form.partnerStudentId}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, partnerStudentId: e.target.value }))
@@ -573,7 +587,7 @@ const EmploymentListTab = () => {
                 </label>
                 <select
                   required
-                    disabled={formMode === "view"}
+                  disabled={formMode === "view"}
                   value={form.employmentStatus}
                   onChange={(e) =>
                     setForm((f) => ({

@@ -547,7 +547,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.ESSCI_DATA}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <ESSCIDataPage />
               </ProtectedRoute>
             }
@@ -556,7 +556,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.ESSCI_DATA_DETAIL}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <ESSCIBatchDetailPage />
               </ProtectedRoute>
             }

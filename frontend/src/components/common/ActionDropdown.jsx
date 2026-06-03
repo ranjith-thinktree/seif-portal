@@ -70,7 +70,10 @@ const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
       const left =
         align === "left"
           ? Math.max(8, rect.left)
-          : Math.max(8, Math.min(rect.right - width, viewportWidth - width - 8));
+          : Math.max(
+              8,
+              Math.min(rect.right - width, viewportWidth - width - 8),
+            );
 
       setMenuStyle({
         position: "fixed",
@@ -140,14 +143,14 @@ const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
         }}
         className={cn(
           "inline-flex items-center justify-center gap-1 rounded-md border border-gray-300 bg-white font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors",
-          buttonSizeClasses[size]
+          buttonSizeClasses[size],
         )}
       >
         Actions
         <ChevronDownIcon
           className={cn(
             "h-4 w-4 transition-transform duration-200",
-            isOpen && "rotate-180"
+            isOpen && "rotate-180",
           )}
         />
       </button>
@@ -162,32 +165,34 @@ const ActionDropdown = ({ actions = [], align = "right", size = "sm" }) => {
               alignClasses[align],
             )}
           >
-          <div className="py-1">
-            {visibleActions.map((action, index) => (
-              <React.Fragment key={index}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleActionClick(action);
-                  }}
-                  disabled={action.disabled}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors",
-                    getVariantClasses(action.variant, action.disabled)
+            <div className="py-1">
+              {visibleActions.map((action, index) => (
+                <React.Fragment key={index}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleActionClick(action);
+                    }}
+                    disabled={action.disabled}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors",
+                      getVariantClasses(action.variant, action.disabled),
+                    )}
+                    title={
+                      action.disabled ? action.disabledReason : action.label
+                    }
+                  >
+                    {action.icon && (
+                      <action.icon className="h-4 w-4 flex-shrink-0" />
+                    )}
+                    <span className="flex-1 text-left">{action.label}</span>
+                  </button>
+                  {action.divider && index < visibleActions.length - 1 && (
+                    <div className="my-1 border-t border-gray-100" />
                   )}
-                  title={action.disabled ? action.disabledReason : action.label}
-                >
-                  {action.icon && (
-                    <action.icon className="h-4 w-4 flex-shrink-0" />
-                  )}
-                  <span className="flex-1 text-left">{action.label}</span>
-                </button>
-                {action.divider && index < visibleActions.length - 1 && (
-                  <div className="my-1 border-t border-gray-100" />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
+                </React.Fragment>
+              ))}
+            </div>
           </div>,
           document.body,
         )}

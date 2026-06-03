@@ -355,7 +355,7 @@ export const deleteCourseCatalog = async (id) => {
  * Get all trainer modules
  */
 export const getTrainerModules = async (params = {}) => {
-  const response = await apiClient.get('/trainer-modules', { params });
+  const response = await apiClient.get("/trainer-modules", { params });
   return response.data;
 };
 
@@ -371,7 +371,7 @@ export const getTrainerModuleById = async (id) => {
  * Create a new trainer module
  */
 export const createTrainerModule = async (data) => {
-  const response = await apiClient.post('/trainer-modules', data);
+  const response = await apiClient.post("/trainer-modules", data);
   return response.data;
 };
 

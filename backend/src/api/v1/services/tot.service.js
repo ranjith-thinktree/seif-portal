@@ -494,7 +494,9 @@ class TotService {
     try {
       await connection.beginTransaction();
 
-      const [existingRows] = await connection.query('SELECT id FROM tots WHERE id = ? LIMIT 1', [id]);
+      const [existingRows] = await connection.query('SELECT id FROM tots WHERE id = ? LIMIT 1', [
+        id,
+      ]);
       if (existingRows.length === 0) {
         throw new Error('Trainer not found');
       }
@@ -565,7 +567,9 @@ class TotService {
     try {
       await connection.beginTransaction();
 
-      const [existingRows] = await connection.query('SELECT id FROM tots WHERE id = ? LIMIT 1', [id]);
+      const [existingRows] = await connection.query('SELECT id FROM tots WHERE id = ? LIMIT 1', [
+        id,
+      ]);
       if (existingRows.length === 0) {
         throw new Error('Trainer not found');
       }
