@@ -116,6 +116,34 @@ const markAsRead = async (req, res, next) => {
 };
 
 /**
+ * Mark notification as unread
+ * PATCH /api/v1/notifications/:id/unread
+ */
+const markAsUnread = async (req, res, next) => {
+  try {
+    const notificationId = req.params.id;
+    const userId = req.user.id;
+    const role = req.user.role;
+
+    const success = await notificationService.markAsUnread(notificationId, userId, role);
+
+    if (!success) {
+      return res.status(404).json({
+        success: false,
+        message: 'Notification not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification marked as unread',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Mark all notifications as read
  * POST /api/v1/notifications/mark-all-read
  */
@@ -270,7 +298,12 @@ const submitRefurbishmentResponse = async (req, res, next) => {
     const role = req.user.role;
     const partnerId = req.user.partner_id;
     const notificationId = req.params.notificationId;
-    const { selected_packages, upgradation = null } = req.body;
+    const {
+      selected_packages,
+      upgradation = null,
+      refurbishment_document = null,
+      upgradation_document = null,
+    } = req.body;
 
     // Only partners can submit responses
     if (role !== 'PARTNER' || !partnerId) {
@@ -288,12 +321,26 @@ const submitRefurbishmentResponse = async (req, res, next) => {
       });
     }
 
+    const hasRefurbishmentDocument =
+      refurbishment_document &&
+      typeof refurbishment_document === 'object' &&
+      refurbishment_document.url;
+
+    if (!hasRefurbishmentDocument) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refurbishment document is required.',
+      });
+    }
+
     const result = await notificationService.submitRefurbishmentResponse(
       notificationId,
       userId,
       partnerId,
       selected_packages,
-      upgradation
+      upgradation,
+      refurbishment_document,
+      upgradation_document
     );
 
     res.status(200).json({
@@ -311,6 +358,7 @@ module.exports = {
   getUnreadCount,
   getNotificationById,
   markAsRead,
+  markAsUnread,
   markAllAsRead,
   deleteNotification,
   getGroupedNotifications,

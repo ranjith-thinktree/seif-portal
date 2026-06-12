@@ -147,7 +147,45 @@ class CronService {
     console.log('[CronService] Processing notification queue...');
 
     try {
-      // Simple query: just get queued items (MySQL Event already filtered them)
+      // --- Fallback: directly process overdue scheduled notifications ---
+      // This covers environments where MySQL Event Scheduler is OFF (local/dev).
+      const RefurbishmentServiceDirect = require('../api/v1/services/refurbishment.service');
+      const ScheduledNotificationServiceDirect = require('../api/v1/services/scheduledNotification.service');
+
+      const [overdueScheduled] = await db.query(`
+        SELECT id, partner_id, center_id, message, frequency, status,
+               max_occurrences, send_count, custom_day, custom_time, custom_interval_days
+        FROM scheduled_refurbishment_notifications
+        WHERE status IN ('pending', 'active')
+          AND auto_send = 1
+          AND partner_responded = 0
+          AND next_send_at <= NOW()
+        LIMIT 50
+      `);
+
+      if (overdueScheduled.length > 0) {
+        console.log(
+          `[CronService] Found ${overdueScheduled.length} overdue scheduled notification(s) — processing directly`
+        );
+        for (const srn of overdueScheduled) {
+          try {
+            await RefurbishmentServiceDirect.sendRefurbishmentNotification(
+              srn.center_id,
+              srn.partner_id,
+              srn.message
+            );
+            await ScheduledNotificationServiceDirect.markImmediatelySent(srn.id);
+            console.log(`[CronService] ✅ Dispatched overdue notification ${srn.id}`);
+          } catch (err) {
+            console.error(
+              `[CronService] ❌ Failed to dispatch overdue notification ${srn.id}:`,
+              err.message
+            );
+          }
+        }
+      }
+
+      // --- Primary path: process notification_queue (MySQL Event populated) ---
       const [queued] = await db.query(`
         SELECT 
           nq.*,

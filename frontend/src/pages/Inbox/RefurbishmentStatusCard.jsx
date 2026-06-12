@@ -13,7 +13,7 @@ import { XMarkIcon } from "@heroicons/react/24/outline";
  * @param {Object} notification - The notification object from the inbox
  * @param {Function} onDismiss  - Callback when the dismiss / close button is clicked
  */
-const RefurbishmentStatusCard = ({ notification, onDismiss }) => {
+const RefurbishmentStatusCard = ({ notification, onDismiss, onReviewData }) => {
   const fmtDate = (d) =>
     d
       ? new Date(d).toLocaleDateString("en-GB", {
@@ -201,6 +201,14 @@ const RefurbishmentStatusCard = ({ notification, onDismiss }) => {
 
       {/* Footer */}
       <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+        {onReviewData && (
+          <button
+            onClick={onReviewData}
+            className="mr-4 px-4 py-1.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-full transition-colors"
+          >
+            Review data
+          </button>
+        )}
         <button
           onClick={onDismiss}
           className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"

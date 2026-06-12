@@ -2,8 +2,37 @@ const RefurbishmentService = require('../services/refurbishment.service');
 const ScheduledNotificationService = require('../services/scheduledNotification.service');
 const ApiResponse = require('../../../utils/response.util');
 const { ValidationError } = require('../../../utils/error.util');
-const { generatePutPresignedUrl } = require('../../../utils/s3.util');
+const { generatePutPresignedUrl, isS3Configured } = require('../../../utils/s3.util');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Local storage for admin refurbishment uploads (S3 fallback)
+const adminLocalUploadDir = path.join(__dirname, '../../../../../uploads/refurbishment');
+if (!fs.existsSync(adminLocalUploadDir)) fs.mkdirSync(adminLocalUploadDir, { recursive: true });
+
+const adminLocalUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, adminLocalUploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${Date.now()}_${uuidv4()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    cb(null, allowed.includes(file.mimetype));
+  },
+}).single('file');
 
 /**
  * Refurbishment Controller
@@ -11,6 +40,46 @@ const { v4: uuidv4 } = require('uuid');
  */
 
 class RefurbishmentController {
+  static async getSettings(req, res, next) {
+    try {
+      const result = await RefurbishmentService.getRefurbishmentSettings();
+      return ApiResponse.success(res, result, 'Refurbishment settings retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateSettings(req, res, next) {
+    try {
+      const { defaultCustomMessage, firstCycleYears, repeatCycleYears } = req.body;
+
+      if (!defaultCustomMessage || !String(defaultCustomMessage).trim()) {
+        throw new ValidationError('defaultCustomMessage is required');
+      }
+
+      const first = parseInt(firstCycleYears, 10);
+      const repeat = parseInt(repeatCycleYears, 10);
+
+      if (Number.isNaN(first) || first < 1 || first > 30) {
+        throw new ValidationError('firstCycleYears must be between 1 and 30');
+      }
+      if (Number.isNaN(repeat) || repeat < 1 || repeat > 30) {
+        throw new ValidationError('repeatCycleYears must be between 1 and 30');
+      }
+
+      const result = await RefurbishmentService.updateRefurbishmentSettings({
+        defaultCustomMessage: String(defaultCustomMessage).trim(),
+        firstCycleYears: first,
+        repeatCycleYears: repeat,
+        userId: req.user?.id,
+      });
+
+      return ApiResponse.success(res, result, 'Refurbishment settings updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * GET /api/v1/admin/refurbishment/eligible-centers
    * Returns centers eligible for refurbishment (Tab 1: Eligible Centers)
@@ -128,8 +197,8 @@ class RefurbishmentController {
       const offset = parseInt(req.query.offset) || 0;
 
       // Validate parameters
-      if (withinMonths < 1 || withinMonths > 120) {
-        throw new ValidationError('Within months must be between 1 and 120 (10 years)');
+      if (withinMonths < 1 || withinMonths > 1200) {
+        throw new ValidationError('Within months must be between 1 and 1200');
       }
       if (limit < 1 || limit > 100) {
         throw new ValidationError('Limit must be between 1 and 100');
@@ -467,7 +536,9 @@ class RefurbishmentController {
         packages,
         upgradation_packages,
         autoSend,
-        isManualRequest, // NEW: Accept manual request flag
+        sendImmediately,
+        isManualRequest,
+        requestType,
       } = req.body;
 
       // Validation
@@ -519,11 +590,12 @@ class RefurbishmentController {
         autoSend: effectiveAutoSend,
         createdBy: req.user.id,
         isManualRequest: isManualRequest || false,
+        requestType: requestType || null,
       });
 
       // For instant notifications with autoSend=true, send immediately to the partner
       // rather than waiting for the MySQL Event + cron (which may take up to 5+ minutes).
-      if (effectiveAutoSend && effectiveFrequency === 'instant') {
+      if (effectiveAutoSend && effectiveFrequency === 'instant' && sendImmediately === true) {
         try {
           await RefurbishmentService.sendRefurbishmentNotification(centerId, partnerId, message);
           await ScheduledNotificationService.markImmediatelySent(result.id);
@@ -1008,6 +1080,37 @@ class RefurbishmentController {
   }
 
   /**
+   * PUT /api/v1/admin/refurbishment/requests/:id/send-back
+   * Admin sends submitted request back to partner for re-initiation
+   *
+   * Body:
+   * {
+   *   "sendBackReason": "Reason/remarks (REQUIRED)"
+   * }
+   */
+  static async sendBackRefurbishmentRequest(req, res, next) {
+    try {
+      const { id } = req.params;
+      const adminUserId = req.user.id;
+      const { sendBackReason } = req.body;
+
+      if (!sendBackReason || sendBackReason.trim() === '') {
+        throw new ValidationError('Send-back reason is required');
+      }
+
+      const result = await RefurbishmentService.sendBackRefurbishmentRequest(
+        id,
+        adminUserId,
+        sendBackReason
+      );
+
+      return ApiResponse.success(res, result, result.message);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * PUT /api/v1/admin/refurbishment/requests/:id/start
    * Admin starts refurbishment work
    */
@@ -1183,10 +1286,10 @@ class RefurbishmentController {
 
   /**
    * POST /api/v1/admin/refurbishment/upload-url
-   * Generate a short-lived S3 presigned PUT URL for direct browser upload.
-   * Used by AdminStatusChangeModal for completion file uploads.
+   * Generate a short-lived S3 presigned PUT URL for direct browser upload,
+   * or return a local upload endpoint when S3 is not configured.
    * Body: { fileName: string, fileType: string, folder?: string }
-   * Returns: { uploadUrl, fileUrl, key }
+   * Returns: { storageType: 's3'|'local', uploadUrl, fileUrl, key }
    */
   static async generateUploadUrl(req, res) {
     try {
@@ -1212,13 +1315,53 @@ class RefurbishmentController {
       const safeFolder = (folder || 'refurbishment/admin').replace(/[^a-zA-Z0-9/_-]/g, '');
       const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext}`;
 
-      const { uploadUrl, fileUrl } = await generatePutPresignedUrl(key, fileType, 300);
+      if (!isS3Configured()) {
+        const backendBase =
+          process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+        return ApiResponse.success(
+          res,
+          {
+            storageType: 'local',
+            uploadUrl: `${backendBase}/api/v1/admin/refurbishment/upload-local`,
+            fileUrl: null,
+            key,
+          },
+          'Local upload endpoint (S3 not configured)'
+        );
+      }
 
-      return ApiResponse.success(res, { uploadUrl, fileUrl, key }, 'Upload URL generated');
+      const { uploadUrl, fileUrl } = await generatePutPresignedUrl(key, fileType, 300);
+      return ApiResponse.success(
+        res,
+        { storageType: 's3', uploadUrl, fileUrl, key },
+        'Upload URL generated'
+      );
     } catch (error) {
       console.error('[RefurbishmentController] Error generating upload URL:', error);
       return ApiResponse.error(res, error.message, 500);
     }
+  }
+
+  /**
+   * POST /api/v1/admin/refurbishment/upload-local
+   * Accept multipart file upload and save to local disk (S3 fallback).
+   * Body: multipart/form-data field 'file'
+   * Returns: { fileUrl, key }
+   */
+  static uploadLocalFile(req, res) {
+    adminLocalUpload(req, res, (err) => {
+      if (err) {
+        console.error('[RefurbishmentController] Local upload error:', err);
+        return ApiResponse.error(res, err.message || 'File upload failed', 400);
+      }
+      if (!req.file) {
+        return ApiResponse.error(res, 'No file received', 400);
+      }
+      const backendBase = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+      const fileUrl = `${backendBase}/uploads/refurbishment/${req.file.filename}`;
+      const key = `refurbishment/${req.file.filename}`;
+      return ApiResponse.success(res, { fileUrl, key }, 'File uploaded locally');
+    });
   }
 }
 

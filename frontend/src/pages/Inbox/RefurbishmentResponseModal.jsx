@@ -34,7 +34,7 @@ const RefurbishmentResponseModal = ({
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [showPreview, setShowPreview] = useState(false); // Show package preview step
   const [activePackageId, setActivePackageId] = useState(null); // Currently focused package for right panel (selection step)
-  const [previewCourseIndex, setPreviewCourseIndex] = useState(0); // Active course tab in preview
+  const [_previewCourseIndex, _setPreviewCourseIndex] = useState(0); // Active course tab in preview
   const [previewActivePackageId, setPreviewActivePackageId] = useState(null); // Focused package in preview detail panel
   const [previewTab, setPreviewTab] = useState(0); // Active tab in preview: course index or 'upgradation'
 
@@ -50,13 +50,168 @@ const RefurbishmentResponseModal = ({
   });
   const [upgradationPhotoFiles, setUpgradationPhotoFiles] = useState([]);
   const [upgradationSelections, setUpgradationSelections] = useState({}); // packageId -> boolean
+  const [upgradationJustifications, setUpgradationJustifications] = useState(
+    {},
+  ); // packageId -> text
+  const [upgradationImageFiles, setUpgradationImageFiles] = useState({}); // packageId -> File[]
+  const [activeUpgradationPackageId, setActiveUpgradationPackageId] =
+    useState(null);
 
   // Document upload state – shown in the final preview step
   const [refurbishmentDoc, setRefurbishmentDoc] = useState(null); // File | null
   const [upgradationDoc, setUpgradationDoc] = useState(null); // File | null
 
+  // Pre-populated data from previous submission (when admin sends back for revision)
+  const [existingImageUrls, setExistingImageUrls] = useState({}); // packageId -> [{url, name, type}]
+  const [existingRefurbishmentDocUrl, setExistingRefurbishmentDocUrl] = useState(null); // {url, name}
+  const [existingUpgradationDocUrl, setExistingUpgradationDocUrl] = useState(null); // {url, name}
+
   const currentCourse = details.courses[currentCourseIndex];
   const totalCourses = details.courses.length;
+  const hasUpgradationFlow = details.has_upgradation_packages;
+  const packagePreviewStepNum = totalCourses + 1;
+  const upgradationStepNum = totalCourses + 2;
+  const finalReviewStepNum = hasUpgradationFlow
+    ? totalCourses + 3
+    : totalCourses + 2;
+
+  const renderFlowConnector = (completed) => (
+    <div className="flex-1 mx-3 max-w-[60px]">
+      <div
+        className={`border-t-2 border-dotted ${completed ? "border-green-400" : "border-gray-300"}`}
+      />
+    </div>
+  );
+
+  /**
+   * Shared stepper: courses → package preview → [upgradation] → final review
+   * @param {'course-selection'|'package-preview'|'upgradation'|'final-review'} activeStep
+   */
+  const renderFlowStepper = (activeStep) => {
+    const isCourseActive = activeStep === "course-selection";
+    const isPackagePreviewActive = activeStep === "package-preview";
+    const isUpgradationActive = activeStep === "upgradation";
+    const isFinalReviewActive = activeStep === "final-review";
+
+    const packagePreviewDone =
+      isUpgradationActive || isFinalReviewActive;
+    const upgradationDone =
+      isFinalReviewActive && upgradationRequested;
+
+    const stepCircle = (num, { active, done, idleClass, activeClass, doneClass }) => (
+      <div
+        className={`flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm ${
+          active ? activeClass : done ? doneClass : idleClass
+        }`}
+      >
+        {num}
+      </div>
+    );
+
+    const stepLabel = (text, { active, done, activeClass, doneClass, idleClass }) => (
+      <span
+        className={`ml-2 text-sm font-medium ${active ? `${activeClass} font-semibold` : done ? doneClass : idleClass}`}
+      >
+        {text}
+      </span>
+    );
+
+    return (
+      <div className="px-8 pt-6 pb-4 border-b border-gray-100">
+        <div className="flex items-center">
+          {details.courses.map((course, index) => (
+            <React.Fragment key={course.course_id}>
+              <div className="flex items-center">
+                {stepCircle(index + 1, {
+                  active: isCourseActive && index === currentCourseIndex,
+                  done: isCourseActive
+                    ? index < currentCourseIndex
+                    : !isCourseActive,
+                  idleClass: "bg-white text-gray-400 border-gray-300",
+                  activeClass: "bg-green-600 text-white border-green-600",
+                  doneClass: "bg-green-100 text-green-600 border-green-500",
+                })}
+                {stepLabel(course.course_name, {
+                  active: isCourseActive && index === currentCourseIndex,
+                  done: isCourseActive
+                    ? index < currentCourseIndex
+                    : !isCourseActive,
+                  idleClass: "text-gray-400",
+                  activeClass: "text-gray-900",
+                  doneClass: "text-green-600",
+                })}
+              </div>
+              {renderFlowConnector(
+                isCourseActive
+                  ? index < currentCourseIndex
+                  : !isCourseActive,
+              )}
+            </React.Fragment>
+          ))}
+
+          <div className="flex items-center">
+            {stepCircle(packagePreviewStepNum, {
+              active: isPackagePreviewActive,
+              done: packagePreviewDone,
+              idleClass: "bg-white text-gray-400 border-gray-300",
+              activeClass: "bg-green-600 text-white border-green-600",
+              doneClass: "bg-green-100 text-green-600 border-green-500",
+            })}
+            {stepLabel("Package preview", {
+              active: isPackagePreviewActive,
+              done: packagePreviewDone,
+              idleClass: "text-gray-400",
+              activeClass: "text-gray-900",
+              doneClass: "text-green-600",
+            })}
+          </div>
+
+          {hasUpgradationFlow && (
+            <>
+              {renderFlowConnector(packagePreviewDone)}
+              <div className="flex items-center">
+                {stepCircle(upgradationStepNum, {
+                  active: isUpgradationActive,
+                  done: upgradationDone,
+                  idleClass: "bg-white text-gray-400 border-gray-300",
+                  activeClass: "bg-purple-600 text-white border-purple-600",
+                  doneClass: "bg-purple-100 text-purple-600 border-purple-500",
+                })}
+                {stepLabel("Upgradation", {
+                  active: isUpgradationActive,
+                  done: upgradationDone,
+                  idleClass: "text-gray-400",
+                  activeClass: "text-purple-700",
+                  doneClass: "text-purple-600",
+                })}
+              </div>
+            </>
+          )}
+
+          {renderFlowConnector(
+            isFinalReviewActive ||
+              (hasUpgradationFlow ? upgradationDone : packagePreviewDone),
+          )}
+          <div className="flex items-center">
+            {stepCircle(finalReviewStepNum, {
+              active: isFinalReviewActive,
+              done: false,
+              idleClass: "bg-white text-gray-400 border-gray-300",
+              activeClass: "bg-green-600 text-white border-green-600",
+              doneClass: "bg-green-100 text-green-600 border-green-500",
+            })}
+            {stepLabel("Final review", {
+              active: isFinalReviewActive,
+              done: false,
+              idleClass: "text-gray-400",
+              activeClass: "text-gray-900",
+              doneClass: "text-green-600",
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Safe JSON parse helper
   const safeJSONParse = (jsonString) => {
@@ -138,6 +293,58 @@ const RefurbishmentResponseModal = ({
     });
   };
 
+  const handleUpgradationJustificationChange = (packageId, value) => {
+    setUpgradationJustifications((prev) => ({
+      ...prev,
+      [packageId]: value,
+    }));
+  };
+
+  const handleUpgradationImageUpload = (packageId, e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const existing = upgradationImageFiles[packageId] || [];
+    if (existing.length + files.length > 5) {
+      toast.error("Maximum 5 images allowed per upgradation package");
+      return;
+    }
+
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        toast.error(`${file.name} is not an image file`);
+        return;
+      }
+      if (!["image/jpeg", "image/jpg", "image/png"].includes(file.type)) {
+        toast.error("Only JPG and PNG images are allowed");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name} exceeds 5MB limit`);
+        return;
+      }
+    }
+
+    setUpgradationImageFiles((prev) => ({
+      ...prev,
+      [packageId]: [...existing, ...files],
+    }));
+    toast.success(`${files.length} image(s) added`);
+  };
+
+  const removeUpgradationImage = (packageId, imageIndex) => {
+    setUpgradationImageFiles((prev) => {
+      const updated = { ...prev };
+      updated[packageId] = updated[packageId].filter(
+        (_, idx) => idx !== imageIndex,
+      );
+      if (updated[packageId].length === 0) {
+        delete updated[packageId];
+      }
+      return updated;
+    });
+  };
+
   // Document upload handlers — shown in the final preview step
   const handleRefurbishmentDocUpload = (e) => {
     const file = e.target.files?.[0];
@@ -183,30 +390,92 @@ const RefurbishmentResponseModal = ({
 
   // Go back from preview to editing
   const handleBackFromPreview = () => {
-    setShowPreview(false);
     if (isFinalPreview) {
-      // From the final combined preview
       if (upgradationRequested) {
-        setUpgradationStep("packages"); // back to upgradation packages
-      } else {
-        // Partner declined upgradation — back to non-final refurbishment preview
+        setShowPreview(false);
+        setUpgradationStep("packages");
+      } else if (hasUpgradationFlow) {
+        setShowPreview(false);
         setIsFinalPreview(false);
-        setShowPreview(true);
+        setUpgradationStep("prompt");
+      } else {
+        setIsFinalPreview(false);
       }
-    } else {
-      // From the non-final refurbishment preview — back to last course
-      setCurrentCourseIndex(totalCourses - 1);
+      return;
     }
+
+    setShowPreview(false);
+    setCurrentCourseIndex(totalCourses - 1);
   };
 
+  // Keep an active upgradation package selected for the right-side panel.
+  // Pre-populate state from previous submission when admin sends the request back
+  React.useEffect(() => {
+    const prev = details.previous_submission;
+    if (!prev || !prev.packages || prev.packages.length === 0) return;
+
+    const newSelections = {};
+    const newJustifications = {};
+    const newExistingImages = {};
+
+    prev.packages.forEach((pkg) => {
+      newSelections[pkg.package_id] = true;
+      if (pkg.justification) newJustifications[pkg.package_id] = pkg.justification;
+      if (pkg.existing_images && pkg.existing_images.length > 0) {
+        newExistingImages[pkg.package_id] = pkg.existing_images;
+      }
+    });
+
+    setSelections(newSelections);
+    setJustifications(newJustifications);
+    setExistingImageUrls(newExistingImages);
+
+    if (prev.supporting_docs?.refurbishment) {
+      setExistingRefurbishmentDocUrl(prev.supporting_docs.refurbishment);
+    }
+    if (prev.supporting_docs?.upgradation) {
+      setExistingUpgradationDocUrl(prev.supporting_docs.upgradation);
+    }
+
+    if (prev.upgradation) {
+      setUpgradationDetails({
+        length_feet: String(prev.upgradation.length_feet || ""),
+        breadth_feet: String(prev.upgradation.breadth_feet || ""),
+        height_feet: String(prev.upgradation.height_feet || ""),
+        justification: prev.upgradation.justification || "",
+      });
+      if (prev.upgradation.package_ids?.length > 0) {
+        const upgSel = {};
+        prev.upgradation.package_ids.forEach((id) => { upgSel[id] = true; });
+        setUpgradationSelections(upgSel);
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    if (upgradationStep !== "packages") return;
+    const firstPkg = details.upgradation_packages?.[0];
+    const firstPkgId = firstPkg?.package_id || firstPkg?.id || null;
+    if (!activeUpgradationPackageId && firstPkgId) {
+      setActiveUpgradationPackageId(firstPkgId);
+    }
+  }, [
+    upgradationStep,
+    details.upgradation_packages,
+    activeUpgradationPackageId,
+  ]);
+
   // Jump to specific course from preview (for editing)
-  const jumpToCourse = (courseIndex) => {
+  const _jumpToCourse = (courseIndex) => {
     setShowPreview(false);
     setCurrentCourseIndex(courseIndex);
   };
 
   // Count selected packages (across all courses)
   const selectedCount = Object.values(selections).filter(Boolean).length;
+  const hasRefurbishmentDocument = Boolean(
+    refurbishmentDoc || existingRefurbishmentDocUrl,
+  );
 
   // Count total packages (across all courses)
   const totalPackages = details.courses.reduce(
@@ -215,7 +484,7 @@ const RefurbishmentResponseModal = ({
   );
 
   // Get all selected packages with their data
-  const getSelectedPackages = () => {
+  const _getSelectedPackages = () => {
     const selected = [];
     details.courses.forEach((course) => {
       course.packages.forEach((pkg) => {
@@ -233,22 +502,38 @@ const RefurbishmentResponseModal = ({
     return selected;
   };
 
-  // Upload a single file directly to S3 via presigned PUT URL
+  // Upload a single file: S3 presigned PUT or local backend POST
   const uploadFileToS3 = async (file, folder = "refurbishment/uploads") => {
-    const { uploadUrl, fileUrl } = await refurbishmentService.generateUploadUrl(
-      {
-        fileName: file.name,
-        fileType: file.type,
-        folder,
-      },
-    );
-    const res = await fetch(uploadUrl, {
-      method: "PUT",
-      body: file,
-      headers: { "Content-Type": file.type },
+    const result = await refurbishmentService.generateUploadUrl({
+      fileName: file.name,
+      fileType: file.type,
+      folder,
     });
-    if (!res.ok)
-      throw new Error(`S3 upload failed: ${res.status} ${res.statusText}`);
+
+    let fileUrl;
+    if (result.storageType === "local") {
+      // S3 not configured — POST multipart to local backend endpoint
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await apiClient.post(
+        "/partner/refurbishment/upload-local",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      fileUrl = uploadRes.data?.data?.fileUrl;
+    } else {
+      // S3: PUT directly to presigned URL
+      const { uploadUrl, fileUrl: s3FileUrl } = result;
+      const res = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!res.ok)
+        throw new Error(`S3 upload failed: ${res.status} ${res.statusText}`);
+      fileUrl = s3FileUrl;
+    }
+
     return { url: fileUrl, name: file.name, size: file.size, type: file.type };
   };
 
@@ -270,6 +555,11 @@ const RefurbishmentResponseModal = ({
       return;
     }
 
+    if (!hasRefurbishmentDocument) {
+      toast.error("Refurbishment document is required before submitting");
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -279,9 +569,14 @@ const RefurbishmentResponseModal = ({
       for (const pkgId of selectedPackages) {
         let imageUrls = [];
 
-        // Upload images for this package if any
+        // Include already-uploaded images from previous submission
+        const prevImages = existingImageUrls[pkgId] || [];
+        imageUrls = [...prevImages];
+
+        // Upload NEW images for this package if any
         if (imageFiles[pkgId] && imageFiles[pkgId].length > 0) {
-          imageUrls = await uploadImagesToS3(imageFiles[pkgId]);
+          const newUrls = await uploadImagesToS3(imageFiles[pkgId]);
+          imageUrls = [...imageUrls, ...newUrls];
         }
 
         submissionData.push({
@@ -300,17 +595,40 @@ const RefurbishmentResponseModal = ({
         );
       }
 
+      let upgradationSelectedPackages = [];
+      if (upgradationRequested) {
+        const selectedUpgradationIds = Object.keys(
+          upgradationSelections,
+        ).filter((id) => upgradationSelections[id]);
+
+        upgradationSelectedPackages = await Promise.all(
+          selectedUpgradationIds.map(async (packageId) => {
+            const pkgFiles = upgradationImageFiles[packageId] || [];
+            const pkgImageUrls =
+              pkgFiles.length > 0
+                ? await uploadImagesToS3(pkgFiles, "refurbishment/upgradation")
+                : [];
+
+            return {
+              package_id: packageId,
+              justification: upgradationJustifications[packageId] || "",
+              image_urls: pkgImageUrls,
+            };
+          }),
+        );
+      }
+
       await apiClient.post(
         `/notifications/${notificationId}/refurbishment-response`,
         {
           selected_packages: submissionData,
-          // Document attachments — upload to S3 via presigned URL
+          // Document attachments: upload new file if provided, else reuse existing URL
           refurbishment_document: refurbishmentDoc
             ? await uploadFileToS3(refurbishmentDoc, "refurbishment/documents")
-            : null,
+            : existingRefurbishmentDocUrl || null,
           upgradation_document: upgradationDoc
             ? await uploadFileToS3(upgradationDoc, "refurbishment/documents")
-            : null,
+            : existingUpgradationDocUrl || null,
           upgradation: upgradationRequested
             ? {
                 length_feet: upgradationDetails.length_feet,
@@ -318,6 +636,7 @@ const RefurbishmentResponseModal = ({
                 height_feet: upgradationDetails.height_feet,
                 justification: upgradationDetails.justification,
                 photos: upgradationPhotoUrls,
+                selected_packages: upgradationSelectedPackages,
                 package_ids: Object.keys(upgradationSelections).filter(
                   (id) => upgradationSelections[id],
                 ),
@@ -429,45 +748,7 @@ const RefurbishmentResponseModal = ({
               <XMarkIcon className="h-6 w-6" />
             </button>
 
-            {/* Stepper */}
-            <div className="px-8 pt-6 pb-4 border-b border-gray-100">
-              <div className="flex items-center">
-                {details.courses.map((course, index) => (
-                  <React.Fragment key={course.course_id}>
-                    <div className="flex items-center">
-                      <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-green-100 text-green-600 border-green-500">
-                        {index + 1}
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-green-600">
-                        {course.course_name}
-                      </span>
-                    </div>
-                    <div className="flex-1 mx-3 max-w-[60px]">
-                      <div className="border-t-2 border-dotted border-green-400"></div>
-                    </div>
-                  </React.Fragment>
-                ))}
-                <div className="flex items-center">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-purple-600 text-white border-purple-600">
-                    {totalCourses + 1}
-                  </div>
-                  <span className="ml-2 text-sm font-semibold text-gray-900">
-                    Upgradation
-                  </span>
-                </div>
-                <div className="flex-1 mx-3 max-w-[60px]">
-                  <div className="border-t-2 border-dotted border-gray-300"></div>
-                </div>
-                <div className="flex items-center">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 border-gray-300 font-semibold text-sm text-gray-400 bg-white">
-                    {totalCourses + 2}
-                  </div>
-                  <span className="ml-2 text-sm font-medium text-gray-400">
-                    Package preview
-                  </span>
-                </div>
-              </div>
-            </div>
+            {renderFlowStepper("upgradation")}
 
             {/* Prompt content */}
             <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8 py-12">
@@ -577,6 +858,8 @@ const RefurbishmentResponseModal = ({
               <XMarkIcon className="h-6 w-6" />
             </button>
 
+            {renderFlowStepper("upgradation")}
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">
@@ -609,7 +892,7 @@ const RefurbishmentResponseModal = ({
                 />
                 <input
                   type="number"
-                  placeholder="HEIGHT"
+                  placeholder="AREA"
                   value={upgradationDetails.height_feet}
                   onChange={(e) =>
                     setUpgradationDetails((prev) => ({
@@ -653,7 +936,7 @@ const RefurbishmentResponseModal = ({
                     ])
                   }
                 />
-                Attach file
+                Attach Images
               </label>
             </div>
 
@@ -686,6 +969,9 @@ const RefurbishmentResponseModal = ({
     const selectedUpgradationCount = Object.values(
       upgradationSelections,
     ).filter(Boolean).length;
+    const activeUpgradationFiles = activeUpgradationPackageId
+      ? upgradationImageFiles[activeUpgradationPackageId] || []
+      : [];
 
     return (
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -702,45 +988,7 @@ const RefurbishmentResponseModal = ({
               <XMarkIcon className="h-6 w-6" />
             </button>
 
-            {/* Stepper */}
-            <div className="px-8 pt-6 pb-4 border-b border-gray-100">
-              <div className="flex items-center">
-                {details.courses.map((course, index) => (
-                  <React.Fragment key={course.course_id}>
-                    <div className="flex items-center">
-                      <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-green-100 text-green-600 border-green-500">
-                        {index + 1}
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-green-600">
-                        {course.course_name}
-                      </span>
-                    </div>
-                    <div className="flex-1 mx-3 max-w-[60px]">
-                      <div className="border-t-2 border-dotted border-green-400"></div>
-                    </div>
-                  </React.Fragment>
-                ))}
-                <div className="flex items-center">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-purple-600 text-white border-purple-600">
-                    {totalCourses + 1}
-                  </div>
-                  <span className="ml-2 text-sm font-semibold text-gray-900">
-                    Upgradation
-                  </span>
-                </div>
-                <div className="flex-1 mx-3 max-w-[60px]">
-                  <div className="border-t-2 border-dotted border-gray-300"></div>
-                </div>
-                <div className="flex items-center">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 border-gray-300 font-semibold text-sm text-gray-400 bg-white">
-                    {totalCourses + 2}
-                  </div>
-                  <span className="ml-2 text-sm font-medium text-gray-400">
-                    Package preview
-                  </span>
-                </div>
-              </div>
-            </div>
+            {renderFlowStepper("upgradation")}
 
             {/* Title */}
             <div className="px-8 pt-5 pb-3">
@@ -752,81 +1000,46 @@ const RefurbishmentResponseModal = ({
               </p>
             </div>
 
-            {/* Package List */}
-            <div className="flex-1 overflow-y-auto px-8 pb-6">
-              {upgradationPkgList.length === 0 ? (
-                <p className="text-sm text-gray-400 mt-4 italic">
-                  No upgradation packages available for this notification.
-                </p>
-              ) : (
-                <div className="space-y-3 pt-2">
-                  {upgradationPkgList.map((pkg, idx) => {
+            {/* Package List + Justification Panel */}
+            <div className="flex-1 overflow-hidden px-8 pb-6 flex gap-6 min-h-0">
+              <div className="w-[52%] overflow-y-auto scrollbar-subtle space-y-3 pr-2">
+                {upgradationPkgList.length === 0 ? (
+                  <p className="text-sm text-gray-400 mt-4 italic">
+                    No upgradation packages available for this notification.
+                  </p>
+                ) : (
+                  upgradationPkgList.map((pkg, idx) => {
                     const pkgId = pkg.package_id || pkg.id;
                     const isSelected = upgradationSelections[pkgId] || false;
                     const pkgImages = safeJSONParse(pkg.images || "[]");
+                    const imageUrl = pkgImages.length > 0 ? pkgImages[0] : null;
+                    const isFocused = activeUpgradationPackageId
+                      ? activeUpgradationPackageId === pkgId
+                      : idx === 0;
 
                     return (
                       <div
                         key={pkgId}
-                        onClick={() =>
+                        onClick={() => {
+                          setActiveUpgradationPackageId(pkgId);
                           setUpgradationSelections((prev) => ({
                             ...prev,
                             [pkgId]: !prev[pkgId],
-                          }))
-                        }
-                        className={`rounded-xl border cursor-pointer transition-all bg-white overflow-hidden ${
-                          isSelected
-                            ? "border-purple-500 ring-2 ring-purple-200 bg-purple-50/30"
-                            : "border-gray-200 hover:border-purple-300"
+                          }));
+                        }}
+                        className={`flex items-start justify-between gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                          isFocused
+                            ? "border-purple-500 bg-purple-50/30 shadow-sm"
+                            : "border-gray-200 bg-white hover:border-purple-300"
                         }`}
                       >
-                        {/* Image bar at top if images exist */}
-                        {pkgImages.length > 0 && (
-                          <div className="relative h-36 overflow-hidden bg-gray-100">
-                            <img
-                              src={pkgImages[0]}
-                              alt={pkg.package_name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.target.parentElement.style.display = "none";
-                              }}
-                            />
-                            {pkgImages.length > 1 && (
-                              <div className="absolute bottom-2 right-2 flex gap-1">
-                                {pkgImages.slice(1, 4).map((imgUrl, i) => (
-                                  <img
-                                    key={i}
-                                    src={imgUrl}
-                                    alt=""
-                                    className="w-10 h-10 object-cover rounded border-2 border-white shadow"
-                                    onError={(e) => {
-                                      e.target.style.display = "none";
-                                    }}
-                                  />
-                                ))}
-                                {pkgImages.length > 4 && (
-                                  <div className="w-10 h-10 rounded border-2 border-white bg-black/60 shadow flex items-center justify-center text-white text-xs font-bold">
-                                    +{pkgImages.length - 4}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {isSelected && (
-                              <div className="absolute top-2 left-2">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-600 text-white shadow">
-                                  ✓ Selected
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {/* Package info */}
-                        <div className="p-4 flex items-start gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={(e) => {
                               e.stopPropagation();
+                              setActiveUpgradationPackageId(pkgId);
                               setUpgradationSelections((prev) => ({
                                 ...prev,
                                 [pkgId]: !prev[pkgId],
@@ -836,28 +1049,131 @@ const RefurbishmentResponseModal = ({
                             style={{ accentColor: "#7c3aed" }}
                           />
                           <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-400 mb-0.5">
+                              PKG ID:{" "}
+                              <span className="font-medium text-gray-500">
+                                UPG-{String(idx + 1).padStart(2, "0")}
+                              </span>
+                            </p>
                             <h4
                               className={`text-sm font-semibold mb-1 leading-snug ${isSelected ? "text-purple-700" : "text-gray-900"}`}
                             >
                               {pkg.package_name}
                             </h4>
                             {pkg.description && (
-                              <p className="text-xs text-gray-500 leading-relaxed">
+                              <p className="text-xs text-gray-500 line-clamp-2">
                                 {pkg.description}
-                              </p>
-                            )}
-                            {pkg.course_names && (
-                              <p className="text-[10px] text-purple-500 mt-1.5 font-medium">
-                                📚 {pkg.course_names}
                               </p>
                             )}
                           </div>
                         </div>
+                        {imageUrl && (
+                          <img
+                            src={imageUrl}
+                            alt={pkg.package_name}
+                            className="flex-shrink-0 w-20 h-16 object-cover rounded-lg border border-gray-200"
+                          />
+                        )}
                       </div>
                     );
-                  })}
+                  })
+                )}
+              </div>
+
+              {/* Right — Justification + Attach Images panel */}
+              <div className="flex-1 bg-gray-50 rounded-2xl p-5 flex flex-col gap-4 overflow-y-auto scrollbar-subtle">
+                <p className="text-xs font-bold tracking-widest text-gray-500 uppercase">
+                  Justification
+                </p>
+                <Textarea
+                  value={
+                    activeUpgradationPackageId
+                      ? upgradationJustifications[activeUpgradationPackageId] ||
+                        ""
+                      : ""
+                  }
+                  onChange={(e) =>
+                    activeUpgradationPackageId &&
+                    handleUpgradationJustificationChange(
+                      activeUpgradationPackageId,
+                      e.target.value,
+                    )
+                  }
+                  placeholder="Write here"
+                  rows={10}
+                  disabled={!activeUpgradationPackageId}
+                  className="flex-1 resize-none bg-white border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:border-purple-400 focus:ring-purple-400 disabled:opacity-60 disabled:cursor-default"
+                />
+
+                <div>
+                  <label
+                    htmlFor={
+                      activeUpgradationPackageId
+                        ? `upgradation-image-upload-${activeUpgradationPackageId}`
+                        : undefined
+                    }
+                    className={`flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 transition-colors ${
+                      activeUpgradationPackageId
+                        ? "cursor-pointer hover:border-purple-400 hover:bg-purple-50 hover:text-purple-600"
+                        : "cursor-default opacity-50"
+                    }`}
+                  >
+                    <ArrowUpTrayIcon className="h-5 w-5" />
+                    <span>
+                      {activeUpgradationPackageId &&
+                      activeUpgradationFiles.length > 0
+                        ? `${activeUpgradationFiles.length} image(s) attached`
+                        : "Attach Image"}
+                    </span>
+                  </label>
+
+                  {activeUpgradationPackageId && (
+                    <input
+                      id={`upgradation-image-upload-${activeUpgradationPackageId}`}
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/jpg,image/png"
+                      className="hidden"
+                      onChange={(e) =>
+                        handleUpgradationImageUpload(
+                          activeUpgradationPackageId,
+                          e,
+                        )
+                      }
+                      disabled={activeUpgradationFiles.length >= 5}
+                    />
+                  )}
+
+                  {activeUpgradationPackageId &&
+                    activeUpgradationFiles.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {activeUpgradationFiles.map((file, imgIdx) => (
+                          <div
+                            key={`${file.name}-${imgIdx}`}
+                            className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-gray-200"
+                          >
+                            <span className="text-xs text-gray-700 truncate pr-2">
+                              {file.name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeUpgradationImage(
+                                  activeUpgradationPackageId,
+                                  imgIdx,
+                                )
+                              }
+                              className="text-red-500 hover:text-red-700"
+                              title="Remove image"
+                            >
+                              <XCircleIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Footer */}
@@ -884,7 +1200,7 @@ const RefurbishmentResponseModal = ({
                     }}
                     className="px-8 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-full transition-colors"
                   >
-                    Package preview
+                    Continue to Final Review →
                   </button>
                 </div>
               </div>
@@ -925,7 +1241,7 @@ const RefurbishmentResponseModal = ({
           ? activeCoursePkgs[0] || null
           : null;
 
-    const focusedImages = focusedPkg ? safeJSONParse(focusedPkg.images) : [];
+    const _focusedImages = focusedPkg ? safeJSONParse(focusedPkg.images) : [];
     const focusedUploads = focusedPkg
       ? imageFiles[focusedPkg.package_id] || []
       : [];
@@ -960,58 +1276,9 @@ const RefurbishmentResponseModal = ({
               <XMarkIcon className="h-6 w-6" />
             </button>
 
-            {/* Stepper (same style as course selection) */}
-            <div className="px-8 pt-6 pb-4 border-b border-gray-100">
-              <div className="flex items-center">
-                {details.courses.map((course, index) => (
-                  <React.Fragment key={course.course_id}>
-                    <div className="flex items-center">
-                      <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-green-100 text-green-600 border-green-500">
-                        {index + 1}
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-green-600">
-                        {course.course_name}
-                      </span>
-                    </div>
-                    <div className="flex-1 mx-3 max-w-[60px]">
-                      <div className="border-t-2 border-dotted border-green-400"></div>
-                    </div>
-                  </React.Fragment>
-                ))}
-                {details.has_upgradation_packages && (
-                  <>
-                    <div className="flex items-center">
-                      <div
-                        className={`flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm ${upgradationRequested ? "bg-purple-100 text-purple-600 border-purple-500" : "bg-gray-100 text-gray-400 border-gray-300"}`}
-                      >
-                        {totalCourses + 1}
-                      </div>
-                      <span
-                        className={`ml-2 text-sm font-medium ${upgradationRequested ? "text-purple-600" : "text-gray-400"}`}
-                      >
-                        Upgradation
-                      </span>
-                    </div>
-                    <div className="flex-1 mx-3 max-w-[60px]">
-                      <div
-                        className={`border-t-2 border-dotted ${upgradationRequested ? "border-purple-400" : "border-gray-300"}`}
-                      ></div>
-                    </div>
-                  </>
-                )}
-                {/* Package Preview Step — active, label changes based on final vs intermediate */}
-                <div className="flex items-center">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm bg-green-600 text-white border-green-600">
-                    {details.has_upgradation_packages
-                      ? totalCourses + 2
-                      : totalCourses + 1}
-                  </div>
-                  <span className="ml-2 text-sm font-semibold text-gray-900">
-                    {isFinalPreview ? "Final review" : "Package preview"}
-                  </span>
-                </div>
-              </div>
-            </div>
+            {renderFlowStepper(
+              isFinalPreview ? "final-review" : "package-preview",
+            )}
 
             {/* Title */}
             <div className="px-8 pt-5 pb-3">
@@ -1080,26 +1347,69 @@ const RefurbishmentResponseModal = ({
                         {selectedUpgradationPkgs.length})
                       </h3>
                       <div className="space-y-2">
-                        {selectedUpgradationPkgs.map((pkg, idx) => (
-                          <div
-                            key={pkg.package_id || pkg.id}
-                            className="flex items-center gap-3 p-3 rounded-xl border border-purple-200 bg-purple-50/20"
-                          >
-                            <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center text-xs font-bold text-purple-600 flex-shrink-0">
-                              {idx + 1}
+                        {selectedUpgradationPkgs.map((pkg, idx) => {
+                          const pkgId = pkg.package_id || pkg.id;
+                          const pkgJustification =
+                            upgradationJustifications[pkgId] || "";
+                          const pkgFiles = upgradationImageFiles[pkgId] || [];
+
+                          return (
+                            <div
+                              key={pkgId}
+                              className="p-3 rounded-xl border border-purple-200 bg-purple-50/20"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center text-xs font-bold text-purple-600 flex-shrink-0">
+                                  {idx + 1}
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-semibold text-purple-700">
+                                    {pkg.package_name}
+                                  </h4>
+                                  {pkg.description && (
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                      {pkg.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="mt-2 pl-10 space-y-2">
+                                <div>
+                                  <p className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase mb-1">
+                                    Justification
+                                  </p>
+                                  <p className="text-xs text-gray-600">
+                                    {pkgJustification ||
+                                      "No justification provided."}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase mb-1">
+                                    Image Uploads
+                                  </p>
+                                  {pkgFiles.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                      {pkgFiles.map((file, fileIdx) => (
+                                        <span
+                                          key={`${file.name}-${fileIdx}`}
+                                          className="px-2 py-1 bg-white border border-purple-100 rounded text-[11px] text-gray-700"
+                                        >
+                                          {file.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-gray-400">
+                                      No images attached.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="text-sm font-semibold text-purple-700">
-                                {pkg.package_name}
-                              </h4>
-                              {pkg.description && (
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  {pkg.description}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1254,6 +1564,7 @@ const RefurbishmentResponseModal = ({
                   <div>
                     <label className="block text-xs text-gray-600 font-medium mb-1">
                       Refurbishment Document{" "}
+                      <span className="text-red-500">*</span>{" "}
                       <span className="text-gray-400 font-normal">
                         (PDF, Excel, Image…)
                       </span>
@@ -1270,6 +1581,29 @@ const RefurbishmentResponseModal = ({
                         >
                           ✕
                         </button>
+                      </div>
+                    ) : existingRefurbishmentDocUrl ? (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                        <span className="text-xs text-blue-700 font-medium truncate flex-1">
+                          {existingRefurbishmentDocUrl.name || "Previously uploaded document"}
+                        </span>
+                        <a
+                          href={existingRefurbishmentDocUrl.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 hover:text-blue-700 text-xs flex-shrink-0"
+                        >
+                          View
+                        </a>
+                        <label className="text-green-600 hover:text-green-700 text-xs flex-shrink-0 cursor-pointer">
+                          Replace
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                            onChange={handleRefurbishmentDocUpload}
+                          />
+                        </label>
                       </div>
                     ) : (
                       <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-400 hover:bg-green-50/30 transition-colors">
@@ -1308,6 +1642,29 @@ const RefurbishmentResponseModal = ({
                           >
                             ✕
                           </button>
+                        </div>
+                      ) : existingUpgradationDocUrl ? (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                          <span className="text-xs text-blue-700 font-medium truncate flex-1">
+                            {existingUpgradationDocUrl.name || "Previously uploaded document"}
+                          </span>
+                          <a
+                            href={existingUpgradationDocUrl.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:text-blue-700 text-xs flex-shrink-0"
+                          >
+                            View
+                          </a>
+                          <label className="text-green-600 hover:text-green-700 text-xs flex-shrink-0 cursor-pointer">
+                            Replace
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                              onChange={handleUpgradationDocUpload}
+                            />
+                          </label>
                         </div>
                       ) : (
                         <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-purple-200 rounded-lg cursor-pointer hover:border-purple-400 hover:bg-purple-50/30 transition-colors">
@@ -1353,10 +1710,25 @@ const RefurbishmentResponseModal = ({
                     >
                       Continue to Upgradation →
                     </button>
+                  ) : !isFinalPreview ? (
+                    <button
+                      onClick={() => {
+                        setIsFinalPreview(true);
+                        setPreviewTab(0);
+                      }}
+                      className="px-8 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-full transition-colors"
+                    >
+                      Continue to Final Review →
+                    </button>
                   ) : (
                     <button
                       onClick={handleSubmit}
-                      disabled={submitting}
+                      disabled={submitting || !hasRefurbishmentDocument}
+                      title={
+                        hasRefurbishmentDocument
+                          ? undefined
+                          : "Upload a refurbishment document to submit"
+                      }
                       className="px-8 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-semibold rounded-full transition-colors"
                     >
                       {submitting ? "Submitting..." : "Submit"}
@@ -1388,81 +1760,19 @@ const RefurbishmentResponseModal = ({
             <XMarkIcon className="h-6 w-6" />
           </button>
 
-          {/* Course Progress Stepper */}
-          <div className="px-8 pt-6 pb-4 border-b border-gray-100">
-            <div className="flex items-center">
-              {details.courses.map((course, index) => (
-                <React.Fragment key={course.course_id}>
-                  <div className="flex items-center">
-                    <div
-                      className={`flex items-center justify-center w-9 h-9 rounded-full border-2 font-semibold text-sm transition-colors ${
-                        index === currentCourseIndex
-                          ? "bg-green-600 text-white border-green-600"
-                          : index < currentCourseIndex
-                            ? "bg-green-100 text-green-600 border-green-500"
-                            : "bg-white text-gray-400 border-gray-300"
-                      }`}
-                    >
-                      {index + 1}
-                    </div>
-                    <span
-                      className={`ml-2 text-sm font-medium ${
-                        index === currentCourseIndex
-                          ? "text-gray-900 font-semibold"
-                          : index < currentCourseIndex
-                            ? "text-green-600"
-                            : "text-gray-400"
-                      }`}
-                    >
-                      {course.course_name}
-                    </span>
-                  </div>
-                  <div className="flex-1 mx-3 max-w-[60px]">
-                    <div
-                      className={`border-t-2 border-dotted ${
-                        index < currentCourseIndex
-                          ? "border-green-400"
-                          : "border-gray-300"
-                      }`}
-                    ></div>
-                  </div>
-                </React.Fragment>
-              ))}
-
-              {/* Package Preview Step — always gray while on course steps */}
-              {details.has_upgradation_packages && (
-                <>
-                  <div className="flex items-center">
-                    <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 border-gray-300 font-semibold text-sm text-gray-400 bg-white">
-                      {totalCourses + 1}
-                    </div>
-                    <span className="ml-2 text-sm font-medium text-gray-400">
-                      Upgradation
-                    </span>
-                  </div>
-                  <div className="flex-1 mx-3 max-w-[60px]">
-                    <div className="border-t-2 border-dotted border-gray-300"></div>
-                  </div>
-                </>
-              )}
-              <div className="flex items-center">
-                <div className="flex items-center justify-center w-9 h-9 rounded-full border-2 border-gray-300 font-semibold text-sm text-gray-400 bg-white">
-                  {details.has_upgradation_packages
-                    ? totalCourses + 2
-                    : totalCourses + 1}
-                </div>
-                <span className="ml-2 text-sm font-medium text-gray-400">
-                  Package preview
-                </span>
-              </div>
-            </div>
-          </div>
+          {renderFlowStepper("course-selection")}
 
           {/* Title */}
           <div className="px-8 pt-5 pb-3">
             <h2 className="text-2xl font-bold text-gray-900">
               Refurbishment package
             </h2>
+            {details.previous_submission?.admin_remarks && (
+              <div className="mt-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+                <span className="font-semibold">Admin remarks: </span>
+                {details.previous_submission.admin_remarks}
+              </div>
+            )}
           </div>
 
           {/* Main Content — left list + right justification panel */}
@@ -1551,7 +1861,7 @@ const RefurbishmentResponseModal = ({
                 className="flex-1 resize-none bg-white border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:border-green-400 focus:ring-green-400 disabled:opacity-60 disabled:cursor-default"
               />
 
-              {/* Attach File */}
+              {/* Attach Image */}
               <div>
                 <label
                   htmlFor={
@@ -1569,8 +1879,8 @@ const RefurbishmentResponseModal = ({
                   <span>
                     {activePackageId &&
                     (imageFiles[activePackageId] || []).length > 0
-                      ? `${(imageFiles[activePackageId] || []).length} file(s) attached`
-                      : "Attach file"}
+                      ? `${(imageFiles[activePackageId] || []).length} image(s) attached`
+                      : "Attach Image"}
                   </span>
                 </label>
                 {activePackageId && (
@@ -1611,6 +1921,49 @@ const RefurbishmentResponseModal = ({
                             <button
                               onClick={() =>
                                 removeImage(activePackageId, imgIdx)
+                              }
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <XCircleIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
+
+                {/* Previously uploaded images (from prior submission) */}
+                {activePackageId &&
+                  (existingImageUrls[activePackageId] || []).length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-gray-400 font-medium">Previously uploaded:</p>
+                      {(existingImageUrls[activePackageId] || []).map(
+                        (img, imgIdx) => (
+                          <div
+                            key={`existing-${imgIdx}`}
+                            className="flex items-center gap-2 p-2 rounded-lg border border-blue-200 bg-blue-50"
+                          >
+                            <img
+                              src={img.url}
+                              alt={img.name}
+                              className="w-10 h-10 object-cover rounded"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-blue-700 truncate">
+                                {img.name}
+                              </p>
+                              <p className="text-xs text-blue-400">
+                                Previously uploaded
+                              </p>
+                            </div>
+                            <button
+                              onClick={() =>
+                                setExistingImageUrls((prev) => {
+                                  const updated = { ...prev };
+                                  updated[activePackageId] = (updated[activePackageId] || []).filter((_, i) => i !== imgIdx);
+                                  if (updated[activePackageId].length === 0) delete updated[activePackageId];
+                                  return updated;
+                                })
                               }
                               className="text-red-400 hover:text-red-600"
                             >

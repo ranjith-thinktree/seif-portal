@@ -23,6 +23,18 @@ router.use(authenticate);
 router.use(checkRole(['ADMIN', 'SUPER_ADMIN']));
 
 /**
+ * GET /api/v1/admin/refurbishment/settings
+ * Get default custom message and eligibility criteria settings
+ */
+router.get('/settings', RefurbishmentController.getSettings);
+
+/**
+ * PUT /api/v1/admin/refurbishment/settings
+ * Update default custom message and eligibility criteria settings
+ */
+router.put('/settings', RefurbishmentController.updateSettings);
+
+/**
  * GET /api/v1/admin/refurbishment/eligible-centers
  * Get centers eligible for refurbishment (Tab 1)
  * Query params: limit, offset
@@ -253,6 +265,14 @@ router.put('/requests/:id/approve', RefurbishmentController.approveRefurbishment
 router.put('/requests/:id/reject', RefurbishmentController.rejectRefurbishmentRequest);
 
 /**
+ * PUT /api/v1/admin/refurbishment/requests/:id/send-back
+ * Admin sends request back to partner for re-submission
+ * Path params: id (refurbishment request UUID)
+ * Body: { sendBackReason: "Reason/remarks (REQUIRED)" }
+ */
+router.put('/requests/:id/send-back', RefurbishmentController.sendBackRefurbishmentRequest);
+
+/**
  * PUT /api/v1/admin/refurbishment/requests/:id/start
  * Admin starts refurbishment work
  * Path params: id (refurbishment request UUID)
@@ -298,9 +318,15 @@ router.get(
 
 /**
  * POST /api/v1/admin/refurbishment/upload-url
- * Generate a presigned PUT URL for direct browser upload to S3.
- * Used by AdminStatusChangeModal for completion file uploads.
+ * Generate a presigned PUT URL for direct browser upload to S3,
+ * or return a local upload endpoint when S3 is not configured.
  */
 router.post('/upload-url', RefurbishmentController.generateUploadUrl);
+
+/**
+ * POST /api/v1/admin/refurbishment/upload-local
+ * Accept multipart file upload and save to local disk (S3 fallback).
+ */
+router.post('/upload-local', RefurbishmentController.uploadLocalFile);
 
 module.exports = router;

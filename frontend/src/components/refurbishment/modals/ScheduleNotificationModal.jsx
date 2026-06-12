@@ -478,6 +478,40 @@ function ScheduleNotificationForm({
         {/* ── Date / Time / Frequency ── (hidden for instant mode) */}
         {!formData.isInstantMode && (
           <Section icon={CalendarDays} title="Schedule">
+            {/* Frequency */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                Frequency <span className="text-red-400">*</span>
+              </Label>
+              <Select
+                value={formData.frequency}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, frequency: value }))
+                }
+              >
+                <SelectTrigger className="h-11 rounded-xl border-gray-200 bg-white text-sm">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-gray-400" />
+                    <SelectValue placeholder="Select frequency" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="instant">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      One time
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="custom">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
+                      Custom (Every X days)
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Date + Time row */}
             <div className="grid grid-cols-2 gap-4">
               {/* Date picker */}
@@ -587,40 +621,6 @@ function ScheduleNotificationForm({
               </div>
             </div>
 
-            {/* Frequency */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                Frequency <span className="text-red-400">*</span>
-              </Label>
-              <Select
-                value={formData.frequency}
-                onValueChange={(value) =>
-                  setFormData((prev) => ({ ...prev, frequency: value }))
-                }
-              >
-                <SelectTrigger className="h-11 rounded-xl border-gray-200 bg-white text-sm">
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4 text-gray-400" />
-                    <SelectValue placeholder="Select frequency" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  <SelectItem value="instant">
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-3.5 h-3.5 text-amber-500" />
-                      Instant (One-time)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="custom">
-                    <div className="flex items-center gap-2">
-                      <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
-                      Custom (Every X days)
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Custom interval */}
             {formData.frequency === "custom" && (
               <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
@@ -671,7 +671,7 @@ function ScheduleNotificationForm({
                           : null,
                       }))
                     }
-                    placeholder="Leave empty = unlimited"
+                    placeholder="Field Empty = Till Partner Responds"
                     className="h-11 rounded-xl border-blue-200 bg-white"
                   />
                   <p className="text-[11px] text-gray-500">

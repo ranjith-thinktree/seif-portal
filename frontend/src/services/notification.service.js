@@ -40,6 +40,14 @@ export const markAsRead = async (id) => {
 };
 
 /**
+ * Mark notification as unread
+ */
+export const markAsUnread = async (id) => {
+  const response = await apiClient.patch(`${API_BASE}/${id}/unread`);
+  return response.data;
+};
+
+/**
  * Mark all notifications as read
  */
 export const markAllAsRead = async () => {
@@ -68,7 +76,7 @@ export const getGroupedNotifications = async (params = {}) => {
  */
 export const getUploadCenterDetails = async (uploadId) => {
   const response = await apiClient.get(
-    `${API_BASE}/upload/${uploadId}/centers`
+    `${API_BASE}/upload/${uploadId}/centers`,
   );
   return response.data;
 };
@@ -79,6 +87,7 @@ const notificationService = {
   getUnreadCount,
   getNotificationById,
   markAsRead,
+  markAsUnread,
   markAllAsRead,
   deleteNotification,
   getGroupedNotifications,

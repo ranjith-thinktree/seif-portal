@@ -57,7 +57,7 @@ const OverviewTab = ({
         />
         <RefurbishmentCard
           icon={BuildingOfficeIcon}
-          title="Last refurbished"
+          title="Refurbished Centers"
           count={lastRefurbishedCount}
           isSelected={selectedCard === "lastRefurbished"}
           onClick={() => onCardClick("lastRefurbished")}

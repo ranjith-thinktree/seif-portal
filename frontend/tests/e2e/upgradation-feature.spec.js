@@ -6,7 +6,7 @@
  * 2. Partner navigates to Inbox and opens the refurbishment notification
  * 3. Partner completes course selection step
  * 4. Partner sees "Do you need upgradation?" prompt (Figma-accurate)
- * 5. Partner chooses "Yes" → fills room dimensions (length/breadth/height in feet, no room name)
+ * 5. Partner chooses "Yes" → fills room dimensions (length/breadth/area in feet, no room name)
  * 6. Partner selects upgradation packages
  * 7. Package preview shows Upgradation tab
  * 8. Partner submits → sees "Request submitted successfully!" screen
@@ -194,10 +194,10 @@ test.describe("Upgradation Feature — Figma-Accurate E2E Flow", () => {
             timeout: 5000,
           });
 
-          // Must show LENGHT, BREADTH, HEIGHT placeholders (Figma typo preserved)
+          // Must show LENGHT, BREADTH, AREA placeholders (Figma typo preserved)
           await expect(page.getByPlaceholder("LENGHT")).toBeVisible();
           await expect(page.getByPlaceholder("BREADTH")).toBeVisible();
-          await expect(page.getByPlaceholder("HEIGHT")).toBeVisible();
+          await expect(page.getByPlaceholder("AREA")).toBeVisible();
 
           // Must show JUSTIFICATION section
           await expect(page.getByText("JUSTIFICATION")).toBeVisible();
@@ -279,7 +279,7 @@ test.describe("Upgradation Feature — Figma-Accurate E2E Flow", () => {
       // Step 4: Fill dimensions
       await page.getByPlaceholder("LENGHT").fill("30");
       await page.getByPlaceholder("BREADTH").fill("20");
-      await page.getByPlaceholder("HEIGHT").fill("10");
+      await page.getByPlaceholder("AREA").fill("600");
       await page
         .getByPlaceholder("WRITE HERE")
         .fill("The lab needs major upgradation.");
@@ -423,7 +423,7 @@ test.describe("Upgradation Feature — Figma-Accurate E2E Flow", () => {
 
           // Should show room dimensions
           await expect(
-            page.getByText(/dimension|feet|length|breadth|height/i).first(),
+            page.getByText(/dimension|feet|length|breadth|area/i).first(),
           ).toBeVisible({ timeout: 5000 });
         }
         // If upgradation tab is not visible, it means partner didn't request — that's also correct behavior

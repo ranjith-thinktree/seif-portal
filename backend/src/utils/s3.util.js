@@ -322,6 +322,14 @@ const uploadFileToS3 = async (buffer, key, contentType) => {
 };
 
 /**
+ * Check if S3 is configured (synchronous — no network call)
+ * @returns {boolean}
+ */
+const isS3Configured = () => {
+  return !!(config.aws.accessKeyId && config.aws.secretAccessKey && config.aws.s3BucketName);
+};
+
+/**
  * Check if S3 is configured and accessible
  * @returns {Promise<boolean>} True if S3 is configured and accessible
  */
@@ -351,6 +359,7 @@ module.exports = {
   deleteMultipleImagesFromS3,
   generatePresignedUrl,
   generatePutPresignedUrl,
+  isS3Configured,
   checkS3Configuration,
   // Test helper: resets the cached S3 client so it reinitializes on next call
   _resetS3Client: () => {

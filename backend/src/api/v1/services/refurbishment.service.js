@@ -9,6 +9,67 @@ const { NotFoundError } = require('../../../utils/error.util');
  * Handles all refurbishment-related business logic
  */
 class RefurbishmentService {
+  static async getRefurbishmentSettings() {
+    const DEFAULTS = {
+      default_custom_message: 'Custom Message',
+      first_cycle_years: '5',
+      repeat_cycle_years: '3',
+    };
+
+    const [rows] = await db.query(
+      `SELECT setting_key, setting_value
+       FROM refurbishment_settings
+       WHERE setting_key IN ('default_custom_message', 'first_cycle_years', 'repeat_cycle_years')`
+    );
+
+    const mapped = rows.reduce((acc, row) => {
+      acc[row.setting_key] = row.setting_value;
+      return acc;
+    }, {});
+
+    return {
+      defaultCustomMessage: mapped.default_custom_message || DEFAULTS.default_custom_message,
+      firstCycleYears: parseInt(mapped.first_cycle_years || DEFAULTS.first_cycle_years, 10),
+      repeatCycleYears: parseInt(mapped.repeat_cycle_years || DEFAULTS.repeat_cycle_years, 10),
+    };
+  }
+
+  static async updateRefurbishmentSettings({
+    defaultCustomMessage,
+    firstCycleYears,
+    repeatCycleYears,
+    userId,
+  }) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const upsertSetting = async (key, value) => {
+        await connection.query(
+          `INSERT INTO refurbishment_settings (id, setting_key, setting_value, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, NOW())
+           ON DUPLICATE KEY UPDATE
+             setting_value = VALUES(setting_value),
+             updated_by = VALUES(updated_by),
+             updated_at = NOW()`,
+          [uuidv4(), key, String(value), userId || null]
+        );
+      };
+
+      await upsertSetting('default_custom_message', defaultCustomMessage);
+      await upsertSetting('first_cycle_years', firstCycleYears);
+      await upsertSetting('repeat_cycle_years', repeatCycleYears);
+
+      await connection.commit();
+      return this.getRefurbishmentSettings();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   /**
    * Get centers eligible for refurbishment based on time-based criteria
    *
@@ -21,10 +82,11 @@ class RefurbishmentService {
    */
   static async getEligibleCenters(limit = 50, offset = 0) {
     try {
-      // First refurbishment: 5 years (60 months) from establishment
-      const FIRST_CYCLE_MONTHS = 60;
-      // Subsequent refurbishments: every 3 years (36 months) from last refurbishment
-      const REPEAT_CYCLE_MONTHS = 36;
+      const settings = await this.getRefurbishmentSettings();
+      // First refurbishment: configurable years from establishment
+      const FIRST_CYCLE_MONTHS = settings.firstCycleYears * 12;
+      // Subsequent refurbishments: configurable repeat years from last refurbishment
+      const REPEAT_CYCLE_MONTHS = settings.repeatCycleYears * 12;
 
       // First, get total count of eligible centers
       const countQuery = `
@@ -114,10 +176,9 @@ class RefurbishmentService {
    */
   static async getAllCentersWithStatus() {
     try {
-      // First refurbishment: 5 years (60 months) from establishment
-      const FIRST_CYCLE_MONTHS = 60;
-      // Subsequent refurbishments: every 3 years (36 months) from last refurbishment
-      const REPEAT_CYCLE_MONTHS = 36;
+      const settings = await this.getRefurbishmentSettings();
+      const FIRST_CYCLE_MONTHS = settings.firstCycleYears * 12;
+      const REPEAT_CYCLE_MONTHS = settings.repeatCycleYears * 12;
 
       const query = `
         SELECT
@@ -438,11 +499,12 @@ class RefurbishmentService {
         let photos = [];
         if (roomRows.length > 0) {
           const roomIds = roomRows.map((r) => r.id);
+          const roomPlaceholders = roomIds.map(() => '?').join(',');
           const [photoRows] = await db.query(
             `SELECT upgradation_room_id, file_url, file_name
              FROM refurbishment_upgradation_photos
-             WHERE upgradation_room_id IN (?)`,
-            [roomIds]
+             WHERE upgradation_room_id IN (${roomPlaceholders})`,
+            roomIds
           );
           photos = photoRows;
         }
@@ -748,6 +810,15 @@ class RefurbishmentService {
           CONCAT('REQ-', YEAR(rr.created_at), '-', UPPER(SUBSTRING(rr.id, 1, 8)))
                                                                                         AS requestId,
           rr.refurbishment_type                                                         AS type,
+          COALESCE(
+            rr.request_type,
+            CASE
+              WHEN srn.frequency = 'instant' OR srn.is_manual_request = 1 THEN 'instant request'
+              ELSE 'schedule request'
+            END,
+            'schedule request'
+          )                                                                             AS request_type,
+          srn.frequency,
           rr.status,
           rr.created_at,
           rr.updated_at,
@@ -764,6 +835,7 @@ class RefurbishmentService {
         FROM refurbishment_requests rr
         JOIN centers c ON c.id = rr.center_id
         LEFT JOIN requests r ON r.id = rr.request_id
+        LEFT JOIN scheduled_refurbishment_notifications srn ON srn.id = rr.request_id
         WHERE ${baseWhere}
         ORDER BY rr.created_at DESC
         LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
@@ -1030,9 +1102,11 @@ class RefurbishmentService {
    */
   static async getPastRefurbishmentRequests(limit = 50, offset = 0, year = null) {
     try {
-      // All non-submitted/non-draft requests surfaced in Past Requests.
+      // Past Requests includes submitted plus actioned statuses.
       // Status lives on refurbishment_requests (not the legacy requests table).
       const activeStatuses = [
+        'submitted',
+        'sent_back',
         'approved',
         'material_procurement',
         'installation_in_progress',
@@ -1063,6 +1137,14 @@ class RefurbishmentService {
           rr.id,
           CONCAT('REQ-', YEAR(rr.created_at), '-', UPPER(SUBSTRING(rr.id, 1, 8))) AS requestId,
           rr.refurbishment_type                      AS type,
+          COALESCE(
+            rr.request_type,
+            CASE
+              WHEN srn.frequency = 'instant' OR srn.is_manual_request = 1 THEN 'instant request'
+              ELSE 'schedule request'
+            END,
+            'schedule request'
+          ) AS request_type,
           c.center_name,
           rr.created_at,
           rr.updated_at,
@@ -1077,6 +1159,7 @@ class RefurbishmentService {
         FROM refurbishment_requests rr
         JOIN centers c ON c.id = rr.center_id
         JOIN partners p ON p.id = c.partner_id
+        LEFT JOIN scheduled_refurbishment_notifications srn ON srn.id = rr.request_id
         WHERE rr.status IN (${placeholders})
       `;
       const params = [...activeStatuses];
@@ -1115,16 +1198,18 @@ class RefurbishmentService {
       const sentAt = new Date();
 
       // Create notification
-      const defaultMessage =
-        message ||
-        'Your center is eligible for refurbishment. Please review and submit your requirements.';
+      const settings = await this.getRefurbishmentSettings();
+      const defaultMessage = message || settings.defaultCustomMessage;
 
       // Find the active partner user first
       const [partnerUserRows] = await db.query(
         `SELECT u.id, u.email, u.full_name, p.name as partner_name
          FROM users u
          LEFT JOIN partners p ON u.partner_id = p.id
-         WHERE u.partner_id = ? AND u.role = 'PARTNER' AND u.status = 'active' LIMIT 1`,
+         WHERE u.partner_id = ?
+           AND UPPER(u.role) = 'PARTNER'
+           AND LOWER(u.status) = 'active'
+         LIMIT 1`,
         [partnerId]
       );
 
@@ -1517,6 +1602,35 @@ class RefurbishmentService {
   /* ==================== ADMIN WORKFLOW METHODS ==================== */
 
   /**
+   * Resolve refurbishment_requests row from either:
+   *  - refurbishment_requests.id (Past Requests tab)
+   *  - scheduled_refurbishment_notifications.id stored in rr.request_id (Alerts / Active Requests)
+   *
+   * @param {import('mysql2/promise').PoolConnection} connection
+   * @param {string} requestId
+   * @returns {Promise<{id: string, center_id: string, status?: string}|null>}
+   */
+  static async resolveRefurbishmentRequest(connection, requestId) {
+    const [byPrimary] = await connection.query(
+      'SELECT id, center_id, status FROM refurbishment_requests WHERE id = ? LIMIT 1',
+      [requestId]
+    );
+    if (byPrimary?.length) return byPrimary[0];
+
+    const [byNotification] = await connection.query(
+      `SELECT rr.id, rr.center_id, rr.status
+       FROM refurbishment_requests rr
+       WHERE rr.request_id = ?
+       ORDER BY rr.created_at DESC
+       LIMIT 1`,
+      [requestId]
+    );
+    if (byNotification?.length) return byNotification[0];
+
+    return null;
+  }
+
+  /**
    * Get refurbishment request details for admin review
    * @param {string} requestId - Refurbishment request ID
    * @param {string} adminUserId - Admin user ID (for authorization)
@@ -1536,9 +1650,12 @@ class RefurbishmentService {
         throw new Error('Unauthorized: Admin access required');
       }
 
-      // Get main request details
-      const [requestData] = await connection.query(
-        `
+      // Get main request details.
+      // The requestId can be either:
+      //   a) refurbishment_requests.id  (used by Past Requests tab)
+      //   b) scheduled_refurbishment_notifications.id  (used by Active Requests tab — FK stored in rr.request_id)
+      // Try both lookups so both tabs work through the same modal.
+      const detailQuery = `
         SELECT 
           rr.id,
           rr.request_id,
@@ -1567,11 +1684,58 @@ class RefurbishmentService {
         JOIN partners p ON c.partner_id = p.id
         LEFT JOIN requests r ON r.id = rr.request_id
         WHERE rr.id = ?
-      `,
-        [requestId]
-      );
+      `;
+
+      let [requestData] = await connection.query(detailQuery, [requestId]);
+
+      // Fallback: try treating requestId as a scheduled_refurbishment_notifications.id
+      if (!requestData || requestData.length === 0) {
+        const fallbackQuery = `
+          SELECT 
+            rr.id,
+            rr.request_id,
+            rr.center_id,
+            rr.refurbishment_type,
+            rr.status,
+            rr.justification,
+            rr.admin_remarks,
+            rr.rejection_reason,
+            rr.approved_at,
+            rr.approved_by,
+            rr.started_at,
+            rr.completed_at,
+            rr.completion_statement,
+            rr.is_upgradation_requested,
+            rr.created_at,
+            c.center_name,
+            c.center_id AS center_code,
+            c.city AS location_city,
+            c.state AS location_state,
+            p.id AS partner_id,
+            p.name AS partner_name,
+            srn.request_number
+          FROM refurbishment_requests rr
+          JOIN centers c ON rr.center_id = c.id
+          JOIN partners p ON c.partner_id = p.id
+          LEFT JOIN scheduled_refurbishment_notifications srn ON srn.id = rr.request_id
+          WHERE rr.request_id = ?
+          ORDER BY rr.created_at DESC
+          LIMIT 1
+        `;
+        [requestData] = await connection.query(fallbackQuery, [requestId]);
+      }
 
       if (!requestData || requestData.length === 0) {
+        // Check if this is a scheduled notification ID with no partner response yet
+        const [srnCheck] = await connection.query(
+          'SELECT id, partner_responded FROM scheduled_refurbishment_notifications WHERE id = ? LIMIT 1',
+          [requestId]
+        );
+        if (srnCheck && srnCheck.length > 0 && !srnCheck[0].partner_responded) {
+          throw new NotFoundError(
+            'The partner has not responded to this notification yet. There is no submission to review.'
+          );
+        }
         throw new NotFoundError('Refurbishment request not found');
       }
 
@@ -1596,16 +1760,16 @@ class RefurbishmentService {
         WHERE rrcp.refurbishment_request_id = ?
         ORDER BY c.course_name, rp.package_name
       `,
-        [requestId]
+        [request.id]
       );
 
-      // Get partner-uploaded images
-      // Note: table has no package_id or attachment_type columns
+      // Get partner-uploaded images / documents
       const [partnerImages] = await connection.query(
         `
         SELECT 
           id,
           course_id,
+          package_id,
           file_url,
           file_name,
           file_size_bytes,
@@ -1616,8 +1780,56 @@ class RefurbishmentService {
         WHERE refurbishment_request_id = ?
         ORDER BY created_at
       `,
-        [requestId]
+        [request.id]
       );
+
+      const isPackageImageAttachment = (att) => {
+        const mime = (att.file_mime_type || '').toLowerCase();
+        const name = (att.file_name || '').toLowerCase();
+        if (!mime.startsWith('image/')) return false;
+        return (
+          !name.includes('refurbishment-document') &&
+          !name.includes('upgradation-document') &&
+          !name.includes('refurbishment_document') &&
+          !name.includes('upgradation_document')
+        );
+      };
+
+      const mapUpload = (att) => ({
+        id: att.id,
+        url: att.file_url,
+        name: att.file_name,
+        size: att.file_size_bytes,
+        type: att.file_mime_type,
+      });
+
+      const imagesByPackageId = {};
+      const legacyImagesByCourse = {};
+      const supportingDocuments = [];
+
+      partnerImages.forEach((att) => {
+        if (isPackageImageAttachment(att)) {
+          const mapped = mapUpload(att);
+          if (att.package_id) {
+            if (!imagesByPackageId[att.package_id]) {
+              imagesByPackageId[att.package_id] = [];
+            }
+            imagesByPackageId[att.package_id].push(mapped);
+          } else {
+            const courseKey = att.course_id || 'unknown';
+            if (!legacyImagesByCourse[courseKey]) {
+              legacyImagesByCourse[courseKey] = [];
+            }
+            legacyImagesByCourse[courseKey].push(mapped);
+          }
+        } else {
+          const name = (att.file_name || '').toLowerCase();
+          let document_type = 'other';
+          if (name.includes('upgradation')) document_type = 'upgradation';
+          else if (name.includes('refurbishment')) document_type = 'refurbishment';
+          supportingDocuments.push({ ...mapUpload(att), document_type });
+        }
+      });
 
       // Get admin-added packages (if any)
       const [adminPackages] = await connection.query(
@@ -1641,7 +1853,7 @@ class RefurbishmentService {
         WHERE raap.refurbishment_request_id = ?
         ORDER BY c.course_name, rp.package_name
       `,
-        [requestId]
+        [request.id]
       );
 
       // Get completion images (if status = completed)
@@ -1660,7 +1872,7 @@ class RefurbishmentService {
         WHERE refurbishment_request_id = ?
         ORDER BY created_at
       `,
-        [requestId]
+        [request.id]
       );
 
       // Get all available courses for this center (for admin to add more packages)
@@ -1691,7 +1903,7 @@ class RefurbishmentService {
         WHERE r.refurbishment_request_id = ?
         ORDER BY r.created_at
       `,
-        [requestId]
+        [request.id]
       );
 
       // Get upgradation photos (for each room)
@@ -1726,7 +1938,7 @@ class RefurbishmentService {
         GROUP BY urap.id, urap.package_id, rp.package_name, rp.description, rp.images, rp.category
         ORDER BY rp.package_name
       `,
-        [requestId]
+        [request.id]
       );
 
       // Get admin-selected upgradation packages (by admin for this request)
@@ -1752,10 +1964,10 @@ class RefurbishmentService {
         GROUP BY raup.id, raup.package_id, rp.package_name, rp.description, rp.images, rp.category, raup.created_at
         ORDER BY rp.package_name
       `,
-        [requestId]
+        [request.id]
       );
 
-      // Group partner packages by course
+      // Group partner packages by course (attach per-package partner uploads + justification)
       const packagesByCourse = {};
       partnerPackages.forEach((pkg) => {
         if (!packagesByCourse[pkg.course_id]) {
@@ -1765,7 +1977,16 @@ class RefurbishmentService {
             packages: [],
           };
         }
-        packagesByCourse[pkg.course_id].packages.push(pkg);
+        const dedicated = imagesByPackageId[pkg.package_id] || [];
+        const legacy = legacyImagesByCourse[pkg.course_id] || [];
+        const partner_uploaded_images =
+          dedicated.length > 0 ? dedicated : legacy.length > 0 ? [...legacy] : [];
+
+        packagesByCourse[pkg.course_id].packages.push({
+          ...pkg,
+          justification: pkg.justification || '',
+          partner_uploaded_images,
+        });
       });
 
       // Group admin packages by course
@@ -1781,9 +2002,10 @@ class RefurbishmentService {
         adminPackagesByCourse[pkg.course_id].packages.push(pkg);
       });
 
-      // Group images by course (table has no package_id column)
+      // Legacy map keyed by course (kept for backward compatibility)
       const imagesByPackage = {};
       partnerImages.forEach((img) => {
+        if (!isPackageImageAttachment(img)) return;
         const key = img.course_id || 'unknown';
         if (!imagesByPackage[key]) {
           imagesByPackage[key] = [];
@@ -1796,6 +2018,7 @@ class RefurbishmentService {
         partner_packages_by_course: Object.values(packagesByCourse),
         admin_packages_by_course: Object.values(adminPackagesByCourse),
         partner_images: partnerImages,
+        supporting_documents: supportingDocuments,
         images_by_package: imagesByPackage,
         completion_images: completionImages,
         available_courses: availableCourses,
@@ -1808,7 +2031,9 @@ class RefurbishmentService {
           })),
           selected_packages: upgradationSelectedPkgs.map((pkg) => ({
             ...pkg,
+            justification: pkg.justification || '',
             courseIds: pkg.courseIds ? pkg.courseIds.split(',') : [],
+            partner_uploaded_images: imagesByPackageId[pkg.package_id] || [],
             images: pkg.images
               ? typeof pkg.images === 'string'
                 ? JSON.parse(pkg.images)
@@ -1978,12 +2203,13 @@ class RefurbishmentService {
   static async getUpgradationPackagesForRequest(requestId) {
     const connection = await db.getConnection();
     try {
-      // Get center_id for this request
-      const [[req]] = await connection.query(
-        'SELECT center_id FROM refurbishment_requests WHERE id = ?',
-        [requestId]
+      const req = await RefurbishmentService.resolveRefurbishmentRequest(
+        connection,
+        requestId,
       );
       if (!req) throw new NotFoundError('Refurbishment request not found');
+
+      const resolvedRequestId = req.id;
 
       // Get all courses for this center
       const [centerCourses] = await connection.query(
@@ -2026,7 +2252,7 @@ class RefurbishmentService {
       const [adminSelections] = await connection.query(
         `SELECT package_id FROM refurbishment_upgradation_request_packages
          WHERE refurbishment_request_id = ?`,
-        [requestId]
+        [resolvedRequestId]
       );
       const adminSelectedIds = adminSelections.map((r) => r.package_id);
 
@@ -2074,17 +2300,18 @@ class RefurbishmentService {
       );
       if (!admin) throw new Error('Unauthorized: Admin access required');
 
-      // Verify request exists
-      const [[request]] = await connection.query(
-        'SELECT id, status FROM refurbishment_requests WHERE id = ?',
-        [requestId]
+      const request = await RefurbishmentService.resolveRefurbishmentRequest(
+        connection,
+        requestId,
       );
       if (!request) throw new NotFoundError('Refurbishment request not found');
+
+      const resolvedRequestId = request.id;
 
       // Delete current admin selections for this request
       await connection.query(
         'DELETE FROM refurbishment_upgradation_request_packages WHERE refurbishment_request_id = ?',
-        [requestId]
+        [resolvedRequestId]
       );
 
       // Insert new selections
@@ -2093,7 +2320,7 @@ class RefurbishmentService {
           `INSERT INTO refurbishment_upgradation_request_packages
              (id, refurbishment_request_id, package_id)
            VALUES (?, ?, ?)`,
-          [uuidv4(), requestId, pkgId]
+          [uuidv4(), resolvedRequestId, pkgId]
         );
       }
 
@@ -2172,10 +2399,11 @@ class RefurbishmentService {
       if (removedPackageIds && removedPackageIds.length > 0) {
         const removeIds = removedPackageIds.map((r) => (typeof r === 'object' ? r.packageId : r));
         if (removeIds.length > 0) {
+          const removePlaceholders = removeIds.map(() => '?').join(',');
           await connection.query(
             `DELETE FROM refurbishment_request_course_packages
-             WHERE refurbishment_request_id = ? AND package_id IN (?)`,
-            [requestId, removeIds]
+             WHERE refurbishment_request_id = ? AND package_id IN (${removePlaceholders})`,
+            [requestId, ...removeIds]
           );
         }
       }
@@ -2409,6 +2637,163 @@ class RefurbishmentService {
     } catch (error) {
       await connection.rollback();
       console.error('[RefurbishmentService] Error rejecting refurbishment request:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Admin sends refurbishment request back to partner for re-submission
+   * @param {string} requestId - Refurbishment request ID
+   * @param {string} adminUserId - Admin user ID
+   * @param {string} sendBackReason - Reason for send-back
+   * @returns {Promise<Object>} Success message
+   */
+  static async sendBackRefurbishmentRequest(requestId, adminUserId, sendBackReason) {
+    const connection = await db.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [admin] = await connection.query(
+        'SELECT role, full_name FROM users WHERE id = ? AND role IN ("ADMIN", "SUPER_ADMIN")',
+        [adminUserId]
+      );
+
+      if (!admin || admin.length === 0) {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      const [request] = await connection.query(
+        `
+        SELECT
+          rr.id,
+          rr.request_id,
+          rr.status,
+          rr.center_id,
+          c.center_name,
+          p.id AS partner_id,
+          p.name AS partner_name,
+          srn.request_number
+        FROM refurbishment_requests rr
+        JOIN centers c ON rr.center_id = c.id
+        JOIN partners p ON c.partner_id = p.id
+        LEFT JOIN scheduled_refurbishment_notifications srn ON rr.request_id = srn.id
+        WHERE rr.id = ?
+      `,
+        [requestId]
+      );
+
+      if (!request || request.length === 0) {
+        throw new NotFoundError('Refurbishment request not found');
+      }
+
+      if (request[0].status !== 'submitted') {
+        throw new Error(`Cannot send back request with status: ${request[0].status}`);
+      }
+
+      const requestData = request[0];
+
+      await connection.query(
+        `
+        UPDATE refurbishment_requests
+        SET status = 'sent_back',
+            admin_remarks = ?,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+        [sendBackReason, requestId]
+      );
+
+      await connection.query(
+        'DELETE FROM refurbishment_admin_added_packages WHERE refurbishment_request_id = ?',
+        [requestId]
+      );
+
+      if (requestData.request_id) {
+        await connection.query(
+          'DELETE FROM refurbishment_admin_selected_packages WHERE request_id = ?',
+          [requestData.request_id]
+        );
+      }
+
+      if (requestData.request_id) {
+        await connection.query(
+          `
+          UPDATE scheduled_refurbishment_notifications
+          SET partner_responded = 0,
+              response_received_at = NULL,
+              updated_at = NOW()
+          WHERE id = ?
+        `,
+          [requestData.request_id]
+        );
+      }
+
+      const [partnerUsers] = await connection.query(
+        `SELECT id FROM users
+         WHERE partner_id = ?
+           AND UPPER(role) = 'PARTNER'
+           AND LOWER(status) = 'active'
+         LIMIT 1`,
+        [requestData.partner_id]
+      );
+
+      let notificationId = null;
+      if (partnerUsers && partnerUsers.length > 0) {
+        notificationId = uuidv4();
+        const requestNumber = requestData.request_number
+          ? `RQ-${String(requestData.request_number).padStart(6, '0')}`
+          : `REF-${requestId.slice(0, 8).toUpperCase()}`;
+
+        const reinitRelatedType = requestData.request_id
+          ? 'scheduled_refurbishment_notification'
+          : 'center';
+        const reinitRelatedId = requestData.request_id || requestData.center_id;
+
+        await connection.query(
+          `INSERT INTO notifications (
+            id, recipient_id, type, alert_type, title, message,
+            related_entity_type, related_entity_id, is_read, created_at
+          ) VALUES (?, ?, 'alert', 'refurbishment_reinitiated', ?, ?, ?, ?, 0, NOW())`,
+          [
+            notificationId,
+            partnerUsers[0].id,
+            `Refurbishment Resubmission Requested - ${requestNumber}`,
+            `Please re-submit the refurbishment request for ${requestData.center_name}. Remarks: ${sendBackReason}`,
+            reinitRelatedType,
+            reinitRelatedId,
+          ]
+        );
+      }
+
+      await connection.commit();
+
+      if (notificationId && partnerUsers && partnerUsers.length > 0) {
+        emitToUser(partnerUsers[0].id, 'notification:new', {
+          id: notificationId,
+          type: 'alert',
+          alert_type: 'refurbishment_reinitiated',
+          title: 'Refurbishment Resubmission Requested',
+          message: `Please re-submit the refurbishment request for ${requestData.center_name}. Remarks: ${sendBackReason}`,
+          related_entity_type: requestData.request_id
+            ? 'scheduled_refurbishment_notification'
+            : 'center',
+          related_entity_id: requestData.request_id || requestData.center_id,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+      }
+
+      return {
+        success: true,
+        status: 'sent_back',
+        message: 'Request sent back to partner for resubmission',
+      };
+    } catch (error) {
+      await connection.rollback();
+      console.error('[RefurbishmentService] Error sending back request:', error);
       throw error;
     } finally {
       connection.release();

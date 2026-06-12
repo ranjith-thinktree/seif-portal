@@ -44,6 +44,9 @@ router.get('/:id', authenticate, notificationController.getNotificationById);
 // Mark notification as read
 router.patch('/:id/read', authenticate, notificationController.markAsRead);
 
+// Mark notification as unread
+router.patch('/:id/unread', authenticate, notificationController.markAsUnread);
+
 // Mark all notifications as read
 router.post('/mark-all-read', authenticate, notificationController.markAllAsRead);
 

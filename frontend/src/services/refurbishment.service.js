@@ -5,6 +5,26 @@ import api from "../api/client";
  * Handles all refurbishment-related API calls for admin dashboard
  */
 const refurbishmentService = {
+  getSettings: async () => {
+    try {
+      const response = await api.get("/admin/refurbishment/settings");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching refurbishment settings:", error);
+      throw error;
+    }
+  },
+
+  updateSettings: async (data) => {
+    try {
+      const response = await api.put("/admin/refurbishment/settings", data);
+      return response.data;
+    } catch (error) {
+      console.error("Error updating refurbishment settings:", error);
+      throw error;
+    }
+  },
+
   /**
    * Get all centers eligible for refurbishment
    * @param {Object} params - Query parameters { limit, offset }
@@ -126,16 +146,16 @@ const refurbishmentService = {
    */
   getLastRefurbished: async (params = {}) => {
     try {
-      const { year, limit = 50, offset = 0 } = params;
+      const { year, limit = 100, offset = 0, within = 1200 } = params;
 
       // Use correct /recently-refurbished endpoint with proper validation
       const response = await api.get(
         "/admin/refurbishment/recently-refurbished",
         {
           params: {
-            limit: Math.min(limit, 100), // Respect backend limit (max 100)
+            limit: Math.min(limit, 100),
             offset,
-            within: 36, // Get centers refurbished in last 36 months
+            within,
           },
         },
       );
@@ -754,6 +774,27 @@ const refurbishmentService = {
       return response.data;
     } catch (error) {
       console.error("Error rejecting refurbishment request:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Admin sends refurbishment request back to partner for re-submission
+   * @param {string} requestId - Refurbishment request UUID
+   * @param {string} sendBackReason - Reason/remarks for re-initiation
+   * @returns {Promise<Object>} - Success response
+   */
+  sendBackRefurbishmentRequest: async (requestId, sendBackReason) => {
+    try {
+      const response = await api.put(
+        `/admin/refurbishment/requests/${requestId}/send-back`,
+        {
+          sendBackReason,
+        },
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error sending back refurbishment request:", error);
       throw error;
     }
   },

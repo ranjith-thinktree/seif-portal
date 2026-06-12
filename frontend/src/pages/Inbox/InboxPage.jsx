@@ -28,6 +28,7 @@ import {
 import { useNotifications } from "../../hooks/useNotifications";
 import {
   markAsRead,
+  markAsUnread,
   markAllAsRead as markAllAsReadAPI,
   deleteNotification as deleteNotificationAPI,
   getGroupedNotifications,
@@ -39,6 +40,7 @@ import NotificationDetailCard from "./NotificationDetailCard";
 import RefurbishmentDetailCard from "./RefurbishmentDetailCard";
 import RefurbishmentStatusCard from "./RefurbishmentStatusCard";
 import PartnerPastRequestsTab from "./PartnerPastRequestsTab";
+import AdminRefurbishmentReviewModal from "../../components/refurbishment/modals/AdminRefurbishmentReviewModal";
 
 /**
  * Format date helper
@@ -256,6 +258,7 @@ const NotificationItem = ({
 const InboxPage = () => {
   const { user } = useSelector((state) => state.auth);
   const isPartner = user?.role === "PARTNER";
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(
     user?.role,
   );
@@ -264,6 +267,7 @@ const InboxPage = () => {
     socket,
     unreadCount,
     markNotificationAsRead,
+    markNotificationAsUnread,
     markAllNotificationsAsRead,
     removeNotification,
   } = useNotifications();
@@ -285,6 +289,8 @@ const InboxPage = () => {
   const [employmentAttachments, setEmploymentAttachments] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewRequestId, setReviewRequestId] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -398,6 +404,24 @@ const InboxPage = () => {
     setCsvData(null);
     setEmploymentAttachments([]);
 
+    // Auto-mark as read when opened in detail pane.
+    if (!notification.is_read) {
+      try {
+        await markAsRead(notification.id);
+        markNotificationAsRead(notification.id);
+        setNotifications((prev) =>
+          prev.map((notif) =>
+            notif.id === notification.id ? { ...notif, is_read: true } : notif,
+          ),
+        );
+        setSelectedNotification((prev) =>
+          prev?.id === notification.id ? { ...prev, is_read: true } : prev,
+        );
+      } catch (error) {
+        console.error("Failed to auto mark as read:", error);
+      }
+    }
+
     // Fetch center details for this upload (student data uploads only, not employment)
     if (
       notification.upload_id &&
@@ -437,6 +461,35 @@ const InboxPage = () => {
   const handleDismissDetail = () => {
     setSelectedNotification(null);
     setCsvData(null);
+  };
+
+  const handleToggleReadState = async () => {
+    if (!selectedNotification) return;
+
+    const shouldMarkUnread = Boolean(selectedNotification.is_read);
+    try {
+      if (shouldMarkUnread) {
+        await markAsUnread(selectedNotification.id);
+        markNotificationAsUnread(selectedNotification.id);
+      } else {
+        await markAsRead(selectedNotification.id);
+        markNotificationAsRead(selectedNotification.id);
+      }
+
+      setNotifications((prev) =>
+        prev.map((notif) =>
+          notif.id === selectedNotification.id
+            ? { ...notif, is_read: !shouldMarkUnread }
+            : notif,
+        ),
+      );
+      setSelectedNotification((prev) =>
+        prev ? { ...prev, is_read: !shouldMarkUnread } : prev,
+      );
+    } catch (error) {
+      console.error("Failed to toggle read state:", error);
+      toast.error("Failed to update notification state");
+    }
   };
 
   /**
@@ -505,12 +558,12 @@ const InboxPage = () => {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger
+            {/* <TabsTrigger
               value="requests"
               className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-[#009530] data-[state=active]:border-b-2 data-[state=active]:border-[#009530] text-gray-500 rounded-none pb-3"
             >
               Requests
-            </TabsTrigger>
+            </TabsTrigger> */}
             {isPartner && (
               <TabsTrigger
                 value="past-requests"
@@ -688,38 +741,67 @@ const InboxPage = () => {
 
               {/* Right side - Notification Detail Card */}
               {selectedNotification && (
-                <div className="h-[450px]">
-                  {selectedNotification.alert_type === "refurbishment" ? (
-                    <RefurbishmentDetailCard
-                      notification={selectedNotification}
-                      onDismiss={handleDismissDetail}
-                    />
-                  ) : selectedNotification.alert_type?.startsWith(
-                      "refurbishment",
+                <div className="h-[450px] flex flex-col gap-2">
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleToggleReadState}
+                      className="rounded-[40px]"
+                    >
+                      {selectedNotification.is_read
+                        ? "Mark as unread"
+                        : "Mark as read"}
+                    </Button>
+                  </div>
+                  <div className="flex-1">
+                    {["refurbishment", "refurbishment_reinitiated"].includes(
+                      selectedNotification.alert_type,
                     ) ? (
-                    <RefurbishmentStatusCard
-                      notification={selectedNotification}
-                      onDismiss={handleDismissDetail}
-                    />
-                  ) : (
-                    <NotificationDetailCard
-                      notification={selectedNotification}
-                      csvData={csvData}
-                      centerDetails={centerDetails}
-                      employmentAttachments={employmentAttachments}
-                      onReview={() => {
-                        // Navigation is handled in the component
-                      }}
-                      onDismiss={handleDismissDetail}
-                    />
-                  )}
+                      <RefurbishmentDetailCard
+                        notification={selectedNotification}
+                        onDismiss={handleDismissDetail}
+                      />
+                    ) : selectedNotification.alert_type?.startsWith(
+                        "refurbishment",
+                      ) ? (
+                      <RefurbishmentStatusCard
+                        notification={selectedNotification}
+                        onDismiss={handleDismissDetail}
+                        onReviewData={
+                          isAdmin &&
+                          selectedNotification.related_entity_type ===
+                            "refurbishment_request" &&
+                          selectedNotification.related_entity_id
+                            ? () => {
+                                setReviewRequestId(
+                                  selectedNotification.related_entity_id,
+                                );
+                                setReviewModalOpen(true);
+                              }
+                            : null
+                        }
+                      />
+                    ) : (
+                      <NotificationDetailCard
+                        notification={selectedNotification}
+                        csvData={csvData}
+                        centerDetails={centerDetails}
+                        employmentAttachments={employmentAttachments}
+                        onReview={() => {
+                          // Navigation is handled in the component
+                        }}
+                        onDismiss={handleDismissDetail}
+                      />
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           </TabsContent>
 
           {/* Requests Tab */}
-          <TabsContent value="requests">
+          {/* <TabsContent value="requests">
             <div className="bg-white rounded-lg border border-border p-8">
               <div className="text-center">
                 <XMarkIcon className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -731,16 +813,34 @@ const InboxPage = () => {
                 </p>
               </div>
             </div>
-          </TabsContent>
+          </TabsContent> */}
 
           {/* Past Requests Tab - Partners only */}
           {isPartner && (
-            <TabsContent value="past-requests">
+            <TabsContent value="past-requests" className="min-h-[560px]">
               <PartnerPastRequestsTab />
             </TabsContent>
           )}
         </Tabs>
       </div>
+
+      {reviewModalOpen && reviewRequestId && (
+        <AdminRefurbishmentReviewModal
+          open={reviewModalOpen}
+          onOpenChange={(open) => {
+            setReviewModalOpen(open);
+            if (!open) {
+              setReviewRequestId(null);
+            }
+          }}
+          requestId={reviewRequestId}
+          onActionComplete={() => {
+            setReviewModalOpen(false);
+            setReviewRequestId(null);
+            fetchNotifications(1);
+          }}
+        />
+      )}
     </MainLayout>
   );
 };

@@ -106,7 +106,7 @@ vi.mock("../../pages/Admin/AdminTerminalPageV2", () => ({
   default: () => <div>Admin Terminal Page</div>,
 }));
 
-vi.mock("../../pages/Admin/RefurbishmentDashboard", () => ({
+vi.mock("../../pages/Refurbishment", () => ({
   default: () => <div>Refurbishment Dashboard</div>,
 }));
 

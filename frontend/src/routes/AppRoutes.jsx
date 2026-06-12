@@ -32,7 +32,7 @@ import StudentsPage from "../pages/Data/StudentsPage";
 import DataManagementPage from "../pages/Data/DataManagementPage";
 import DatabaseManagement from "../pages/Admin/DatabaseManagement";
 import AdminTerminalPageV2 from "../pages/Admin/AdminTerminalPageV2";
-import RefurbishmentDashboard from "../pages/Admin/RefurbishmentDashboard";
+import RefurbishmentPage from "../pages/Refurbishment";
 import ForcedPasswordChangeGuard from "./ForcedPasswordChangeGuard";
 import UserManagementPage from "../pages/UserManagement/UserManagementPage";
 import OrganizationManagementPage from "../pages/OrganizationManagementPage";
@@ -528,7 +528,7 @@ const AppRoutes = () => {
             path={ROUTES.REFURBISHMENT}
             element={
               <ProtectedRoute allowedRoles={ADMIN_ROLES}>
-                <RefurbishmentDashboard />
+                <RefurbishmentPage />
               </ProtectedRoute>
             }
           />

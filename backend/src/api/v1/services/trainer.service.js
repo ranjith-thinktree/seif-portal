@@ -7,6 +7,143 @@ const ApiResponse = require('../../../utils/response.util');
  * Handles all business logic for trainer management
  */
 class TrainerService {
+  static tableInitialized = false;
+
+  static async ensureTrainerProfilesTable() {
+    if (TrainerService.tableInitialized) {
+      return;
+    }
+
+    const [profileTableRows] = await db.query(
+      `
+        SELECT COUNT(*) AS count
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = 'trainer_profiles'
+      `
+    );
+
+    const trainerProfilesExists = Number(profileTableRows?.[0]?.count || 0) > 0;
+
+    if (!trainerProfilesExists) {
+      await db.query(`
+        CREATE TABLE trainer_profiles (
+          id CHAR(36) NOT NULL PRIMARY KEY,
+          partner_id CHAR(36) NOT NULL,
+          center_id CHAR(36) NOT NULL,
+          training_partner VARCHAR(255) DEFAULT NULL,
+          training_centre_name VARCHAR(255) DEFAULT NULL,
+          trainer_name VARCHAR(255) NOT NULL,
+          course_name VARCHAR(255) DEFAULT NULL,
+          qualification VARCHAR(255) DEFAULT NULL,
+          date_of_joining DATE DEFAULT NULL,
+          mobile_no VARCHAR(20) NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          resume_file_url VARCHAR(1000) DEFAULT NULL,
+          resume_file_name VARCHAR(255) DEFAULT NULL,
+          qualification_certificate_url VARCHAR(1000) DEFAULT NULL,
+          qualification_certificate_name VARCHAR(255) DEFAULT NULL,
+          id_proof_file_url VARCHAR(1000) DEFAULT NULL,
+          id_proof_file_name VARCHAR(255) DEFAULT NULL,
+          status ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          KEY idx_trainer_profiles_partner_id (partner_id),
+          KEY idx_trainer_profiles_center_id (center_id),
+          KEY idx_trainer_profiles_status (status),
+          CONSTRAINT fk_trainer_profiles_partner_id FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+          CONSTRAINT fk_trainer_profiles_center_id FOREIGN KEY (center_id) REFERENCES centers(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+      `);
+
+      const [legacyTrainerTableRows] = await db.query(
+        `
+          SELECT COUNT(*) AS count
+          FROM information_schema.tables
+          WHERE table_schema = DATABASE()
+            AND table_name = 'trainers'
+        `
+      );
+
+      const trainersTableExists = Number(legacyTrainerTableRows?.[0]?.count || 0) > 0;
+
+      if (trainersTableExists) {
+        const [legacyTrainerColumns] = await db.query(
+          `
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'trainers'
+          `
+        );
+
+        const availableColumns = new Set(
+          (legacyTrainerColumns || []).map((column) => column.column_name)
+        );
+
+        const columnOrNull = (columnName) =>
+          availableColumns.has(columnName) ? `tr.${columnName}` : 'NULL';
+
+        await db.query(`
+          INSERT INTO trainer_profiles (
+            id,
+            partner_id,
+            center_id,
+            training_partner,
+            training_centre_name,
+            trainer_name,
+            course_name,
+            qualification,
+            date_of_joining,
+            mobile_no,
+            email,
+            resume_file_url,
+            resume_file_name,
+            qualification_certificate_url,
+            qualification_certificate_name,
+            id_proof_file_url,
+            id_proof_file_name,
+            status,
+            created_at,
+            updated_at
+          )
+          SELECT
+            tr.id,
+            tr.partner_id,
+            tr.center_id,
+            ${columnOrNull('training_partner')},
+            ${columnOrNull('training_centre_name')},
+            tr.trainer_name,
+            ${columnOrNull('course_name')},
+            ${columnOrNull('qualification')},
+            ${columnOrNull('date_of_joining')},
+            tr.mobile_no,
+            tr.email,
+            ${columnOrNull('resume_file_url')},
+            ${columnOrNull('resume_file_name')},
+            ${columnOrNull('qualification_certificate_url')},
+            ${columnOrNull('qualification_certificate_name')},
+            ${columnOrNull('id_proof_file_url')},
+            ${columnOrNull('id_proof_file_name')},
+            CASE
+              WHEN tr.status IN ('active', 'inactive', 'suspended') THEN tr.status
+              ELSE 'active'
+            END,
+            tr.created_at,
+            tr.updated_at
+          FROM trainers tr
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM trainer_profiles tp
+            WHERE tp.id = tr.id
+          )
+        `);
+      }
+    }
+
+    TrainerService.tableInitialized = true;
+  }
+
   static getDocumentColumnMap() {
     return {
       resume: {
@@ -50,6 +187,8 @@ class TrainerService {
     sort_order = 'desc',
   }) {
     try {
+      await TrainerService.ensureTrainerProfilesTable();
+
       const validPage = Math.max(1, parseInt(page) || 1);
       const validLimit = Math.max(1, Math.min(5000, parseInt(limit) || 10));
       const offset = (validPage - 1) * validLimit;
@@ -148,6 +287,8 @@ class TrainerService {
    */
   static async getTrainerById(trainerId) {
     try {
+      await TrainerService.ensureTrainerProfilesTable();
+
       const query = `
         SELECT 
           t.*,
@@ -179,6 +320,8 @@ class TrainerService {
    */
   static async createTrainer(data) {
     try {
+      await TrainerService.ensureTrainerProfilesTable();
+
       const trainerId = uuidv4();
       const documents = data.documents || {};
 
@@ -246,6 +389,8 @@ class TrainerService {
    */
   static async updateTrainer(trainerId, data, userRole) {
     try {
+      await TrainerService.ensureTrainerProfilesTable();
+
       // Check if trainer exists
       const [existing] = await db.query('SELECT id FROM trainer_profiles WHERE id = ?', [trainerId]);
 
@@ -307,6 +452,8 @@ class TrainerService {
    */
   static async deleteTrainer(trainerId, userRole) {
     try {
+      await TrainerService.ensureTrainerProfilesTable();
+
       // Check if trainer exists
       const [existing] = await db.query('SELECT id, partner_id FROM trainer_profiles WHERE id = ?', [
         trainerId,
@@ -318,7 +465,7 @@ class TrainerService {
 
       if (userRole === 'PARTNER') {
         // Soft delete: set status to inactive
-        await db.query('UPDATE trainers SET status = ?, updated_at = NOW() WHERE id = ?', [
+        await db.query('UPDATE trainer_profiles SET status = ?, updated_at = NOW() WHERE id = ?', [
           'inactive',
           trainerId,
         ]);
@@ -340,6 +487,8 @@ class TrainerService {
    */
   static async getFilterOptions(userRole, userPartnerId) {
     try {
+      await TrainerService.ensureTrainerProfilesTable();
+
       let partnerQuery = '';
       let partnerParams = [];
 

@@ -290,6 +290,24 @@ const markAsRead = async (notificationId, userId, role) => {
 };
 
 /**
+ * Mark notification as unread
+ */
+const markAsUnread = async (notificationId, userId, role) => {
+  try {
+    const [result] = await pool.query(
+      `UPDATE notifications
+      SET is_read = 0, read_at = NULL
+      WHERE id = ? AND (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL))`,
+      [notificationId, userId, role]
+    );
+
+    return result.affectedRows > 0;
+  } catch (error) {
+    throw new Error(`Failed to mark notification as unread: ${error.message}`);
+  }
+};
+
+/**
  * Mark all notifications as read
  */
 const markAllAsRead = async (userId, role) => {
@@ -474,7 +492,8 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
   try {
     const { page = 1, limit = 20, search, days = 180, status, sortBy = 'newest' } = filters;
     const offset = (page - 1) * limit;
-    const inboxVisibilityClause = buildInboxVisibilityClause(role, 'n');
+    const normalizedRole = String(role || '').toUpperCase();
+    const inboxVisibilityClause = buildInboxVisibilityClause(normalizedRole, 'n');
 
     // Build where clause
     let whereClause =
@@ -580,7 +599,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
     // Refurbishment notifications only appear in partner inbox;
     // admin sees them in the Refurbishment > Alerts tab instead.
     const [refurbishmentResults] =
-      role === 'PARTNER' ? await pool.query(refurbishmentQuery, params) : [[]];
+      normalizedRole === 'PARTNER' ? await pool.query(refurbishmentQuery, params) : [[]];
 
     // Employment upload notifications (rejected/approved by admin)
     const employmentQuery = `
@@ -1214,15 +1233,26 @@ const getRefurbishmentDetails = async (notificationId, userId, partnerId) => {
       JOIN users u ON n.recipient_id = u.id
       JOIN scheduled_refurbishment_notifications srn
         ON u.partner_id = srn.partner_id
-        AND n.related_entity_id = srn.center_id
+        AND (
+          (n.alert_type = 'refurbishment_reinitiated' AND n.related_entity_id = srn.id)
+          OR (
+            n.alert_type = 'refurbishment_reinitiated'
+            AND n.related_entity_type = 'center'
+            AND n.related_entity_id = srn.center_id
+          )
+          OR (n.alert_type = 'refurbishment' AND n.related_entity_id = srn.center_id)
+        )
       JOIN centers c ON srn.center_id = c.id
       JOIN partners p ON srn.partner_id = p.id
       WHERE n.id = ?
         AND u.id = ?
         AND srn.partner_id = ?
         AND n.type = 'alert'
-        AND n.alert_type = 'refurbishment'
-      ORDER BY srn.created_at DESC
+        AND n.alert_type IN ('refurbishment', 'refurbishment_reinitiated')
+      ORDER BY
+        CASE WHEN n.related_entity_id = srn.id THEN 0 ELSE 1 END,
+        (srn.partner_responded = 0) DESC,
+        srn.updated_at DESC
       LIMIT 1
     `,
       [notificationId, userId, partnerId]
@@ -1347,6 +1377,100 @@ const getRefurbishmentDetails = async (notificationId, userId, partnerId) => {
       response_received_at: notification.response_received_at,
       notification_id: notification.notification_id,
       refurb_notification_id: notification.refurb_notification_id,
+      previous_submission: await (async () => {
+        // Fetch previous submission data if the request was sent back
+        const [prevRequests] = await pool.query(
+          `SELECT id, status, admin_remarks FROM refurbishment_requests WHERE request_id = ? ORDER BY created_at DESC LIMIT 1`,
+          [notification.refurb_notification_id]
+        );
+        if (!prevRequests || prevRequests.length === 0) return null;
+
+        const prevReqId = prevRequests[0].id;
+
+        const [prevPackages] = await pool.query(
+          `SELECT package_id, justification FROM refurbishment_request_course_packages WHERE refurbishment_request_id = ?`,
+          [prevReqId]
+        );
+
+        const [prevAttachments] = await pool.query(
+          `SELECT course_id, file_url, file_name, file_mime_type FROM refurbishment_request_course_attachments WHERE refurbishment_request_id = ?`,
+          [prevReqId]
+        );
+
+        // Map package_id → course_id
+        let pkgToCourse = {};
+        if (prevPackages.length > 0) {
+          const pkgIds = prevPackages.map((p) => pool.escape(p.package_id)).join(',');
+          const [pkgCourses] = await pool.query(
+            `SELECT package_id, course_id FROM package_courses WHERE package_id IN (${pkgIds})`
+          );
+          pkgCourses.forEach((pc) => {
+            pkgToCourse[pc.package_id] = pc.course_id;
+          });
+        }
+
+        // Separate images from supporting documents by mime type
+        const imagesByCourse = {};
+        const supportingDocs = [];
+        prevAttachments.forEach((att) => {
+          if (att.file_mime_type && att.file_mime_type.startsWith('image/')) {
+            const cid = att.course_id;
+            if (!imagesByCourse[cid]) imagesByCourse[cid] = [];
+            imagesByCourse[cid].push({
+              url: att.file_url,
+              name: att.file_name,
+              type: att.file_mime_type,
+            });
+          } else {
+            supportingDocs.push({
+              url: att.file_url,
+              name: att.file_name,
+              type: att.file_mime_type,
+            });
+          }
+        });
+
+        // Fetch upgradation data if any
+        const [prevRooms] = await pool.query(
+          `SELECT id, length_feet, breadth_feet, height_feet, justification FROM refurbishment_upgradation_rooms WHERE refurbishment_request_id = ? LIMIT 1`,
+          [prevReqId]
+        );
+        let upgradationPrev = null;
+        if (prevRooms.length > 0) {
+          const roomId = prevRooms[0].id;
+          const [roomPhotos] = await pool.query(
+            `SELECT file_url, file_name FROM refurbishment_upgradation_photos WHERE upgradation_room_id = ?`,
+            [roomId]
+          );
+          const [upgPkgs] = await pool.query(
+            `SELECT package_id FROM refurbishment_upgradation_request_packages WHERE refurbishment_request_id = ?`,
+            [prevReqId]
+          );
+          upgradationPrev = {
+            length_feet: String(prevRooms[0].length_feet || ''),
+            breadth_feet: String(prevRooms[0].breadth_feet || ''),
+            height_feet: String(prevRooms[0].height_feet || ''),
+            justification: prevRooms[0].justification || '',
+            photos: roomPhotos,
+            package_ids: upgPkgs.map((p) => p.package_id),
+          };
+        }
+
+        return {
+          status: prevRequests[0].status,
+          admin_remarks: prevRequests[0].admin_remarks,
+          packages: prevPackages.map((p) => ({
+            package_id: p.package_id,
+            justification: p.justification || '',
+            existing_images: imagesByCourse[pkgToCourse[p.package_id]] || [],
+          })),
+          supporting_docs: {
+            refurbishment: supportingDocs[0] || null,
+            upgradation: supportingDocs[1] || null,
+          },
+          upgradation: upgradationPrev,
+        };
+      })(),
     };
   } catch (error) {
     console.error('Error fetching refurbishment details:', error);
@@ -1370,7 +1494,9 @@ const submitRefurbishmentResponse = async (
   userId,
   partnerId,
   selectedPackages,
-  upgradation = null
+  upgradation = null,
+  refurbishmentDocument = null,
+  upgradationDocument = null
 ) => {
   const connection = await pool.getConnection();
 
@@ -1382,20 +1508,34 @@ const submitRefurbishmentResponse = async (
       `
       SELECT 
         n.id AS notification_id,
-        n.related_entity_id AS center_id,
+        srn.center_id AS center_id,
         srn.id AS refurb_notification_id,
-        srn.request_number
+        srn.request_number,
+        srn.request_type,
+        srn.frequency,
+        srn.is_manual_request
       FROM notifications n
       JOIN users u ON n.recipient_id = u.id
       JOIN scheduled_refurbishment_notifications srn
         ON u.partner_id = srn.partner_id
-        AND n.related_entity_id = srn.center_id
+        AND (
+          (n.alert_type = 'refurbishment_reinitiated' AND n.related_entity_id = srn.id)
+          OR (
+            n.alert_type = 'refurbishment_reinitiated'
+            AND n.related_entity_type = 'center'
+            AND n.related_entity_id = srn.center_id
+          )
+          OR (n.alert_type = 'refurbishment' AND n.related_entity_id = srn.center_id)
+        )
       WHERE n.id = ?
         AND u.id = ?
         AND srn.partner_id = ?
         AND n.type = 'alert'
-        AND n.alert_type = 'refurbishment'
+        AND n.alert_type IN ('refurbishment', 'refurbishment_reinitiated')
         AND srn.partner_responded = 0
+      ORDER BY
+        CASE WHEN n.related_entity_id = srn.id THEN 0 ELSE 1 END,
+        srn.updated_at DESC
       LIMIT 1
     `,
       [notificationId, userId, partnerId]
@@ -1407,29 +1547,98 @@ const submitRefurbishmentResponse = async (
 
     const notifData = notification[0];
     const uuid = require('uuid');
-    const refurbishmentRequestId = uuid.v4();
+    const requestType =
+      notifData.request_type ||
+      (notifData.frequency === 'instant' || notifData.is_manual_request === 1
+        ? 'instant request'
+        : 'schedule request');
 
-    // Create main refurbishment request record
-    await connection.query(
-      `
-      INSERT INTO refurbishment_requests (
-        id,
-        request_id,
-        center_id,
-        refurbishment_type,
-        justification,
-        created_at,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())
-    `,
-      [
-        refurbishmentRequestId,
-        notifData.refurb_notification_id, // Link to scheduled notification
-        notifData.center_id,
-        'package_selection',
-        'Partner package selection response',
-      ]
+    // Check if a refurbishment_requests record already exists (re-submission after send-back)
+    const [existingRequest] = await connection.query(
+      'SELECT id FROM refurbishment_requests WHERE request_id = ? LIMIT 1',
+      [notifData.refurb_notification_id]
     );
+
+    let refurbishmentRequestId;
+    if (existingRequest && existingRequest.length > 0) {
+      // Re-submission: clear old child data and update the main record
+      refurbishmentRequestId = existingRequest[0].id;
+
+      await connection.query(
+        'DELETE FROM refurbishment_request_course_packages WHERE refurbishment_request_id = ?',
+        [refurbishmentRequestId]
+      );
+      await connection.query(
+        'DELETE FROM refurbishment_request_course_attachments WHERE refurbishment_request_id = ?',
+        [refurbishmentRequestId]
+      );
+      const [existingRooms] = await connection.query(
+        'SELECT id FROM refurbishment_upgradation_rooms WHERE refurbishment_request_id = ?',
+        [refurbishmentRequestId]
+      );
+      for (const room of existingRooms) {
+        await connection.query(
+          'DELETE FROM refurbishment_upgradation_photos WHERE upgradation_room_id = ?',
+          [room.id]
+        );
+      }
+      await connection.query(
+        'DELETE FROM refurbishment_upgradation_rooms WHERE refurbishment_request_id = ?',
+        [refurbishmentRequestId]
+      );
+      await connection.query(
+        'DELETE FROM refurbishment_upgradation_request_packages WHERE refurbishment_request_id = ?',
+        [refurbishmentRequestId]
+      );
+      await connection.query(
+        'DELETE FROM refurbishment_admin_added_packages WHERE refurbishment_request_id = ?',
+        [refurbishmentRequestId]
+      );
+      await connection.query(
+        'DELETE FROM refurbishment_admin_selected_packages WHERE request_id = ?',
+        [notifData.refurb_notification_id]
+      );
+      await connection.query(
+        `UPDATE refurbishment_requests
+         SET status = 'submitted',
+             refurbishment_type = 'package_selection',
+             request_type = ?,
+             justification = 'Partner package selection response',
+             is_upgradation_requested = 0,
+             admin_remarks = NULL,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [requestType, refurbishmentRequestId]
+      );
+    } else {
+      // First-time submission: insert new record
+      refurbishmentRequestId = uuid.v4();
+      await connection.query(
+        `
+        INSERT INTO refurbishment_requests (
+          id,
+          request_id,
+          center_id,
+          refurbishment_type,
+          request_type,
+          justification,
+          status,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'submitted', NOW(), NOW())
+      `,
+        [
+          refurbishmentRequestId,
+          notifData.refurb_notification_id,
+          notifData.center_id,
+          'package_selection',
+          requestType,
+          'Partner package selection response',
+        ]
+      );
+    }
+
+    let firstSelectedCourseId = null;
 
     // Insert package selections with justifications and attachments
     for (const pkg of selectedPackages) {
@@ -1445,6 +1654,9 @@ const submitRefurbishmentResponse = async (
 
       if (packageInfo.length > 0) {
         const courseId = packageInfo[0].course_id;
+        if (!firstSelectedCourseId) {
+          firstSelectedCourseId = courseId;
+        }
 
         // Insert package selection with justification
         await connection.query(
@@ -1481,18 +1693,20 @@ const submitRefurbishmentResponse = async (
                 id,
                 refurbishment_request_id,
                 course_id,
+                package_id,
                 file_url,
                 file_name,
                 file_size_bytes,
                 file_mime_type,
                 uploaded_by,
                 created_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             `,
               [
                 attachmentId,
                 refurbishmentRequestId,
                 courseId,
+                pkg.package_id,
                 imageUrl.url,
                 imageUrl.name || 'attachment.jpg',
                 imageUrl.size || null,
@@ -1502,6 +1716,50 @@ const submitRefurbishmentResponse = async (
             );
           }
         }
+      }
+    }
+
+    // Persist supporting documents for admin review/download
+    const supportingDocuments = [
+      {
+        doc: refurbishmentDocument,
+        fallbackName: 'refurbishment-document',
+        fallbackType: 'application/octet-stream',
+      },
+      {
+        doc: upgradationDocument,
+        fallbackName: 'upgradation-document',
+        fallbackType: 'application/octet-stream',
+      },
+    ].filter((entry) => entry.doc && entry.doc.url);
+
+    if (supportingDocuments.length > 0 && firstSelectedCourseId) {
+      for (const entry of supportingDocuments) {
+        await connection.query(
+          `
+          INSERT INTO refurbishment_request_course_attachments (
+            id,
+            refurbishment_request_id,
+            course_id,
+            file_url,
+            file_name,
+            file_size_bytes,
+            file_mime_type,
+            uploaded_by,
+            created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        `,
+          [
+            uuid.v4(),
+            refurbishmentRequestId,
+            firstSelectedCourseId,
+            entry.doc.url,
+            entry.doc.name || entry.fallbackName,
+            entry.doc.size || null,
+            entry.doc.type || entry.fallbackType,
+            userId,
+          ]
+        );
       }
     }
 
@@ -1636,6 +1894,7 @@ module.exports = {
   getUserNotifications,
   getUnreadCount,
   markAsRead,
+  markAsUnread,
   markAllAsRead,
   deleteNotification,
   getNotificationById,

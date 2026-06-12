@@ -63,9 +63,17 @@ router.post(
 
 /**
  * POST /api/v1/partner/refurbishment/upload-url
- * Generate a short-lived S3 presigned PUT URL for direct browser upload
+ * Generate a short-lived S3 presigned PUT URL for direct browser upload,
+ * or return a local upload endpoint when S3 is not configured.
  * Body: { fileName, fileType, folder? }
  */
 router.post('/upload-url', PartnerRefurbishmentController.generateUploadUrl);
+
+/**
+ * POST /api/v1/partner/refurbishment/upload-local
+ * Accept multipart file upload and save to local disk (S3 fallback).
+ * Body: multipart/form-data field 'file'
+ */
+router.post('/upload-local', PartnerRefurbishmentController.uploadLocalFile);
 
 module.exports = router;

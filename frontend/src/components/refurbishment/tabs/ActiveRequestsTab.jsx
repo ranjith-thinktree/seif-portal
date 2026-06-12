@@ -11,6 +11,7 @@ import {
 } from "../../ui/select";
 import EnhancedDataTable from "../../common/EnhancedDataTable";
 import ColumnVisibilityToggle from "../../common/ColumnVisibilityToggle";
+import { getDisplayRequestType } from "../../../utils/refurbishmentUtils";
 
 const YEAR_OPTIONS = [
   { value: "2026", label: "2026" },
@@ -31,8 +32,8 @@ const formatFrequency = (value) => {
   if (!isNaN(n) && String(value).trim() !== "")
     return `${n} Month${n !== 1 ? "s" : ""}`;
   const MAP = {
-    instant: "One-time",
-    "one-time": "One-time",
+    instant: "One time",
+    "one-time": "One time",
     daily: "Daily",
     weekly: "Weekly",
     monthly: "Monthly",
@@ -67,6 +68,7 @@ const formatLastAlert = (row) => {
 const ActiveRequestsTab = ({
   table,
   loading = false,
+  onViewRequest,
   onNotifyPartner,
   onToggleAutoSend,
   onCreateManualRequest,
@@ -146,6 +148,22 @@ const ActiveRequestsTab = ({
         enableHiding: true,
       },
       {
+        id: "request_type",
+        accessorKey: "request_type",
+        header: "REQUEST TYPE",
+        cell: ({ row }) => {
+          const type = getDisplayRequestType(row.original);
+          return (
+            <span className="text-sm text-gray-700 capitalize">
+              {type || "-"}
+            </span>
+          );
+        },
+        size: 150,
+        enableResizing: true,
+        enableHiding: true,
+      },
+      {
         id: "frequency",
         accessorKey: "frequency",
         header: "FREQUENCY",
@@ -177,26 +195,36 @@ const ActiveRequestsTab = ({
         cell: ({ row }) => {
           const isAutoOn = row.original.auto_send || false;
           return (
-            <button
-              onClick={() => onNotifyPartner && onNotifyPartner(row.original)}
-              disabled={loading}
-              title={isAutoOn ? "Auto-send enabled" : "Send Notification"}
-              className={`w-8 h-8 rounded-full flex items-center justify-center border transition-colors ${
-                isAutoOn
-                  ? "border-gray-300 text-gray-400 hover:bg-gray-50"
-                  : "border-green-500 text-green-600 hover:bg-green-50"
-              }`}
-            >
-              <BellIcon className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onViewRequest && onViewRequest(row.original)}
+                disabled={loading}
+                title="View Request"
+                className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                View
+              </button>
+              <button
+                onClick={() => onNotifyPartner && onNotifyPartner(row.original)}
+                disabled={loading}
+                title={isAutoOn ? "Auto-send enabled" : "Send Notification"}
+                className={`w-8 h-8 rounded-full flex items-center justify-center border transition-colors ${
+                  isAutoOn
+                    ? "border-gray-300 text-gray-400 hover:bg-gray-50"
+                    : "border-green-500 text-green-600 hover:bg-green-50"
+                }`}
+              >
+                <BellIcon className="w-4 h-4" />
+              </button>
+            </div>
           );
         },
-        size: 80,
+        size: 140,
         enableResizing: false,
         enableHiding: false,
       },
     ],
-    [loading, onNotifyPartner, onToggleAutoSend],
+    [loading, onNotifyPartner, onToggleAutoSend, onViewRequest],
   );
 
   const currentYear = selectedYear

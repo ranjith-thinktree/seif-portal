@@ -21,9 +21,9 @@ module.exports = [
       'no-console': 'off',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       indent: ['error', 2],
-      quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+      quotes: ['error', 'single'],
       semi: ['error', 'always'],
-      'comma-dangle': 'off',
+      'comma-dangle': ['error', 'never'],
     },
   },
 ];

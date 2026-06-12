@@ -9,6 +9,7 @@ import {
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import EnhancedDataTable from "../../common/EnhancedDataTable";
 import AdvancedSearchBar from "../../common/AdvancedSearchBar";
+import { getDisplayRequestType } from "../../../utils/refurbishmentUtils";
 
 /**
  * PastRequestsTab Component
@@ -45,6 +46,10 @@ const PastRequestsTab = ({
     submitted: {
       label: "In-review",
       cls: "bg-yellow-50 border border-yellow-400 text-yellow-700",
+    },
+    sent_back: {
+      label: "Sent back",
+      cls: "bg-amber-50 border border-amber-400 text-amber-800",
     },
     approved: {
       label: "In-review",
@@ -99,16 +104,15 @@ const PastRequestsTab = ({
         enableResizing: true,
       },
       {
-        id: "type",
-        accessorKey: "type",
-        header: "Type",
-        cell: ({ row }) => (
-          <span className="text-sm text-gray-600">
-            {row.original.refurbishment_type ||
-              row.original.type ||
-              "Refurbishment"}
-          </span>
-        ),
+        id: "request_type",
+        accessorKey: "request_type",
+        header: "Request Type",
+        cell: ({ row }) => {
+          const type = getDisplayRequestType(row.original);
+          return (
+            <span className="text-sm text-gray-600">{type || "-"}</span>
+          );
+        },
         size: 130,
         enableHiding: true,
         enableResizing: true,
@@ -206,7 +210,7 @@ const PastRequestsTab = ({
   const filterGroups = useMemo(
     () => [
       {
-        label: "Type",
+        label: "Request Type",
         key: "type",
         options: filterOptions.types || [],
         isMulti: true,

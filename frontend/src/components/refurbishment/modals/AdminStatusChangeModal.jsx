@@ -131,12 +131,30 @@ export default function AdminStatusChangeModal({
         folder: "refurbishment-admin-completion",
       },
     );
-    await fetch(presigned.uploadUrl, {
-      method: "PUT",
-      body: item.file,
-      headers: { "Content-Type": item.file.type },
-    });
-    return { url: presigned.fileUrl, name: item.file.name, type: item.type };
+
+    let fileUrl;
+    if (presigned.storageType === "local") {
+      // S3 not configured — POST multipart to local backend endpoint
+      const formData = new FormData();
+      formData.append("file", item.file);
+      const uploadRes = await apiClient.post(
+        "/admin/refurbishment/upload-local",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      fileUrl = uploadRes.data?.data?.fileUrl;
+    } else {
+      // S3: PUT directly to presigned URL
+      const res = await fetch(presigned.uploadUrl, {
+        method: "PUT",
+        body: item.file,
+        headers: { "Content-Type": item.file.type },
+      });
+      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+      fileUrl = presigned.fileUrl;
+    }
+
+    return { url: fileUrl, name: item.file.name, type: item.type };
   };
 
   // ── Submit completion ─────────────────────────────────────────────────

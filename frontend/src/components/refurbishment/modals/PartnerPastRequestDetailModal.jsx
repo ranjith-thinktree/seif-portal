@@ -13,6 +13,7 @@ import {
   Download,
 } from "lucide-react";
 import refurbishmentService from "../../../services/refurbishment.service";
+import { resolvePartnerFileUrl } from "../../../utils/refurbishmentUtils";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 function safeParseImages(raw) {
@@ -63,6 +64,12 @@ const STATUS = {
     cls: "bg-yellow-50 text-yellow-700 border-yellow-200",
     iconCls: "text-yellow-500",
   },
+  sent_back: {
+    label: "Sent Back",
+    Icon: AlertCircle,
+    cls: "bg-amber-50 text-amber-800 border-amber-200",
+    iconCls: "text-amber-500",
+  },
   completed: {
     label: "Completed",
     Icon: CheckCircle2,
@@ -103,9 +110,10 @@ function StatusBadge({ status }) {
 // ── Image/attachment thumbnail ───────────────────────────────────────────────
 function AttachmentItem({ item }) {
   const isImage = item.type?.startsWith("image/");
+  const src = resolvePartnerFileUrl(item.url);
   return (
     <a
-      href={item.url}
+      href={src}
       target="_blank"
       rel="noreferrer"
       className="group flex flex-col items-center gap-1.5 w-20"
@@ -114,9 +122,12 @@ function AttachmentItem({ item }) {
       {isImage ? (
         <div className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group-hover:border-green-400 transition-colors">
           <img
-            src={item.url}
+            src={src}
             alt={item.name}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.target.style.display = "none";
+            }}
           />
         </div>
       ) : (
@@ -133,7 +144,11 @@ function AttachmentItem({ item }) {
 }
 
 // ── Main Modal ───────────────────────────────────────────────────────────────
-export default function PartnerPastRequestDetailModal({ request, onClose }) {
+export default function PartnerPastRequestDetailModal({
+  request,
+  onClose,
+  onSubmitCompletion,
+}) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -145,12 +160,32 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
 
   useEffect(() => {
     if (!request?.request_id) return;
+    setLoading(true);
+    setError(null);
+    setDetails(null);
+    setActiveTab(0);
+    setSelectedPkg(null);
     (async () => {
       try {
         const res = await refurbishmentService.getPartnerRequestDetails(
           request.request_id,
         );
-        const data = res?.data ?? res;
+        const data =
+          res?.success &&
+          res.data &&
+          typeof res.data === "object" &&
+          Array.isArray(res.data.courses)
+            ? res.data
+            : res?.success &&
+                res.message &&
+                typeof res.message === "object" &&
+                Array.isArray(res.message.courses)
+              ? res.message
+              : null;
+        if (!data) {
+          setError("Failed to load request details");
+          return;
+        }
         setDetails(data);
         // Default-select first package of first course
         if (data?.courses?.[0]?.packages?.[0]) {
@@ -164,7 +199,7 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
         setLoading(false);
       }
     })();
-  }, [request]);
+  }, [request?.request_id]);
 
   // Build tabs
   const tabs = details
@@ -195,9 +230,25 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
   }, [activeTab, details]);
 
   const req = details?.request ?? request;
+  const showCompletion =
+    req?.completion_notified_at &&
+    req?.status !== "completed" &&
+    req?.status !== "rejected" &&
+    !req?.partner_completed_at;
+  const requestIdLabel =
+    request?.requestId ||
+    (req?.request_number ? `#${req.request_number}` : null) ||
+    (request?.request_id
+      ? `REQ-${new Date(request.created_at || req?.created_at).getFullYear()}-${request.request_id.slice(0, 8).toUpperCase()}`
+      : null);
+
+  if (!request) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -205,20 +256,19 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
         {/* ── Header ────────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between px-7 py-5 border-b border-gray-100 shrink-0">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-xl font-bold text-gray-900 truncate">
-                {req?.center_name || "Request Details"}
-              </h2>
-              <StatusBadge status={req?.status} />
-              <span className="text-xs text-gray-400 font-mono ml-auto">
-                {req?.request_number
-                  ? `#${req.request_number}`
-                  : request?.request_id?.slice(0, 8)}
-              </span>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Submitted {fmt(req?.created_at || request?.created_at)}
+            <p className="text-xl font-bold text-gray-900 truncate">
+              {req?.center_name || "Request Details"}
             </p>
+            <div className="flex items-center justify-between gap-3 mt-1.5">
+              <p className="text-xs text-gray-400 truncate min-w-0">
+                {requestIdLabel || "—"}
+                {requestIdLabel ? " · " : ""}
+                Submitted {fmt(req?.created_at || request?.created_at)}
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                <StatusBadge status={req?.status} />
+              </div>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -247,6 +297,13 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
             </div>
           ) : (
             <div className="flex flex-col h-full">
+              {req?.has_admin_modifications && (
+                <div className="mx-6 mt-5 px-5 py-3 rounded-2xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
+                  <span className="font-semibold">Admin Note:</span> The admin
+                  has curated the package list for this request.
+                </div>
+              )}
+
               {/* Admin remarks / rejection reason banner */}
               {(req?.admin_remarks || req?.rejection_reason) && (
                 <div
@@ -265,6 +322,20 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                 </div>
               )}
 
+              {showCompletion && onSubmitCompletion && (
+                <div className="mx-6 mt-5 px-5 py-4 rounded-2xl bg-purple-50 border border-purple-200">
+                  <p className="text-sm text-purple-800 font-semibold mb-2">
+                    Refurbishment Complete — Confirmation Required
+                  </p>
+                  <button
+                    onClick={() => onSubmitCompletion(request)}
+                    className="px-4 py-2 text-sm bg-purple-600 text-white rounded-full font-semibold hover:bg-purple-700 transition-colors"
+                  >
+                    Submit Completion
+                  </button>
+                </div>
+              )}
+
               {/* Tab strip */}
               {tabs.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap px-6 pt-5 pb-2 shrink-0">
@@ -274,7 +345,9 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                       onClick={() => setActiveTab(tab.idx)}
                       className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                         activeTab === tab.idx
-                          ? "bg-green-600 text-white shadow-sm"
+                          ? tab.isUpgradation
+                            ? "bg-purple-600 text-white shadow-sm"
+                            : "bg-green-600 text-white shadow-sm"
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
                     >
@@ -301,27 +374,33 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                         No packages selected for this course.
                       </p>
                     ) : (
-                      activeCourse.packages.map((pkg) => (
-                        <button
-                          key={pkg.package_id}
-                          onClick={() => setSelectedPkg(pkg)}
-                          className={`w-full text-left px-4 py-3 rounded-2xl border transition-all text-sm ${
-                            selectedPkg?.package_id === pkg.package_id
-                              ? "border-green-500 bg-green-50 text-green-800 font-semibold shadow-sm"
-                              : "border-gray-200 bg-white hover:border-gray-300 text-gray-700"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate leading-snug">
-                              {pkg.package_name}
-                            </span>
-                            {selectedPkg?.package_id === pkg.package_id && (
-                              <ChevronRight className="w-4 h-4 shrink-0 text-green-600" />
+                      activeCourse.packages
+                        .filter((pkg) => !pkg.removed_by_admin)
+                        .map((pkg) => (
+                          <button
+                            key={pkg.package_id}
+                            onClick={() => setSelectedPkg(pkg)}
+                            className={`w-full text-left px-4 py-3 rounded-2xl border transition-all text-sm ${
+                              selectedPkg?.package_id === pkg.package_id
+                                ? "border-green-500 bg-green-50 text-green-800 font-semibold shadow-sm"
+                                : "border-gray-200 bg-white hover:border-gray-300 text-gray-700"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate leading-snug">
+                                {pkg.package_name}
+                              </span>
+                              {selectedPkg?.package_id === pkg.package_id && (
+                                <ChevronRight className="w-4 h-4 shrink-0 text-green-600" />
+                              )}
+                            </div>
+                            {pkg.added_by_admin && (
+                              <span className="text-[10px] text-blue-600 font-normal">
+                                ✦ Admin added
+                              </span>
                             )}
-                          </div>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-1" />
-                        </button>
-                      ))
+                          </button>
+                        ))
                     )}
                   </div>
 
@@ -365,21 +444,26 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                               Reference Images
                             </p>
                             <div className="flex flex-wrap gap-3">
-                              {imgs.map((url, i) => (
-                                <a
-                                  key={i}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 hover:border-green-400 transition-colors"
-                                >
-                                  <img
-                                    src={url}
-                                    alt={`ref-${i}`}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </a>
-                              ))}
+                              {imgs.map((url, i) => {
+                                const src = resolvePartnerFileUrl(
+                                  typeof url === "string" ? url : url?.url,
+                                );
+                                return (
+                                  <a
+                                    key={i}
+                                    href={src}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 hover:border-green-400 transition-colors"
+                                  >
+                                    <img
+                                      src={src}
+                                      alt={`ref-${i}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </a>
+                                );
+                              })}
                             </div>
                           </div>
                         ) : null;
@@ -430,7 +514,15 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                             {[
                               ["Length", room.length_feet],
                               ["Breadth", room.breadth_feet],
-                              ["Height", room.height_feet],
+                              [
+                                "Area",
+                                room.area_sqft ??
+                                  (Number(room.length_feet) > 0 &&
+                                  Number(room.breadth_feet) > 0
+                                    ? Number(room.length_feet) *
+                                      Number(room.breadth_feet)
+                                    : null),
+                              ],
                             ].map(([label, val]) => (
                               <div key={label} className="text-center">
                                 <p className="text-xs text-gray-400 mb-0.5">
@@ -439,7 +531,7 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                                 <p className="text-base font-bold text-gray-800">
                                   {val ?? "—"}
                                   <span className="text-xs font-normal text-gray-400 ml-1">
-                                    ft
+                                    {label === "Area" ? "sq ft" : "ft"}
                                   </span>
                                 </p>
                               </div>
@@ -524,7 +616,9 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {details.refurbishment_document && (
                       <a
-                        href={details.refurbishment_document.url || "#"}
+                        href={resolvePartnerFileUrl(
+                          details.refurbishment_document.url,
+                        )}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center gap-3 bg-gray-50 border border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors group"
@@ -544,7 +638,9 @@ export default function PartnerPastRequestDetailModal({ request, onClose }) {
                     )}
                     {details.upgradation_document && (
                       <a
-                        href={details.upgradation_document.url || "#"}
+                        href={resolvePartnerFileUrl(
+                          details.upgradation_document.url,
+                        )}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center gap-3 bg-gray-50 border border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors group"

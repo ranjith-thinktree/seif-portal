@@ -27,10 +27,12 @@ class ScheduledNotificationService {
       autoSend = true,
       createdBy,
       isManualRequest = false, // NEW: Distinguish manual requests from scheduled notifications
+      requestType: requestTypeOverride = null,
     } = data;
 
     const id = uuidv4();
     const now = new Date();
+    const requestType = requestTypeOverride || null;
 
     // Calculate next_send_at based on frequency
     const nextSendAt = this.calculateNextSendAt(
@@ -46,9 +48,9 @@ class ScheduledNotificationService {
         id, partner_id, center_id, scheduled_at, frequency, 
         custom_interval_days, max_occurrences,
         custom_day, custom_time, message, packages, upgradation_packages, auto_send, 
-        status, next_send_at, send_count, created_by, is_manual_request, created_at
+        status, next_send_at, send_count, created_by, is_manual_request, request_type, created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, ?, ?, ?, ?)
     `;
 
     await db.query(query, [
@@ -68,6 +70,7 @@ class ScheduledNotificationService {
       nextSendAt,
       createdBy,
       isManualRequest ? 1 : 0, // NEW: Store manual request flag
+      requestType,
       now,
     ]);
 

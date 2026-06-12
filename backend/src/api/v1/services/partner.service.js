@@ -179,7 +179,7 @@ class PartnerService {
       const partner = partners[0];
 
       const [statePresenceRows] = await db.query(
-        'SELECT state_id FROM partner_state_presence WHERE partner_id = ? ORDER BY state_id ASC',
+        `SELECT state_id FROM partner_state_presence WHERE partner_id = ? ORDER BY state_id ASC`,
         [partnerId]
       );
 
@@ -688,33 +688,13 @@ class PartnerService {
     }
   }
 
-  async deletePartnerDependencies(partnerId, executor) {
-    await executor.query(
-      `DELETE FROM notifications WHERE recipient_id IN (
-         SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
-       )`,
-      [partnerId]
-    );
-
-    await executor.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
-    await executor.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [
-      partnerId,
-    ]);
-    await executor.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
-    await executor.query('DELETE FROM partners WHERE id = ?', [partnerId]);
-  }
-
   /**
    * Delete partner
    * @param {string} id - Partner ID
    * @returns {Promise<boolean>} Success status
    */
   async deletePartner(id) {
-    const connection = await db.getConnection();
-
     try {
-      await connection.beginTransaction();
-
       const partnerId = convertToUUID(id);
 
       // Check if partner exists
@@ -724,7 +704,7 @@ class PartnerService {
       }
 
       // Check if partner has centers
-      const [centers] = await connection.query(
+      const [centers] = await db.query(
         'SELECT COUNT(*) as count FROM centers WHERE partner_id = ?',
         [partnerId]
       );
@@ -735,16 +715,32 @@ class PartnerService {
         );
       }
 
-      await this.deletePartnerDependencies(partnerId, connection);
-      await connection.commit();
+      // Delete in correct dependency order:
+      // 1. Notifications for this partner's users
+      await db.query(
+        `DELETE FROM notifications WHERE recipient_id IN (
+           SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
+         )`,
+        [partnerId]
+      );
+
+      // 2. Notification queue entries for this partner
+      await db.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
+
+      // 3. Delete associated user accounts (partner login accounts are automatically created)
+      // This only deletes users with role='PARTNER' linked to this partner
+      await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [partnerId]);
+
+      // 4. Delete partner state presence
+      await db.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
+
+      // 5. Delete the partner
+      await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
 
       return true;
     } catch (error) {
-      await connection.rollback();
       console.error('Error in deletePartner:', error);
       throw error;
-    } finally {
-      connection.release();
     }
   }
 
@@ -956,13 +952,9 @@ class PartnerService {
                 u.full_name as uploaded_by_name
          FROM data_uploads du
          LEFT JOIN users u ON du.uploaded_by = u.id
-         WHERE du.id = ? AND du.partner_id = ?`,
-        [uploadId, partnerId]
+         WHERE du.id = ?`,
+        [uploadId]
       );
-
-      if (!uploadRows.length) {
-        throw new Error('Upload not found or unauthorized');
-      }
 
       const [centers] = await connection.query(
         `SELECT uc.* FROM uploaded_centers uc
@@ -2017,18 +2009,28 @@ class PartnerService {
             continue;
           }
 
-          const connection = await db.getConnection();
+          // All checks passed - safe to delete
+          // 1. Notifications for this partner's users
+          await db.query(
+            `DELETE FROM notifications WHERE recipient_id IN (
+               SELECT id FROM users WHERE partner_id = ? AND role = 'PARTNER'
+             )`,
+            [partnerId]
+          );
 
-          try {
-            await connection.beginTransaction();
-            await this.deletePartnerDependencies(partnerId, connection);
-            await connection.commit();
-          } catch (error) {
-            await connection.rollback();
-            throw error;
-          } finally {
-            connection.release();
-          }
+          // 2. Notification queue entries for this partner
+          await db.query('DELETE FROM notification_queue WHERE partner_id = ?', [partnerId]);
+
+          // 3. Delete associated user accounts first
+          await db.query("DELETE FROM users WHERE partner_id = ? AND role = 'PARTNER'", [
+            partnerId,
+          ]);
+
+          // 4. Delete partner_state_presence records
+          await db.query('DELETE FROM partner_state_presence WHERE partner_id = ?', [partnerId]);
+
+          // 5. Delete the partner
+          await db.query('DELETE FROM partners WHERE id = ?', [partnerId]);
 
           results.success.push({
             id: partnerId,

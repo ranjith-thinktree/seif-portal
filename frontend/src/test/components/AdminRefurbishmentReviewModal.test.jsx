@@ -221,6 +221,9 @@ describe("AdminRefurbishmentReviewModal Component", () => {
         screen.queryByRole("button", { name: /^Reject$/i }),
       ).not.toBeInTheDocument();
       expect(screen.getByText(/already been approved/i)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Add other package/i }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -467,6 +470,19 @@ describe("AdminRefurbishmentReviewModal Component", () => {
       refurbishmentService.getPackages.mockResolvedValue({
         data: { packages: mockAllPackages },
       });
+      refurbishmentService.getUpgradationPackagesForRequest.mockResolvedValue({
+        data: {
+          available_packages: [
+            {
+              id: "pkg-upgr-002",
+              name: "Furniture Replacement",
+              description: "New lab benches.",
+              images: "[]",
+            },
+          ],
+          admin_selected_ids: [],
+        },
+      });
     });
 
     test("shows Upgradation pill when partner requested upgradation", async () => {
@@ -504,7 +520,7 @@ describe("AdminRefurbishmentReviewModal Component", () => {
       await waitFor(() => {
         expect(screen.getByText("30")).toBeInTheDocument();
         expect(screen.getByText("20")).toBeInTheDocument();
-        expect(screen.getByText("10")).toBeInTheDocument();
+        expect(screen.getByText("600")).toBeInTheDocument();
       });
     });
 

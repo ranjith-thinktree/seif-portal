@@ -62,9 +62,9 @@ export default function PartnerCompletionModal({
     });
   };
 
-  // ── Upload to S3 via presigned URL ──────────────────────────────────────
+  // ── Upload file: S3 presigned PUT or local backend POST ─────────────────
   const uploadFile = async (item) => {
-    // Request a presigned upload URL from backend
+    // Request upload endpoint from backend
     const { data: presigned } = await apiClient.post(
       "/partner/refurbishment/upload-url",
       {
@@ -73,13 +73,30 @@ export default function PartnerCompletionModal({
         folder: "refurbishment-completion",
       },
     );
-    // Upload directly to S3
-    await fetch(presigned.uploadUrl, {
-      method: "PUT",
-      body: item.file,
-      headers: { "Content-Type": item.file.type },
-    });
-    return { url: presigned.fileUrl, name: item.file.name, type: item.type };
+
+    let fileUrl;
+    if (presigned.storageType === "local") {
+      // S3 not configured — POST multipart to local backend endpoint
+      const formData = new FormData();
+      formData.append("file", item.file);
+      const uploadRes = await apiClient.post(
+        "/partner/refurbishment/upload-local",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      fileUrl = uploadRes.data?.data?.fileUrl;
+    } else {
+      // S3: PUT directly to presigned URL
+      const res = await fetch(presigned.uploadUrl, {
+        method: "PUT",
+        body: item.file,
+        headers: { "Content-Type": item.file.type },
+      });
+      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+      fileUrl = presigned.fileUrl;
+    }
+
+    return { url: fileUrl, name: item.file.name, type: item.type };
   };
 
   // ── Submit ──────────────────────────────────────────────────────────────

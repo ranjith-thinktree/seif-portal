@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import refurbishmentService from "../../services/refurbishment.service";
+import { getDisplayRequestType } from "../../utils/refurbishmentUtils";
 
 /**
  * Custom hook to manage refurbishment dashboard data
@@ -79,6 +80,7 @@ export const useRefurbishmentData = (selectedYear) => {
       const response = await refurbishmentService.getLastRefurbished({
         limit: 100,
         offset: 0,
+        within: 1200,
       });
       if (response.success) {
         // getLastRefurbished returns { success: true, data: [...] } - data is already an array
@@ -144,7 +146,7 @@ export const useRefurbishmentData = (selectedYear) => {
       // Fetch from unified table (contains both manual and scheduled)
       const scheduledResponse =
         await refurbishmentService.getScheduledNotifications({
-          status: "pending,active",
+          status: "pending,active,completed",
           limit: 100,
           offset: 0,
         });
@@ -163,23 +165,17 @@ export const useRefurbishmentData = (selectedYear) => {
           items: notifications,
         });
 
-        // Map all items - use is_scheduled from backend to determine type
+        // Map notification fields to request fields for UI compatibility
         const mappedRequests = notifications.map((notif) => ({
           ...notif,
-          // is_scheduled comes from backend: IF(is_manual_request = 1, 0, 1)
-          // Manual requests have is_scheduled=0, Scheduled have is_scheduled=1
-          request_type: notif.is_scheduled ? "scheduled" : "manual",
-          // Map scheduled notification fields to request fields for UI compatibility
           organization_name: notif.partner_name,
           reason: notif.message,
         }));
 
         console.log("[DEBUG] Mapped active requests:", {
           totalCount: mappedRequests.length,
-          manualCount: mappedRequests.filter((r) => r.request_type === "manual")
-            .length,
-          scheduledCount: mappedRequests.filter(
-            (r) => r.request_type === "scheduled",
+          withStoredType: mappedRequests.filter(
+            (r) => getDisplayRequestType(r),
           ).length,
           firstItem: mappedRequests[0],
         });

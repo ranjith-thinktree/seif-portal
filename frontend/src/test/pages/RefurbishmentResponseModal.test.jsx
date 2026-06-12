@@ -245,11 +245,11 @@ describe("RefurbishmentResponseModal — Room Dimension Step", () => {
     expect(screen.getByText("ROOM DIMENSION (IN FEET)")).toBeInTheDocument();
   });
 
-  test("shows LENGHT, BREADTH, HEIGHT placeholder inputs", () => {
+  test("shows LENGHT, BREADTH, AREA placeholder inputs", () => {
     advanceToRoomStep();
     expect(screen.getByPlaceholderText("LENGHT")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("BREADTH")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("HEIGHT")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("AREA")).toBeInTheDocument();
   });
 
   test("shows JUSTIFICATION label and WRITE HERE placeholder", () => {
@@ -286,7 +286,7 @@ describe("RefurbishmentResponseModal — Room Dimension Step", () => {
     fireEvent.change(screen.getByPlaceholderText("BREADTH"), {
       target: { value: "20" },
     });
-    fireEvent.change(screen.getByPlaceholderText("HEIGHT"), {
+    fireEvent.change(screen.getByPlaceholderText("AREA"), {
       target: { value: "10" },
     });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
@@ -313,7 +313,7 @@ describe("RefurbishmentResponseModal — Upgradation Packages Step", () => {
     fireEvent.change(screen.getByPlaceholderText("BREADTH"), {
       target: { value: "20" },
     });
-    fireEvent.change(screen.getByPlaceholderText("HEIGHT"), {
+    fireEvent.change(screen.getByPlaceholderText("AREA"), {
       target: { value: "10" },
     });
     fireEvent.click(screen.getByRole("button", { name: /continue/i })); // → packages
@@ -372,7 +372,7 @@ describe("RefurbishmentResponseModal — Package Preview Step", () => {
     fireEvent.change(screen.getByPlaceholderText("BREADTH"), {
       target: { value: "20" },
     });
-    fireEvent.change(screen.getByPlaceholderText("HEIGHT"), {
+    fireEvent.change(screen.getByPlaceholderText("AREA"), {
       target: { value: "10" },
     });
     fireEvent.click(screen.getByRole("button", { name: /continue/i })); // room → packages

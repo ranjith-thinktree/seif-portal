@@ -188,6 +188,18 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   /**
+   * Mark notification as unread locally
+   */
+  const markNotificationAsUnread = useCallback((notificationId) => {
+    setNotifications((prev) =>
+      prev.map((notif) =>
+        notif.id === notificationId ? { ...notif, is_read: false } : notif,
+      ),
+    );
+    setUnreadCount((prev) => prev + 1);
+  }, []);
+
+  /**
    * Mark all notifications as read locally
    */
   const markAllNotificationsAsRead = useCallback(() => {
@@ -307,6 +319,7 @@ export const NotificationProvider = ({ children }) => {
     updateUnreadCount,
     addNotification,
     markNotificationAsRead,
+    markNotificationAsUnread,
     markAllNotificationsAsRead,
     removeNotification,
     connectSocket,

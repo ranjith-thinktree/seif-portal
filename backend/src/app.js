@@ -123,8 +123,13 @@ app.use(compression());
 // STATIC FILE SERVING
 // ===================================
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded files statically.
+// Refurbishment local uploads are stored at project-root/uploads (see partner/admin controllers).
+// Other modules may still use backend/uploads via upload.middleware.
+const projectUploadsDir = path.join(__dirname, '../../uploads');
+const backendUploadsDir = path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(projectUploadsDir));
+app.use('/uploads', express.static(backendUploadsDir));
 
 // ===================================
 // HEALTH CHECK

@@ -1,13 +1,37 @@
 const RefurbishmentService = require('../services/refurbishment.service');
 const { ApiError } = require('../../../utils/error.util');
 const ApiResponse = require('../../../utils/response.util');
-const { generatePutPresignedUrl } = require('../../../utils/s3.util');
+const { generatePutPresignedUrl, isS3Configured } = require('../../../utils/s3.util');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-/**
- * Partner Refurbishment Controller
- * Handles partner-specific refurbishment request operations
- */
+// Local storage for refurbishment uploads (S3 fallback)
+const localUploadDir = path.join(__dirname, '../../../../../uploads/refurbishment');
+if (!fs.existsSync(localUploadDir)) fs.mkdirSync(localUploadDir, { recursive: true });
+
+const localRefurbishmentStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, localUploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}_${uuidv4()}${ext}`);
+  },
+});
+
+const localRefurbishmentUpload = multer({
+  storage: localRefurbishmentStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'image/jpeg', 'image/jpg', 'image/png',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    cb(null, allowed.includes(file.mimetype));
+  },
+}).single('file');
 
 /**
  * Get refurbishment request details for partner
@@ -33,7 +57,7 @@ const getRequestDetails = async (req, res, next) => {
       return ApiResponse.error(res, 'Request not found or access denied', 404);
     }
 
-    return ApiResponse.success(res, 'Request details retrieved successfully', requestDetails);
+    return ApiResponse.success(res, requestDetails, 'Request details retrieved successfully');
   } catch (error) {
     console.error('Error getting request details:', error);
     next(error);
@@ -70,7 +94,7 @@ const submitRefurbishmentRequest = async (req, res, next) => {
       upgradation: submissionData.upgradation || null,
     });
 
-    return ApiResponse.success(res, 'Refurbishment request submitted successfully', result, 201);
+    return ApiResponse.success(res, result, 'Refurbishment request submitted successfully', 201);
   } catch (error) {
     console.error('Error submitting refurbishment request:', error);
     next(error);
@@ -106,8 +130,8 @@ const getMyRequests = async (req, res, next) => {
 };
 
 /**
- * Get partner's past (actioned) refurbishment requests.
- * Returns requests that have progressed beyond 'submitted'.
+ * Get partner's past refurbishment requests.
+ * Includes submitted and actioned requests.
  * @route GET /api/v1/partner/refurbishment/past-requests
  */
 const getPartnerPastRequests = async (req, res, next) => {
@@ -119,12 +143,11 @@ const getPartnerPastRequests = async (req, res, next) => {
       return ApiResponse.error(res, 'User is not associated with a partner', 403);
     }
 
-    // Reuse getPartnerRefurbishmentRequests but exclude 'submitted' draft requests
+    // Reuse getPartnerRefurbishmentRequests including submitted and actioned requests
     const data = await RefurbishmentService.getPartnerRefurbishmentRequests({
       partnerId,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      excludeStatus: 'submitted',
     });
 
     return ApiResponse.success(res, data, 'Past requests retrieved successfully');
@@ -162,10 +185,10 @@ const submitPartnerCompletion = async (req, res, next) => {
 };
 
 /**
- * Generate a presigned PUT URL so the browser can upload a file directly to S3.
+ * Generate a presigned PUT URL (S3) or a local upload endpoint URL when S3 is not configured.
  * @route POST /api/v1/partner/refurbishment/upload-url
  * Body: { fileName: string, fileType: string, folder?: string }
- * Returns: { uploadUrl, fileUrl, key }
+ * Returns: { storageType: 's3'|'local', uploadUrl, fileUrl, key }
  */
 const generateUploadUrl = async (req, res, next) => {
   try {
@@ -188,18 +211,53 @@ const generateUploadUrl = async (req, res, next) => {
       return ApiResponse.error(res, `File type not allowed`, 400);
     }
 
-    // Build a safe S3 key
     const ext = fileName.split('.').pop().toLowerCase();
     const safeFolder = (folder || 'refurbishment/uploads').replace(/[^a-zA-Z0-9/_-]/g, '');
     const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext}`;
 
-    const { uploadUrl, fileUrl } = await generatePutPresignedUrl(key, fileType, 300);
+    if (!isS3Configured()) {
+      // S3 not available — tell the client to POST the file directly to our local endpoint
+      const backendBase = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+      return ApiResponse.success(
+        res,
+        {
+          storageType: 'local',
+          uploadUrl: `${backendBase}/api/v1/partner/refurbishment/upload-local`,
+          fileUrl: null, // resolved after actual upload
+          key,
+        },
+        'Local upload endpoint (S3 not configured)'
+      );
+    }
 
-    return ApiResponse.success(res, { uploadUrl, fileUrl, key }, 'Upload URL generated');
+    const { uploadUrl, fileUrl } = await generatePutPresignedUrl(key, fileType, 300);
+    return ApiResponse.success(res, { storageType: 's3', uploadUrl, fileUrl, key }, 'Upload URL generated');
   } catch (error) {
     console.error('Error generating upload URL:', error);
     next(error);
   }
+};
+
+/**
+ * Accept a multipart file upload and save it to local disk (S3 fallback).
+ * @route POST /api/v1/partner/refurbishment/upload-local
+ * Body: multipart/form-data with field 'file'
+ * Returns: { fileUrl, key }
+ */
+const uploadLocalFile = (req, res, next) => {
+  localRefurbishmentUpload(req, res, (err) => {
+    if (err) {
+      console.error('Local upload error:', err);
+      return ApiResponse.error(res, err.message || 'File upload failed', 400);
+    }
+    if (!req.file) {
+      return ApiResponse.error(res, 'No file received', 400);
+    }
+    const backendBase = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const fileUrl = `${backendBase}/uploads/refurbishment/${req.file.filename}`;
+    const key = `refurbishment/${req.file.filename}`;
+    return ApiResponse.success(res, { fileUrl, key }, 'File uploaded locally');
+  });
 };
 
 module.exports = {
@@ -209,4 +267,5 @@ module.exports = {
   getPartnerPastRequests,
   submitPartnerCompletion,
   generateUploadUrl,
+  uploadLocalFile,
 };
