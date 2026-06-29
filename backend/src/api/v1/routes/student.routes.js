@@ -21,8 +21,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),
@@ -40,8 +39,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),
@@ -53,7 +51,7 @@ router.get(
 /**
  * @route   GET /api/v1/students/export
  * @desc    Export students to CSV
- * @access  ADMIN, SUPER_ADMIN, ESSCI, PARTNER
+ * @access  ADMIN, SUPER_ADMIN, PARTNER
  */
 router.get(
   '/export',
@@ -75,8 +73,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),
@@ -96,8 +93,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),

@@ -33,7 +33,7 @@ const OverviewTab = ({
   // Last Refurbished Card (from useTableSearch)
   lastRefurbishedTable,
   lastRefurbishedFilterOptions,
-  onCreateRequestLastRefurbished,
+  onViewLastRefurbished,
   onExportLastRefurbished,
 
   // All Centers Card (from useTableSearch)
@@ -88,7 +88,7 @@ const OverviewTab = ({
         <LastRefurbishedCard
           table={lastRefurbishedTable}
           loading={loading}
-          onCreateRequest={onCreateRequestLastRefurbished}
+          onViewRequest={onViewLastRefurbished}
           formatDate={formatDate}
           filterOptions={lastRefurbishedFilterOptions}
           onExport={onExportLastRefurbished}

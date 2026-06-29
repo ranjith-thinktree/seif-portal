@@ -4,6 +4,20 @@ const { emitToUser, emitToRole } = require('../../../websocket/socket');
 const emailService = require('../../../utils/email.util');
 const { NotFoundError } = require('../../../utils/error.util');
 
+/** Human-readable refurbishment lifecycle labels (DB status keys unchanged). */
+const REFURBISHMENT_STATUS_LABELS = {
+  submitted: 'Submitted',
+  sent_back: 'Sent Back',
+  approved: 'Approved',
+  material_procurement: 'Material Procurement Completed',
+  installation_in_progress: 'Installation In Progress',
+  refurbishment_started: 'In Progress',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  acknowledgement_pending: 'Acknowledgement Pending',
+  ready_to_complete: 'Ready to Complete',
+};
+
 /**
  * Refurbishment Service
  * Handles all refurbishment-related business logic
@@ -249,27 +263,49 @@ class RefurbishmentService {
       // Default refurbishment frequency: 36 months (3 years) if not set
       const DEFAULT_FREQUENCY = 36;
 
+      const effectiveRefurbDateSql = `
+        CASE
+          WHEN c.last_refurbishment_date IS NULL THEN rr_latest.latest_completion
+          WHEN rr_latest.latest_completion IS NULL THEN c.last_refurbishment_date
+          WHEN c.last_refurbishment_date >= rr_latest.latest_completion THEN c.last_refurbishment_date
+          ELSE rr_latest.latest_completion
+        END
+      `;
+
       const query = `
         SELECT 
           c.id,
           c.center_name,
           c.partner_id,
-          p.name as organization_name,
+          p.name as partner_name,
           c.year_of_establishment,
-          c.last_refurbishment_date,
+          ${effectiveRefurbDateSql} as last_refurbishment_date,
           COALESCE(c.refurbishment_frequency_months, ${DEFAULT_FREQUENCY}) as refurbishment_frequency_months,
           c.city,
           c.state,
           c.region,
           c.center_type,
           c.status,
-          TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) as months_since_last_refurbishment
+          rr_latest.latest_request_id,
+          TIMESTAMPDIFF(MONTH, ${effectiveRefurbDateSql}, CURDATE()) as months_since_last_refurbishment
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
+        LEFT JOIN (
+          SELECT rr.center_id, MIN(rr.id) AS latest_request_id, MAX(rr.completed_at) AS latest_completion
+          FROM refurbishment_requests rr
+          INNER JOIN (
+            SELECT center_id, MAX(completed_at) AS latest_completion
+            FROM refurbishment_requests
+            WHERE status = 'completed' AND completed_at IS NOT NULL
+            GROUP BY center_id
+          ) rr_max ON rr_max.center_id = rr.center_id AND rr_max.latest_completion = rr.completed_at
+          WHERE rr.status = 'completed'
+          GROUP BY rr.center_id
+        ) rr_latest ON rr_latest.center_id = c.id
         WHERE c.status = 'active'
-          AND c.last_refurbishment_date IS NOT NULL
-          AND TIMESTAMPDIFF(MONTH, c.last_refurbishment_date, CURDATE()) <= ?
-        ORDER BY c.last_refurbishment_date DESC
+          AND ${effectiveRefurbDateSql} IS NOT NULL
+          AND TIMESTAMPDIFF(MONTH, ${effectiveRefurbDateSql}, CURDATE()) <= ?
+        ORDER BY last_refurbishment_date DESC
       `;
 
       const [centers] = await db.query(query, [withinMonths]);
@@ -360,10 +396,19 @@ class RefurbishmentService {
            rr.admin_remarks,
            rr.rejection_reason,
            rr.approved_at,
+           rr.material_procurement_at,
+           rr.installation_in_progress_at,
+           rr.completed_at,
+           rr.rejected_at,
+           rr.partner_completion_description,
            rr.created_at,
            rr.updated_at,
            rr.completion_notified_at,
            rr.partner_completed_at,
+           rr.partner_acknowledgment_consent,
+           rr.partner_acknowledgment_consent_at,
+           rr.partner_acknowledgment_consent_text,
+           rr.package_modification_summary,
            c.center_name,
            c.partner_id,
            p.name  AS partner_name,
@@ -484,6 +529,9 @@ class RefurbishmentService {
       }
 
       const hasAdminModifications = adminPkgRows.length > 0;
+      const packageModifications = RefurbishmentService.parsePackageModificationSummary(
+        req.package_modification_summary
+      );
 
       // ── 4. Upgradation details (if requested) ──
       let upgradation = null;
@@ -526,6 +574,49 @@ class RefurbishmentService {
         };
       }
 
+      const [partnerAckFiles] = await db.query(
+        `SELECT file_url, file_name, file_mime_type, created_at
+         FROM refurbishment_request_course_attachments
+         WHERE refurbishment_request_id = ?
+           AND attachment_type = 'partner_completion'
+         ORDER BY created_at`,
+        [requestId]
+      );
+
+      const timelineRecord = {
+        status: req.status,
+        created_at: req.created_at,
+        updated_at: req.updated_at,
+        approved_at: req.approved_at,
+        material_procurement_at: req.material_procurement_at,
+        installation_in_progress_at: req.installation_in_progress_at,
+        completed_at: req.completed_at,
+        rejected_at: req.rejected_at,
+        admin_remarks: req.admin_remarks,
+        rejection_reason: req.rejection_reason,
+        completion_notified_at: req.completion_notified_at,
+        partner_completed_at: req.partner_completed_at,
+        partner_completion_description: req.partner_completion_description,
+        completion_statement: null,
+      };
+
+      const statusTimeline =
+        RefurbishmentService.buildRefurbishmentStatusTimeline(timelineRecord);
+      const partnerAcknowledgment = req.partner_completed_at
+        ? {
+            submitted_at: req.partner_completed_at,
+            statement: req.partner_completion_description || '',
+            consent: req.partner_acknowledgment_consent === 1,
+            consent_at: req.partner_acknowledgment_consent_at || null,
+            consent_text: req.partner_acknowledgment_consent_text || null,
+            files: partnerAckFiles.map((file) => ({
+              url: file.file_url,
+              name: file.file_name,
+              type: file.file_mime_type,
+            })),
+          }
+        : null;
+
       return {
         request: {
           id: req.refurbishment_request_id,
@@ -536,13 +627,22 @@ class RefurbishmentService {
           admin_remarks: req.admin_remarks,
           rejection_reason: req.rejection_reason,
           approved_at: req.approved_at,
+          material_procurement_at: req.material_procurement_at || null,
+          installation_in_progress_at: req.installation_in_progress_at || null,
+          completed_at: req.completed_at || null,
           created_at: req.created_at,
           updated_at: req.updated_at,
           request_number: req.request_number,
           completion_notified_at: req.completion_notified_at || null,
           partner_completed_at: req.partner_completed_at || null,
-          has_admin_modifications: hasAdminModifications,
+          partner_completion_description: req.partner_completion_description || null,
+          is_upgradation_requested: !!req.is_upgradation_requested,
+          has_admin_modifications:
+            hasAdminModifications || packageModifications.hasChanges,
         },
+        package_modifications: packageModifications,
+        status_timeline: statusTimeline,
+        partner_acknowledgment: partnerAcknowledgment,
         courses: Array.from(courseMap.values()),
         upgradation_requested: !!req.is_upgradation_requested,
         upgradation,
@@ -728,7 +828,7 @@ class RefurbishmentService {
 
       // 9. Emit real-time WebSocket notification to all ADMIN users
       try {
-        emitToRole('ADMIN', 'notification:new', {
+        const socketPayload = {
           id: notificationUuid,
           type: 'alert',
           alert_type: 'refurbishment',
@@ -738,7 +838,9 @@ class RefurbishmentService {
           related_entity_id: requestId,
           is_read: false,
           created_at: new Date().toISOString(),
-        });
+        };
+        emitToRole('ADMIN', 'notification:new', socketPayload);
+        emitToRole('SUPER_ADMIN', 'notification:new', socketPayload);
       } catch (socketError) {
         console.error(
           '[RefurbishmentService] Failed to emit socket notification to admins:',
@@ -824,12 +926,18 @@ class RefurbishmentService {
           rr.updated_at,
           rr.admin_remarks,
           rr.rejection_reason,
+          rr.rejected_at,
+          rr.rejected_by,
           rr.approved_at,
           rr.completed_at,
           rr.completion_statement,
           rr.partner_completion_description,
           rr.partner_completed_at,
+          rr.partner_acknowledgment_consent,
+          rr.partner_acknowledgment_consent_at,
+          rr.partner_acknowledgment_consent_text,
           rr.completion_notified_at,
+          rr.is_upgradation_requested,
           c.center_name,
           c.address                                                                     AS center_address
         FROM refurbishment_requests rr
@@ -1150,7 +1258,12 @@ class RefurbishmentService {
           rr.updated_at,
           rr.status,
           rr.approved_at,
+          rr.material_procurement_at,
+          rr.installation_in_progress_at,
           rr.completed_at,
+          rr.completion_notified_at,
+          rr.partner_completed_at,
+          rr.partner_acknowledgment_consent,
           rr.rejection_reason,
           rr.completion_statement,
           rr.admin_remarks,
@@ -1173,11 +1286,31 @@ class RefurbishmentService {
 
       const [requests] = await db.query(query, params);
 
+      const [[{ readyToCompleteCount }]] = await db.query(
+        `SELECT COUNT(*) AS readyToCompleteCount
+         FROM refurbishment_requests rr
+         WHERE rr.status NOT IN ('completed', 'rejected')
+           AND rr.partner_completed_at IS NOT NULL`,
+      );
+
+      const enrichedRequests = requests.map((row) => {
+        const displayStatus = RefurbishmentService.getRefurbishmentDisplayStatus(row);
+        return {
+          ...row,
+          display_status: displayStatus.key,
+          display_status_label: displayStatus.label,
+        };
+      });
+
       console.log(
         `[RefurbishmentService] Retrieved ${requests.length} past requests (total: ${total})`
       );
 
-      return { requests, totalCount: total };
+      return {
+        requests: enrichedRequests,
+        totalCount: total,
+        readyToCompleteCount: readyToCompleteCount || 0,
+      };
     } catch (error) {
       console.error('[RefurbishmentService] Error fetching past requests:', error);
       throw error;
@@ -1630,6 +1763,406 @@ class RefurbishmentService {
     return null;
   }
 
+  static getRefurbishmentDisplayStatus(record = {}) {
+    const STATUS_LABELS = REFURBISHMENT_STATUS_LABELS;
+
+    if (record.status === 'completed') {
+      return {
+        key: 'completed',
+        label: STATUS_LABELS.completed,
+        badgeKey: 'completed',
+      };
+    }
+    if (record.status === 'rejected') {
+      return {
+        key: 'rejected',
+        label: STATUS_LABELS.rejected,
+        badgeKey: 'rejected',
+      };
+    }
+    if (record.partner_completed_at) {
+      return {
+        key: 'ready_to_complete',
+        label: STATUS_LABELS.ready_to_complete,
+        badgeKey: 'ready_to_complete',
+      };
+    }
+    if (record.completion_notified_at) {
+      return {
+        key: 'acknowledgement_pending',
+        label: STATUS_LABELS.acknowledgement_pending,
+        badgeKey: 'acknowledgement_pending',
+      };
+    }
+
+    const status = record.status;
+    return {
+      key: status,
+      label: STATUS_LABELS[status] || status,
+      badgeKey: status,
+    };
+  }
+
+  static buildPartnerAcknowledgmentConsentText(includeUpgradation = false) {
+    const upgradationClause = includeUpgradation
+      ? ' and all upgradation work requested as part of this application'
+      : '';
+    return (
+      `I hereby acknowledge that all refurbishment work${upgradationClause} for this center ` +
+      'has been completed as per the approved scope, and the information and documents I am ' +
+      'submitting are true and accurate.'
+    );
+  }
+
+  static async resolvePackageModificationSummary(
+    connection,
+    requestId,
+    removedPackageIds = [],
+    adminAddedPackages = []
+  ) {
+    const removed = [];
+    const added = [];
+
+    if (removedPackageIds?.length > 0) {
+      const removeIds = removedPackageIds.map((r) =>
+        typeof r === 'object' ? r.packageId : r
+      );
+      if (removeIds.length > 0) {
+        const removePlaceholders = removeIds.map(() => '?').join(',');
+        const [rows] = await connection.query(
+          `SELECT rrcp.package_id, rp.package_name, co.course_name, co.id AS course_id
+           FROM refurbishment_request_course_packages rrcp
+           JOIN refurbishment_packages rp ON rp.id = rrcp.package_id
+           JOIN courses co ON co.id = rrcp.course_id
+           WHERE rrcp.refurbishment_request_id = ?
+             AND rrcp.package_id IN (${removePlaceholders})`,
+          [requestId, ...removeIds]
+        );
+        removed.push(...rows.map((row) => ({ ...row, scope: 'course' })));
+      }
+    }
+
+    if (adminAddedPackages?.length > 0) {
+      for (const pkg of adminAddedPackages) {
+        const packageId = typeof pkg === 'object' ? pkg.packageId : pkg;
+        const courseId = typeof pkg === 'object' ? pkg.courseId : null;
+        if (!courseId) continue;
+        const [rows] = await connection.query(
+          `SELECT rp.id AS package_id, rp.package_name, co.course_name, co.id AS course_id
+           FROM refurbishment_packages rp
+           JOIN courses co ON co.id = ?
+           WHERE rp.id = ?
+           LIMIT 1`,
+          [courseId, packageId]
+        );
+        if (rows?.[0]) added.push({ ...rows[0], scope: 'course' });
+      }
+    }
+
+    return {
+      added,
+      removed,
+      hasChanges: added.length > 0 || removed.length > 0,
+      approved_at: new Date().toISOString(),
+    };
+  }
+
+  static async resolveUpgradationPackageRows(connection, packageIds = []) {
+    if (!packageIds?.length) return [];
+    const placeholders = packageIds.map(() => '?').join(',');
+    const [rows] = await connection.query(
+      `SELECT
+         rp.id AS package_id,
+         rp.package_name,
+         GROUP_CONCAT(DISTINCT c.course_name ORDER BY c.course_name SEPARATOR ', ') AS course_name
+       FROM refurbishment_packages rp
+       LEFT JOIN package_courses pc ON pc.package_id = rp.id
+       LEFT JOIN courses c ON c.id = pc.course_id
+       WHERE rp.id IN (${placeholders})
+       GROUP BY rp.id, rp.package_name`,
+      packageIds
+    );
+    return rows.map((row) => ({
+      ...row,
+      scope: 'upgradation',
+      course_id: null,
+    }));
+  }
+
+  static async resolveUpgradationModificationSummary(
+    connection,
+    requestId,
+    finalPackageIds = null
+  ) {
+    if (!Array.isArray(finalPackageIds)) {
+      return { added: [], removed: [] };
+    }
+
+    const [currentRows] = await connection.query(
+      `SELECT package_id
+       FROM refurbishment_upgradation_request_packages
+       WHERE refurbishment_request_id = ?`,
+      [requestId]
+    );
+    const currentIds = new Set(currentRows.map((row) => row.package_id));
+    const finalIds = new Set(finalPackageIds);
+
+    const removedIds = [...currentIds].filter((id) => !finalIds.has(id));
+    const addedIds = [...finalIds].filter((id) => !currentIds.has(id));
+
+    const removed = await RefurbishmentService.resolveUpgradationPackageRows(
+      connection,
+      removedIds
+    );
+    const added = await RefurbishmentService.resolveUpgradationPackageRows(
+      connection,
+      addedIds
+    );
+
+    return { added, removed };
+  }
+
+  static formatPackageModificationLabel(pkg) {
+    const name = pkg.package_name || 'Package';
+    if (pkg.scope === 'upgradation') {
+      return `${name} (Upgradation)`;
+    }
+    return `${name} (${pkg.course_name || 'Course'})`;
+  }
+
+  static buildPackageModificationMessage(summary, centerName) {
+    const lines = [`Your refurbishment request for ${centerName} has been approved.`];
+    if (summary?.removed?.length) {
+      lines.push(
+        `Removed packages: ${summary.removed
+          .map((p) => RefurbishmentService.formatPackageModificationLabel(p))
+          .join(', ')}.`
+      );
+    }
+    if (summary?.added?.length) {
+      lines.push(
+        `Added packages: ${summary.added
+          .map((p) => RefurbishmentService.formatPackageModificationLabel(p))
+          .join(', ')}.`
+      );
+    }
+    if (!summary?.removed?.length && !summary?.added?.length) {
+      lines.push('All selected packages were approved as submitted.');
+    }
+    return lines.join(' ');
+  }
+
+  static parsePackageModificationSummary(raw) {
+    if (!raw) {
+      return { added: [], removed: [], hasChanges: false, approved_at: null };
+    }
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const added = Array.isArray(parsed?.added) ? parsed.added : [];
+      const removed = Array.isArray(parsed?.removed) ? parsed.removed : [];
+      return {
+        added,
+        removed,
+        hasChanges: Boolean(parsed?.hasChanges) || added.length > 0 || removed.length > 0,
+        approved_at: parsed?.approved_at || null,
+      };
+    } catch {
+      return { added: [], removed: [], hasChanges: false, approved_at: null };
+    }
+  }
+
+  static buildRefurbishmentStatusTimeline(record, options = {}) {
+    const hideCompletedEvents = options.hideCompletedEvents !== false;
+
+    if (!record) return { current_status: null, current_status_label: null, events: [] };
+
+    const STATUS_LABELS = REFURBISHMENT_STATUS_LABELS;
+
+    const status = record.status;
+    const events = [];
+
+    const addEvent = (event) => {
+      if (!event) return;
+      if (event.requireDate && !event.occurred_at) return;
+      events.push(event);
+    };
+
+    addEvent({
+      key: 'submitted',
+      status: 'submitted',
+      label: STATUS_LABELS.submitted,
+      occurred_at: record.created_at,
+      detail: null,
+    });
+
+    if (status === 'sent_back') {
+      addEvent({
+        key: 'sent_back',
+        status: 'sent_back',
+        label: STATUS_LABELS.sent_back,
+        occurred_at: record.updated_at,
+        detail: record.admin_remarks || null,
+      });
+    }
+
+    if (status === 'rejected') {
+      addEvent({
+        key: 'rejected',
+        status: 'rejected',
+        label: STATUS_LABELS.rejected,
+        occurred_at: record.rejected_at || record.updated_at,
+        detail: record.rejection_reason || null,
+      });
+    } else {
+      const lifecycle = [
+        { key: 'approved', label: STATUS_LABELS.approved, dateField: 'approved_at' },
+        {
+          key: 'material_procurement',
+          label: STATUS_LABELS.material_procurement,
+          dateField: 'material_procurement_at',
+        },
+        {
+          key: 'installation_in_progress',
+          label: STATUS_LABELS.installation_in_progress,
+          dateField: 'installation_in_progress_at',
+        },
+      ];
+
+      const workflowStatus =
+        status === 'refurbishment_started' ? 'installation_in_progress' : status;
+      const lifecycleKeys = [...lifecycle.map((s) => s.key), 'partner_acknowledgment'];
+      const currentIdx = lifecycleKeys.indexOf(workflowStatus);
+      const completedFlow = status === 'completed';
+
+      lifecycle.forEach((step, idx) => {
+        const reached =
+          completedFlow ||
+          currentIdx >= idx ||
+          (step.key === 'approved' && record.approved_at);
+        if (!reached) return;
+
+        let occurredAt = step.dateField ? record[step.dateField] : null;
+        if (!occurredAt && workflowStatus === step.key) occurredAt = record.updated_at;
+        if (!occurredAt && completedFlow) occurredAt = record.updated_at;
+
+        let label = step.label;
+
+        addEvent({
+          key: step.key,
+          status: step.key,
+          label,
+          occurred_at: occurredAt,
+          detail: null,
+        });
+      });
+
+      const installationDone =
+        Boolean(record.installation_in_progress_at) ||
+        ['installation_in_progress', 'refurbishment_started', 'completed'].includes(status) ||
+        Boolean(record.completion_notified_at) ||
+        Boolean(record.partner_completed_at);
+
+      if (installationDone || record.completion_notified_at || record.partner_completed_at) {
+        let partnerAckLabel = 'Partner Acknowledgement';
+        let partnerAckDate = null;
+        let partnerAckDetail = null;
+
+        if (record.partner_completed_at) {
+          partnerAckLabel = 'Partner Acknowledgement Submitted';
+          partnerAckDate = record.partner_completed_at;
+          partnerAckDetail = record.partner_completion_description || null;
+        } else if (record.completion_notified_at) {
+          partnerAckLabel = 'Partner Acknowledgement Pending';
+          partnerAckDate = record.completion_notified_at;
+          partnerAckDetail =
+            'Waiting for the partner to submit their acknowledgment statement, files, and consent.';
+        }
+
+        addEvent({
+          key: 'partner_acknowledgment',
+          status: 'partner_acknowledgment',
+          label: partnerAckLabel,
+          occurred_at: partnerAckDate,
+          detail: partnerAckDetail,
+          requireDate: false,
+        });
+      }
+    }
+
+    if (!hideCompletedEvents && record.completed_at) {
+      addEvent({
+        key: 'completed',
+        status: 'completed',
+        label: STATUS_LABELS.completed,
+        occurred_at: record.completed_at,
+        detail: record.completion_statement || null,
+      });
+    }
+
+    const sortedEvents = events.sort((a, b) => {
+      const ta = a.occurred_at ? new Date(a.occurred_at).getTime() : 0;
+      const tb = b.occurred_at ? new Date(b.occurred_at).getTime() : 0;
+      if (ta && tb) return ta - tb;
+      if (ta) return -1;
+      if (tb) return 1;
+      return 0;
+    });
+
+    const displayStatus = RefurbishmentService.getRefurbishmentDisplayStatus(record);
+
+    sortedEvents.forEach((event, index) => {
+      if (displayStatus.key === 'acknowledgement_pending') {
+        event.is_current = event.key === 'partner_acknowledgment';
+      } else if (displayStatus.key === 'ready_to_complete') {
+        event.is_current = event.key === 'partner_acknowledgment';
+      } else if (displayStatus.key === 'completed') {
+        event.is_current = false;
+      } else {
+        const workflowStatus =
+          status === 'refurbishment_started' ? 'installation_in_progress' : status;
+        event.is_current =
+          event.status === workflowStatus || event.status === status;
+      }
+      event.is_latest = index === sortedEvents.length - 1;
+    });
+
+    if (sortedEvents.length > 0 && !sortedEvents.some((e) => e.is_current)) {
+      const pendingAck = sortedEvents.find((e) => e.key === 'partner_acknowledgment');
+      if (pendingAck) pendingAck.is_current = true;
+      else sortedEvents[sortedEvents.length - 1].is_current = true;
+    }
+
+    return {
+      current_status: displayStatus.key,
+      current_status_label: displayStatus.label,
+      events: sortedEvents,
+    };
+  }
+
+  static buildRefurbishmentCompletionSummary(record, partnerFiles = [], adminFiles = []) {
+    return {
+      admin: record.completed_at
+        ? {
+            completed_at: record.completed_at,
+            completed_by_name: record.completed_by_name || null,
+            statement: record.completion_statement || null,
+            files: adminFiles,
+          }
+        : null,
+      partner: record.partner_completed_at
+        ? {
+            submitted_at: record.partner_completed_at,
+            description: record.partner_completion_description || null,
+            consent: record.partner_acknowledgment_consent === 1,
+            consent_at: record.partner_acknowledgment_consent_at || null,
+            consent_text: record.partner_acknowledgment_consent_text || null,
+            files: partnerFiles,
+          }
+        : null,
+      completion_notified_at: record.completion_notified_at || null,
+    };
+  }
+
   /**
    * Get refurbishment request details for admin review
    * @param {string} requestId - Refurbishment request ID
@@ -1665,24 +2198,42 @@ class RefurbishmentService {
           rr.justification,
           rr.admin_remarks,
           rr.rejection_reason,
+          rr.rejected_at,
+          rr.rejected_by,
           rr.approved_at,
+          rr.material_procurement_at,
+          rr.installation_in_progress_at,
           rr.approved_by,
           rr.started_at,
           rr.completed_at,
+          rr.completed_by,
           rr.completion_statement,
+          rr.completion_notified_at,
+          rr.partner_completed_at,
+          rr.partner_completion_description,
+          rr.partner_acknowledgment_consent,
+          rr.partner_acknowledgment_consent_at,
+          rr.partner_acknowledgment_consent_text,
           rr.is_upgradation_requested,
           rr.created_at,
+          rr.updated_at,
           c.center_name,
           c.center_id AS center_code,
           c.city AS location_city,
           c.state AS location_state,
           p.id AS partner_id,
           p.name AS partner_name,
-          r.request_number
+          r.request_number,
+          ua.full_name AS approved_by_name,
+          uc.full_name AS completed_by_name,
+          ur.full_name AS rejected_by_name
         FROM refurbishment_requests rr
         JOIN centers c ON rr.center_id = c.id
         JOIN partners p ON c.partner_id = p.id
         LEFT JOIN requests r ON r.id = rr.request_id
+        LEFT JOIN users ua ON ua.id = rr.approved_by
+        LEFT JOIN users uc ON uc.id = rr.completed_by
+        LEFT JOIN users ur ON ur.id = rr.rejected_by
         WHERE rr.id = ?
       `;
 
@@ -1700,24 +2251,42 @@ class RefurbishmentService {
             rr.justification,
             rr.admin_remarks,
             rr.rejection_reason,
+            rr.rejected_at,
+            rr.rejected_by,
             rr.approved_at,
+            rr.material_procurement_at,
+            rr.installation_in_progress_at,
             rr.approved_by,
             rr.started_at,
             rr.completed_at,
+            rr.completed_by,
             rr.completion_statement,
+            rr.completion_notified_at,
+            rr.partner_completed_at,
+            rr.partner_completion_description,
+            rr.partner_acknowledgment_consent,
+            rr.partner_acknowledgment_consent_at,
+            rr.partner_acknowledgment_consent_text,
             rr.is_upgradation_requested,
             rr.created_at,
+            rr.updated_at,
             c.center_name,
             c.center_id AS center_code,
             c.city AS location_city,
             c.state AS location_state,
             p.id AS partner_id,
             p.name AS partner_name,
-            srn.request_number
+            srn.request_number,
+            ua.full_name AS approved_by_name,
+            uc.full_name AS completed_by_name,
+            ur.full_name AS rejected_by_name
           FROM refurbishment_requests rr
           JOIN centers c ON rr.center_id = c.id
           JOIN partners p ON c.partner_id = p.id
           LEFT JOIN scheduled_refurbishment_notifications srn ON srn.id = rr.request_id
+          LEFT JOIN users ua ON ua.id = rr.approved_by
+          LEFT JOIN users uc ON uc.id = rr.completed_by
+          LEFT JOIN users ur ON ur.id = rr.rejected_by
           WHERE rr.request_id = ?
           ORDER BY rr.created_at DESC
           LIMIT 1
@@ -1774,6 +2343,7 @@ class RefurbishmentService {
           file_name,
           file_size_bytes,
           file_mime_type,
+          attachment_type,
           uploaded_by,
           created_at
         FROM refurbishment_request_course_attachments
@@ -1786,6 +2356,14 @@ class RefurbishmentService {
       const isPackageImageAttachment = (att) => {
         const mime = (att.file_mime_type || '').toLowerCase();
         const name = (att.file_name || '').toLowerCase();
+        const attachmentType = (att.attachment_type || '').toLowerCase();
+        if (
+          attachmentType === 'refurbishment_submission' ||
+          attachmentType === 'upgradation_submission'
+        ) {
+          return false;
+        }
+        if (!att.package_id) return false;
         if (!mime.startsWith('image/')) return false;
         return (
           !name.includes('refurbishment-document') &&
@@ -1795,40 +2373,87 @@ class RefurbishmentService {
         );
       };
 
+      const resolveSupportingDocumentType = (att) => {
+        const attachmentType = (att.attachment_type || '').toLowerCase();
+        const name = (att.file_name || '').toLowerCase();
+        if (attachmentType === 'upgradation_submission' || name.includes('upgradation')) {
+          return 'upgradation';
+        }
+        if (
+          attachmentType === 'refurbishment_submission' ||
+          name.includes('refurbishment-document') ||
+          name.includes('refurbishment_document') ||
+          name.includes('refurbishment')
+        ) {
+          return 'refurbishment';
+        }
+        // Legacy rows use partner_before for partner submission files without package_id.
+        if (!att.package_id && attachmentType === 'partner_before') {
+          return 'refurbishment';
+        }
+        return 'other';
+      };
+
+      const isGlobalSubmissionAttachment = (att) => {
+        const attachmentType = (att.attachment_type || '').toLowerCase();
+        if (
+          attachmentType === 'refurbishment_submission' ||
+          attachmentType === 'upgradation_submission'
+        ) {
+          return true;
+        }
+        if (!att.package_id && attachmentType === 'partner_before') {
+          return true;
+        }
+        const name = (att.file_name || '').toLowerCase();
+        return (
+          name.includes('refurbishment-document') ||
+          name.includes('upgradation-document') ||
+          name.includes('refurbishment_document') ||
+          name.includes('upgradation_document')
+        );
+      };
+
       const mapUpload = (att) => ({
         id: att.id,
         url: att.file_url,
         name: att.file_name,
         size: att.file_size_bytes,
         type: att.file_mime_type,
+        attachment_type: att.attachment_type || null,
       });
 
       const imagesByPackageId = {};
-      const legacyImagesByCourse = {};
       const supportingDocuments = [];
 
       partnerImages.forEach((att) => {
-        if (isPackageImageAttachment(att)) {
-          const mapped = mapUpload(att);
-          if (att.package_id) {
-            if (!imagesByPackageId[att.package_id]) {
-              imagesByPackageId[att.package_id] = [];
-            }
-            imagesByPackageId[att.package_id].push(mapped);
-          } else {
-            const courseKey = att.course_id || 'unknown';
-            if (!legacyImagesByCourse[courseKey]) {
-              legacyImagesByCourse[courseKey] = [];
-            }
-            legacyImagesByCourse[courseKey].push(mapped);
-          }
-        } else {
-          const name = (att.file_name || '').toLowerCase();
-          let document_type = 'other';
-          if (name.includes('upgradation')) document_type = 'upgradation';
-          else if (name.includes('refurbishment')) document_type = 'refurbishment';
-          supportingDocuments.push({ ...mapUpload(att), document_type });
+        if (att.attachment_type === 'partner_completion' || att.attachment_type === 'admin_completion') {
+          return;
         }
+
+        const mapped = mapUpload(att);
+
+        // Global submission documents and any file without package_id stay at request level.
+        if (isGlobalSubmissionAttachment(att) || !att.package_id) {
+          supportingDocuments.push({
+            ...mapped,
+            document_type: resolveSupportingDocumentType(att),
+          });
+          return;
+        }
+
+        if (isPackageImageAttachment(att)) {
+          if (!imagesByPackageId[att.package_id]) {
+            imagesByPackageId[att.package_id] = [];
+          }
+          imagesByPackageId[att.package_id].push(mapped);
+          return;
+        }
+
+        supportingDocuments.push({
+          ...mapped,
+          document_type: resolveSupportingDocumentType(att),
+        });
       });
 
       // Get admin-added packages (if any)
@@ -1856,8 +2481,8 @@ class RefurbishmentService {
         [request.id]
       );
 
-      // Get completion images (if status = completed)
-      const [completionImages] = await connection.query(
+      // Completion evidence uploaded by admin or partner
+      const [completionAttachments] = await connection.query(
         `
         SELECT 
           id,
@@ -1866,13 +2491,29 @@ class RefurbishmentService {
           file_name,
           file_size_bytes,
           file_mime_type,
+          attachment_type,
           uploaded_by,
           created_at
         FROM refurbishment_request_course_attachments
         WHERE refurbishment_request_id = ?
+          AND attachment_type IN ('admin_completion', 'partner_completion')
         ORDER BY created_at
       `,
         [request.id]
+      );
+
+      const partnerCompletionFiles = completionAttachments
+        .filter((att) => att.attachment_type === 'partner_completion')
+        .map(mapUpload);
+      const adminCompletionFiles = completionAttachments
+        .filter((att) => att.attachment_type === 'admin_completion')
+        .map(mapUpload);
+
+      const statusTimeline = RefurbishmentService.buildRefurbishmentStatusTimeline(request);
+      const completionSummary = RefurbishmentService.buildRefurbishmentCompletionSummary(
+        request,
+        partnerCompletionFiles,
+        adminCompletionFiles
       );
 
       // Get all available courses for this center (for admin to add more packages)
@@ -1977,10 +2618,7 @@ class RefurbishmentService {
             packages: [],
           };
         }
-        const dedicated = imagesByPackageId[pkg.package_id] || [];
-        const legacy = legacyImagesByCourse[pkg.course_id] || [];
-        const partner_uploaded_images =
-          dedicated.length > 0 ? dedicated : legacy.length > 0 ? [...legacy] : [];
+        const partner_uploaded_images = imagesByPackageId[pkg.package_id] || [];
 
         packagesByCourse[pkg.course_id].packages.push({
           ...pkg,
@@ -2020,7 +2658,24 @@ class RefurbishmentService {
         partner_images: partnerImages,
         supporting_documents: supportingDocuments,
         images_by_package: imagesByPackage,
-        completion_images: completionImages,
+        completion_images: adminCompletionFiles,
+        partner_completion_files: partnerCompletionFiles,
+        status_timeline: statusTimeline,
+        completion_summary: completionSummary,
+        status_dates: {
+          approved_at: request.approved_at || null,
+          material_procurement_at: request.material_procurement_at || null,
+          installation_in_progress_at: request.installation_in_progress_at || null,
+          completed_at: request.completed_at || null,
+        },
+        rejection_summary:
+          request.status === 'rejected'
+            ? {
+                rejected_at: request.rejected_at || null,
+                rejected_by_name: request.rejected_by_name || null,
+                reason: request.rejection_reason || null,
+              }
+            : null,
         available_courses: availableCourses,
         upgradation: {
           is_requested:
@@ -2193,7 +2848,7 @@ class RefurbishmentService {
   }
 
   /**
-   * Get available upgradation packages for a refurbishment request's center,
+   * Get available upgradation and lab packages for a refurbishment request's center,
    * filtered by the courses the center runs.  Also returns the current admin
    * selections so the front-end can pre-tick them.
    *
@@ -2218,7 +2873,7 @@ class RefurbishmentService {
       );
       const centerCourseIds = centerCourses.map((r) => r.course_id);
 
-      // All active upgradation packages (filter by center's courses if any)
+      // Active upgradation + lab (refurbishment) packages for the center's courses.
       let pkgQuery = `
         SELECT
           rp.id,
@@ -2233,7 +2888,7 @@ class RefurbishmentService {
         FROM refurbishment_packages rp
         LEFT JOIN package_courses pc ON pc.package_id = rp.id
         LEFT JOIN courses c ON pc.course_id = c.id
-        WHERE rp.category = 'upgradation'
+        WHERE rp.category IN ('upgradation', 'refurbishment')
           AND rp.is_active = 1`;
 
       const params = [];
@@ -2244,7 +2899,7 @@ class RefurbishmentService {
         ))`;
         params.push(...centerCourseIds);
       }
-      pkgQuery += ` GROUP BY rp.id ORDER BY rp.display_order ASC, rp.package_name ASC`;
+      pkgQuery += ` GROUP BY rp.id ORDER BY FIELD(rp.category, 'upgradation', 'refurbishment'), rp.display_order ASC, rp.package_name ASC`;
 
       const [packages] = await connection.query(pkgQuery, params);
 
@@ -2347,7 +3002,8 @@ class RefurbishmentService {
     adminUserId,
     adminRemarks = null,
     removedPackageIds = [],
-    adminAddedPackages = []
+    adminAddedPackages = [],
+    finalUpgradationPackageIds = null
   ) {
     const connection = await db.getConnection();
 
@@ -2394,6 +3050,27 @@ class RefurbishmentService {
 
       const requestData = request[0];
 
+      const packageSummary = await RefurbishmentService.resolvePackageModificationSummary(
+        connection,
+        requestId,
+        removedPackageIds,
+        adminAddedPackages
+      );
+
+      if (Array.isArray(finalUpgradationPackageIds)) {
+        const upgSummary = await RefurbishmentService.resolveUpgradationModificationSummary(
+          connection,
+          requestId,
+          finalUpgradationPackageIds
+        );
+        packageSummary.added.push(...upgSummary.added);
+        packageSummary.removed.push(...upgSummary.removed);
+        packageSummary.hasChanges =
+          packageSummary.hasChanges ||
+          upgSummary.added.length > 0 ||
+          upgSummary.removed.length > 0;
+      }
+
       // ── Apply package modifications BEFORE approval ──────────────────
       // 1. Remove partner-selected packages that admin has rejected
       if (removedPackageIds && removedPackageIds.length > 0) {
@@ -2421,6 +3098,22 @@ class RefurbishmentService {
         }
       }
 
+      // 3. Apply admin's final upgradation package list (partner kept + admin added − removed)
+      if (Array.isArray(finalUpgradationPackageIds)) {
+        await connection.query(
+          'DELETE FROM refurbishment_upgradation_request_packages WHERE refurbishment_request_id = ?',
+          [requestId]
+        );
+        for (const packageId of finalUpgradationPackageIds) {
+          await connection.query(
+            `INSERT INTO refurbishment_upgradation_request_packages
+               (id, refurbishment_request_id, package_id)
+             VALUES (?, ?, ?)`,
+            [uuidv4(), requestId, packageId]
+          );
+        }
+      }
+
       // Update request status to approved
       await connection.query(
         `
@@ -2429,10 +3122,16 @@ class RefurbishmentService {
             approved_by = ?,
             approved_at = NOW(),
             admin_remarks = ?,
+            package_modification_summary = ?,
             updated_at = NOW()
         WHERE id = ?
       `,
-        [adminUserId, adminRemarks, requestId]
+        [
+          adminUserId,
+          adminRemarks,
+          packageSummary.hasChanges ? JSON.stringify(packageSummary) : null,
+          requestId,
+        ]
       );
 
       // Create notification for partner
@@ -2441,24 +3140,38 @@ class RefurbishmentService {
         ? String(requestData.request_number).toUpperCase()
         : `REF-${requestId.slice(0, 8).toUpperCase()}`;
 
+      const approvalMessage = RefurbishmentService.buildPackageModificationMessage(
+        packageSummary,
+        requestData.center_name
+      );
+      const notificationPayload = {
+        request_number: requestNumber,
+        center_name: requestData.center_name,
+        package_modifications: {
+          added: packageSummary.added,
+          removed: packageSummary.removed,
+        },
+      };
+
       // Get partner user ID
       const [partnerUsers] = await connection.query(
-        'SELECT id FROM users WHERE partner_id = ? AND role = ? AND status = ? LIMIT 1',
+        'SELECT id, email FROM users WHERE partner_id = ? AND role = ? AND status = ? LIMIT 1',
         [requestData.partner_id, 'PARTNER', 'active']
       );
 
       if (partnerUsers && partnerUsers.length > 0) {
         await connection.query(
           `INSERT INTO notifications (
-            id, recipient_id, type, alert_type, title, message,
+            id, recipient_id, type, alert_type, title, message, payload,
             related_entity_type, related_entity_id, is_read, created_at
-          ) VALUES (?, ?, 'alert', 'refurbishment_approved', ?, ?, 'center', ?, 0, NOW())`,
+          ) VALUES (?, ?, 'alert', 'refurbishment_approved', ?, ?, ?, 'refurbishment_request', ?, 0, NOW())`,
           [
             notificationId,
             partnerUsers[0].id,
             `Refurbishment Request Approved - ${requestNumber}`,
-            `Your refurbishment request for ${requestData.center_name} has been approved by ${admin[0].full_name}.${adminRemarks ? ' Remarks: ' + adminRemarks : ''}`,
-            requestData.center_id,
+            `${approvalMessage}${adminRemarks ? ` Admin remarks: ${adminRemarks}` : ''}`,
+            JSON.stringify(notificationPayload),
+            requestId,
           ]
         );
       }
@@ -2482,12 +3195,30 @@ class RefurbishmentService {
           type: 'alert',
           alert_type: 'refurbishment_approved',
           title: `Refurbishment Request Approved - ${requestNumber}`,
-          message: `Your refurbishment request for ${requestData.center_name} has been approved by ${admin[0].full_name}.`,
-          related_entity_type: 'center',
-          related_entity_id: requestData.center_id,
+          message: approvalMessage,
+          payload: notificationPayload,
+          related_entity_type: 'refurbishment_request',
+          related_entity_id: requestId,
           is_read: false,
           created_at: new Date().toISOString(),
         });
+
+        if (partnerUsers[0].email) {
+          emailService
+            .sendRefurbishmentNotificationEmail({
+              email: partnerUsers[0].email,
+              partnerName: requestData.partner_name,
+              centerName: requestData.center_name,
+              message: approvalMessage,
+              packageModifications: notificationPayload.package_modifications,
+            })
+            .catch((emailErr) => {
+              console.error(
+                '[RefurbishmentService] Failed to send approval email:',
+                emailErr.message
+              );
+            });
+        }
       }
 
       return {
@@ -2890,13 +3621,8 @@ class RefurbishmentService {
         throw new Error('Unauthorized: Admin access required');
       }
 
-      // Validate completion data
-      if (
-        !completionData.completion_statement ||
-        completionData.completion_statement.trim() === ''
-      ) {
-        throw new Error('Completion statement is required');
-      }
+      // Completion statement and files are optional for admin
+      const completionStatement = (completionData.completion_statement || '').trim();
 
       // Get request details
       const [request] = await connection.query(
@@ -2933,6 +3659,26 @@ class RefurbishmentService {
       }
 
       const requestData = request[0];
+      const completedAt = RefurbishmentService.parseWorkflowStatusDate(
+        completionData.completion_date
+      );
+
+      const optionalDateUpdates = [];
+      const optionalDateValues = [];
+      const optionalDateMap = {
+        approved_at: completionData.approved_at,
+        material_procurement_at: completionData.material_procurement_at,
+        installation_in_progress_at: completionData.installation_in_progress_at,
+      };
+
+      Object.entries(optionalDateMap).forEach(([column, value]) => {
+        if (!value) return;
+        optionalDateUpdates.push(`${column} = ?`);
+        optionalDateValues.push(RefurbishmentService.parseWorkflowStatusDate(value));
+      });
+
+      const optionalDateSql =
+        optionalDateUpdates.length > 0 ? `, ${optionalDateUpdates.join(', ')}` : '';
 
       // Update status to completed
       await connection.query(
@@ -2941,16 +3687,31 @@ class RefurbishmentService {
         SET status = 'completed',
             completed_by = ?,
             completed_at = ?,
-            completion_statement = ?,
+            completion_statement = ?${optionalDateSql},
             updated_at = NOW()
         WHERE id = ?
       `,
         [
           adminUserId,
-          completionData.completion_date || new Date(),
-          completionData.completion_statement,
+          completedAt,
+          completionStatement || null,
+          ...optionalDateValues,
           requestId,
         ]
+      );
+
+      // Keep center record in sync so Overview/eligibility use the latest refurbishment date
+      await connection.query(
+        `
+        UPDATE centers
+        SET last_refurbishment_date = ?
+        WHERE id = ?
+          AND (
+            last_refurbishment_date IS NULL
+            OR last_refurbishment_date < ?
+          )
+      `,
+        [completedAt, requestData.center_id, completedAt]
       );
 
       // Insert completion images
@@ -2998,6 +3759,10 @@ class RefurbishmentService {
       );
 
       if (partnerUsers && partnerUsers.length > 0) {
+        const completionMessage = completionStatement
+          ? `The refurbishment work for ${requestData.center_name} has been completed. ${completionStatement.substring(0, 100)}${completionStatement.length > 100 ? '...' : ''}`
+          : `The refurbishment work for ${requestData.center_name} has been completed.`;
+
         await connection.query(
           `INSERT INTO notifications (
             id, recipient_id, type, alert_type, title, message,
@@ -3007,7 +3772,7 @@ class RefurbishmentService {
             notificationId,
             partnerUsers[0].id,
             `Refurbishment Completed - ${requestNumber}`,
-            `The refurbishment work for ${requestData.center_name} has been completed. ${completionData.completion_statement.substring(0, 100)}...`,
+            completionMessage,
             requestData.center_id,
           ]
         );
@@ -3067,12 +3832,72 @@ class RefurbishmentService {
    * @param {string} adminUserId
    * @param {string} newStatus
    */
-  static async updateRefurbishmentStatus(requestId, adminUserId, newStatus) {
+  static async updateRefurbishmentStepDate(requestId, adminUserId, step, statusDate) {
+    const STEP_DATE_FIELDS = {
+      approved: 'approved_at',
+      material_procurement: 'material_procurement_at',
+      installation_in_progress: 'installation_in_progress_at',
+    };
+
+    const allowedStatusesByStep = {
+      approved: ['approved', 'material_procurement', 'installation_in_progress', 'refurbishment_started'],
+      material_procurement: [
+        'material_procurement',
+        'installation_in_progress',
+        'refurbishment_started',
+      ],
+      installation_in_progress: ['installation_in_progress', 'refurbishment_started'],
+    };
+
+    const field = STEP_DATE_FIELDS[step];
+    if (!field) throw new Error('Invalid workflow step');
+
+    const [admin] = await db.query(
+      'SELECT role FROM users WHERE id = ? AND role IN ("ADMIN", "SUPER_ADMIN")',
+      [adminUserId]
+    );
+    if (!admin || admin.length === 0) throw new Error('Unauthorized: Admin access required');
+
+    const [rows] = await db.query('SELECT id, status FROM refurbishment_requests WHERE id = ?', [
+      requestId,
+    ]);
+    if (!rows || rows.length === 0) throw new NotFoundError('Refurbishment request not found');
+
+    const allowed = allowedStatusesByStep[step] || [];
+    if (!allowed.includes(rows[0].status)) {
+      throw new Error(`Cannot save ${step} date when status is: ${rows[0].status}`);
+    }
+
+    const parsedDate = RefurbishmentService.parseWorkflowStatusDate(statusDate);
+    await db.query(
+      `UPDATE refurbishment_requests SET ${field} = ?, updated_at = NOW() WHERE id = ?`,
+      [parsedDate, requestId]
+    );
+
+    return { success: true, step, status_date: parsedDate, field };
+  }
+
+  static parseWorkflowStatusDate(value) {
+    if (!value) return new Date();
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error('Invalid status date');
+    }
+    return parsed;
+  }
+
+  static async updateRefurbishmentStatus(requestId, adminUserId, newStatus, options = {}) {
     const VALID_TRANSITIONS = {
       approved: ['material_procurement'],
       material_procurement: ['installation_in_progress'],
       installation_in_progress: [], // must use completeRefurbishment to → completed
       refurbishment_started: ['installation_in_progress', 'material_procurement'],
+    };
+
+    const STATUS_DATE_FIELDS = {
+      approved: 'approved_at',
+      material_procurement: 'material_procurement_at',
+      installation_in_progress: 'installation_in_progress_at',
     };
 
     const [admin] = await db.query(
@@ -3092,16 +3917,185 @@ class RefurbishmentService {
       throw new Error(`Invalid transition: ${current} → ${newStatus}`);
     }
 
-    await db.query(
-      'UPDATE refurbishment_requests SET status = ?, updated_at = NOW() WHERE id = ?',
-      [newStatus, requestId]
-    );
+    const dateField = STATUS_DATE_FIELDS[current];
+    const statusDate = RefurbishmentService.parseWorkflowStatusDate(options.status_date);
+
+    if (dateField) {
+      await db.query(
+        `UPDATE refurbishment_requests
+         SET status = ?, ${dateField} = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [newStatus, statusDate, requestId]
+      );
+    } else {
+      await db.query(
+        'UPDATE refurbishment_requests SET status = ?, updated_at = NOW() WHERE id = ?',
+        [newStatus, requestId]
+      );
+    }
 
     console.log(`[RefurbishmentService] Status updated: ${requestId} → ${newStatus}`);
-    return { success: true, status: newStatus };
+    return {
+      success: true,
+      status: newStatus,
+      status_date: statusDate,
+      status_date_field: dateField || null,
+    };
   }
 
-  // ── Partner 2-month completion submission ─────────────────────────────────
+  // ── Partner acknowledgment (admin-initiated) ───────────────────────────────
+  /**
+   * Admin requests partner acknowledgment before final completion.
+   * Sends in-app notification and email to the partner.
+   */
+  static async requestPartnerAcknowledgment(requestId, adminUserId) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [admin] = await connection.query(
+        'SELECT role, full_name FROM users WHERE id = ? AND role IN ("ADMIN", "SUPER_ADMIN")',
+        [adminUserId]
+      );
+      if (!admin || admin.length === 0) {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      const [rows] = await connection.query(
+        `SELECT
+           rr.id,
+           rr.status,
+           rr.completion_notified_at,
+           rr.partner_completed_at,
+           c.center_name,
+           c.partner_id,
+           p.name AS partner_name,
+           r.request_number
+         FROM refurbishment_requests rr
+         JOIN centers c ON c.id = rr.center_id
+         JOIN partners p ON p.id = c.partner_id
+         LEFT JOIN requests r ON r.id = rr.request_id
+         WHERE rr.id = ?`,
+        [requestId]
+      );
+
+      if (!rows || rows.length === 0) {
+        throw new NotFoundError('Refurbishment request not found');
+      }
+
+      const request = rows[0];
+      const completableStatuses = [
+        'approved',
+        'material_procurement',
+        'installation_in_progress',
+        'refurbishment_started',
+      ];
+
+      if (!completableStatuses.includes(request.status)) {
+        throw new Error(
+          `Cannot request partner acknowledgment when status is: ${request.status}`
+        );
+      }
+
+      if (request.partner_completed_at) {
+        throw new Error('Partner has already submitted their acknowledgment');
+      }
+
+      if (request.completion_notified_at) {
+        throw new Error('Partner acknowledgment has already been requested');
+      }
+
+      await connection.query(
+        `UPDATE refurbishment_requests
+         SET completion_notified_at = NOW(), updated_at = NOW()
+         WHERE id = ?`,
+        [requestId]
+      );
+
+      const requestNumber = request.request_number
+        ? String(request.request_number).toUpperCase()
+        : `REF-${requestId.slice(0, 8).toUpperCase()}`;
+
+      const [partnerUsers] = await connection.query(
+        `SELECT u.id, u.email
+         FROM users u
+         WHERE u.partner_id = ? AND u.role = 'PARTNER' AND u.status = 'active'
+         LIMIT 1`,
+        [request.partner_id]
+      );
+
+      const ackMessage =
+        `Please submit your acknowledgment for the refurbishment work at ${request.center_name}. ` +
+        'Open this alert and click Submit Acknowledgment to upload your statement and supporting files.';
+
+      if (partnerUsers && partnerUsers.length > 0) {
+        const notificationId = uuidv4();
+        await connection.query(
+          `INSERT INTO notifications (
+             id, recipient_id, type, alert_type, title, message,
+             related_entity_type, related_entity_id, is_read, created_at
+           ) VALUES (?, ?, 'alert', 'refurbishment_acknowledgment_due', ?, ?, 'refurbishment_request', ?, 0, NOW())`,
+          [
+            notificationId,
+            partnerUsers[0].id,
+            `Acknowledgment Required - ${requestNumber}`,
+            ackMessage,
+            requestId,
+          ]
+        );
+
+        if (partnerUsers[0].email) {
+          emailService
+            .sendRefurbishmentNotificationEmail({
+              email: partnerUsers[0].email,
+              partnerName: request.partner_name,
+              centerName: request.center_name,
+              message: ackMessage,
+            })
+            .catch((emailErr) => {
+              console.error(
+                '[RefurbishmentService] Failed to send acknowledgment email:',
+                emailErr.message
+              );
+            });
+        }
+      }
+
+      await connection.commit();
+
+      if (partnerUsers && partnerUsers.length > 0) {
+        emitToUser(partnerUsers[0].id, 'notification:new', {
+          id: uuidv4(),
+          type: 'alert',
+          alert_type: 'refurbishment_acknowledgment_due',
+          title: `Acknowledgment Required - ${requestNumber}`,
+          message: ackMessage,
+          related_entity_type: 'refurbishment_request',
+          related_entity_id: requestId,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+      }
+
+      console.log(
+        `[RefurbishmentService] Partner acknowledgment requested for ${requestId} by ${admin[0].full_name}`
+      );
+
+      return {
+        success: true,
+        message: 'Partner acknowledgment request sent successfully',
+        completion_notified_at: new Date().toISOString(),
+      };
+    } catch (error) {
+      await connection.rollback();
+      console.error('[RefurbishmentService] Error requesting partner acknowledgment:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  // ── Partner acknowledgment submission ─────────────────────────────────
   /**
    * Partner submits their completion report after receiving the 2-month notification.
    * Only allowed when admin has NOT yet moved status to 'completed'.
@@ -3114,11 +4108,38 @@ class RefurbishmentService {
     try {
       await connection.beginTransaction();
 
+      const statement = (data.description || '').trim();
+      if (!statement) {
+        throw new Error('Acknowledgment statement is required');
+      }
+      if (!Array.isArray(data.fileUrls) || data.fileUrls.length === 0) {
+        throw new Error('At least one file is required');
+      }
+      if (!data.consent) {
+        throw new Error('Acknowledgment consent is required');
+      }
+      const consentText = (data.consentText || '').trim();
+      if (!consentText) {
+        throw new Error('Acknowledgment consent text is required');
+      }
+
       // Validate ownership
       const [rows] = await connection.query(
-        `SELECT rr.id, rr.status, rr.center_id, c.partner_id
+        `SELECT
+           rr.id,
+           rr.status,
+           rr.center_id,
+           rr.completion_notified_at,
+           rr.partner_completed_at,
+           rr.is_upgradation_requested,
+           c.center_name,
+           c.partner_id,
+           p.name AS partner_name,
+           r.request_number
          FROM refurbishment_requests rr
          JOIN centers c ON c.id = rr.center_id
+         JOIN partners p ON p.id = c.partner_id
+         LEFT JOIN requests r ON r.id = rr.request_id
          WHERE rr.id = ?`,
         [requestId]
       );
@@ -3127,16 +4148,27 @@ class RefurbishmentService {
       if (rows[0].status === 'completed')
         throw new Error('Admin has already marked this request as completed');
       if (rows[0].status === 'rejected')
-        throw new Error('Cannot submit completion for a rejected request');
+        throw new Error('Cannot submit acknowledgment for a rejected request');
+      if (!rows[0].completion_notified_at) {
+        throw new Error('Acknowledgment has not been requested for this request yet');
+      }
+      if (rows[0].partner_completed_at) {
+        throw new Error('Acknowledgment has already been submitted');
+      }
+
+      const requestData = rows[0];
 
       // Save description + timestamp
       await connection.query(
         `UPDATE refurbishment_requests
          SET partner_completion_description = ?,
-             partner_completed_at           = NOW(),
-             updated_at                     = NOW()
+             partner_completed_at = NOW(),
+             partner_acknowledgment_consent = 1,
+             partner_acknowledgment_consent_at = NOW(),
+             partner_acknowledgment_consent_text = ?,
+             updated_at = NOW()
          WHERE id = ?`,
-        [data.description || '', requestId]
+        [statement, consentText, requestId]
       );
 
       // Save file attachments
@@ -3150,7 +4182,7 @@ class RefurbishmentService {
               uuidv4(),
               requestId,
               file.url,
-              file.name || 'completion_file',
+              file.name || 'acknowledgment_file',
               file.size || null,
               file.type || null,
               data.userId || null,
@@ -3159,9 +4191,79 @@ class RefurbishmentService {
         }
       }
 
+      const requestNumber = requestData.request_number
+        ? String(requestData.request_number).toUpperCase()
+        : `REF-${requestId.slice(0, 8).toUpperCase()}`;
+
+      const adminNotificationId = uuidv4();
+      await connection.query(
+        `INSERT INTO notifications (
+           id, recipient_role, type, alert_type, title, message,
+           related_entity_type, related_entity_id, is_read, created_at
+         ) VALUES (?, 'ADMIN', 'alert', 'refurbishment_partner_acknowledgment', ?, ?, 'refurbishment_request', ?, 0, NOW())`,
+        [
+          adminNotificationId,
+          `Partner Acknowledgment - ${requestNumber}`,
+          `${requestData.partner_name || 'Partner'} submitted acknowledgment for ${requestData.center_name}. Review their statement and files before completing the request.`,
+          requestId,
+        ]
+      );
+
+      await connection.query(
+        `UPDATE notifications
+         SET alert_type = 'refurbishment_acknowledgment_submitted',
+             title = ?,
+             message = ?,
+             is_read = 1
+         WHERE related_entity_id = ?
+           AND related_entity_type = 'refurbishment_request'
+           AND alert_type = 'refurbishment_acknowledgment_due'`,
+        [
+          `Acknowledgment Submitted - ${requestNumber}`,
+          'Your acknowledgment has been received. Admin will review your statement and files before completing the request.',
+          requestId,
+        ]
+      );
+
+      const [partnerUsers] = await connection.query(
+        `SELECT id FROM users
+         WHERE partner_id = ? AND role = 'PARTNER' AND status = 'active'
+         LIMIT 1`,
+        [requestData.partner_id]
+      );
+
       await connection.commit();
-      console.log(`[RefurbishmentService] Partner completion submitted for ${requestId}`);
-      return { success: true, message: 'Completion report submitted successfully' };
+      console.log(`[RefurbishmentService] Partner acknowledgment submitted for ${requestId}`);
+
+      try {
+        emitToRole('ADMIN', 'notification:new', {
+          id: adminNotificationId,
+          type: 'alert',
+          alert_type: 'refurbishment_partner_acknowledgment',
+          title: `Partner Acknowledgment - ${requestNumber}`,
+          message: `${requestData.partner_name || 'Partner'} submitted acknowledgment for ${requestData.center_name}.`,
+          related_entity_type: 'refurbishment_request',
+          related_entity_id: requestId,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+        if (partnerUsers?.[0]?.id) {
+          emitToUser(partnerUsers[0].id, 'notification:new', {
+            type: 'alert',
+            alert_type: 'refurbishment_acknowledgment_submitted',
+            related_entity_type: 'refurbishment_request',
+            related_entity_id: requestId,
+            created_at: new Date().toISOString(),
+          });
+        }
+      } catch (socketError) {
+        console.error(
+          '[RefurbishmentService] Failed to emit partner acknowledgment socket:',
+          socketError.message
+        );
+      }
+
+      return { success: true, message: 'Acknowledgment submitted successfully' };
     } catch (error) {
       await connection.rollback();
       console.error('[RefurbishmentService] Error submitting partner completion:', error);

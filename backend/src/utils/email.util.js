@@ -404,11 +404,64 @@ This is an automated email. Please do not reply to this message.
    * @param {string} data.message - Custom message (optional)
    * @returns {Promise<Object>} Email result
    */
-  async sendRefurbishmentNotificationEmail({ email, partnerName, centerName, message }) {
+  async sendRefurbishmentNotificationEmail({
+    email,
+    partnerName,
+    centerName,
+    message,
+    packageModifications = null,
+  }) {
     const subject = `Refurbishment Notification – ${centerName}`;
     const customMsg =
       message ||
       'Your center is eligible for refurbishment. Please log in to the portal to review and submit your requirements.';
+
+    const packageHtml = packageModifications
+      ? RefurbishmentService_buildPackageEmailHtml(packageModifications)
+      : '';
+
+    function RefurbishmentService_buildPackageEmailHtml(mods) {
+      const sections = [];
+      if (mods.removed?.length) {
+        sections.push(
+          `<p style="margin:8px 0 4px;font-weight:600;">Removed packages</p><ul style="margin:0;padding-left:18px;">${mods.removed
+            .map(
+              (p) =>
+                `<li>${p.package_name || 'Package'}${p.course_name ? ` (${p.course_name})` : ''}</li>`
+            )
+            .join('')}</ul>`
+        );
+      }
+      if (mods.added?.length) {
+        sections.push(
+          `<p style="margin:8px 0 4px;font-weight:600;">Added packages</p><ul style="margin:0;padding-left:18px;">${mods.added
+            .map(
+              (p) =>
+                `<li>${p.package_name || 'Package'}${p.course_name ? ` (${p.course_name})` : ''}</li>`
+            )
+            .join('')}</ul>`
+        );
+      }
+      if (!sections.length) return '';
+      return `<div style="margin-top:16px;padding:12px 16px;background:#fff;border-left:4px solid #009530;border-radius:0 8px 8px 0;">${sections.join('')}</div>`;
+    }
+
+    const packageText = packageModifications
+      ? [
+          packageModifications.removed?.length
+            ? `Removed packages: ${packageModifications.removed
+                .map((p) => `${p.package_name}${p.course_name ? ` (${p.course_name})` : ''}`)
+                .join(', ')}`
+            : null,
+          packageModifications.added?.length
+            ? `Added packages: ${packageModifications.added
+                .map((p) => `${p.package_name}${p.course_name ? ` (${p.course_name})` : ''}`)
+                .join(', ')}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : '';
 
     const html = `
       <!DOCTYPE html>
@@ -437,6 +490,7 @@ This is an automated email. Please do not reply to this message.
               <div class="badge">Action Required</div>
               <p style="margin:0; font-size:15px;">${customMsg}</p>
             </div>
+            ${packageHtml}
             <table style="width:100%; border-collapse:collapse; margin: 16px 0;">
               <tr>
                 <td style="padding:8px 0; color:#6b7280; font-size:13px; width:40%;">Center</td>
@@ -462,6 +516,7 @@ This is an automated email. Please do not reply to this message.
 Dear ${partnerName},
 
 ${customMsg}
+${packageText ? `\n${packageText}\n` : ''}
 
 Center: ${centerName}
 
@@ -554,6 +609,206 @@ This is an automated message from SEIF Portal. Please do not reply.
           contentType: attachment.contentType,
         },
       ],
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
+  /**
+   * Email center spoke person with ESSCI step 1 assessment access details.
+   */
+  async sendCertificationSpokeStep1Email({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    batchNumber,
+    batchStartDate,
+    batchEndDate,
+    assessmentDate,
+    responseLink,
+    responseId,
+    responsePassword,
+    qrCodePath,
+    qrCodeName,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const path = require('path');
+    const fs = require('fs');
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const fmtDate = (value) => {
+      if (!value) return '—';
+      try {
+        return new Date(value).toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+      } catch {
+        return '—';
+      }
+    };
+
+    const safeName = esc(recipientName || 'Center Spoke Person');
+    const partner = esc(partnerName || '—');
+    const center = esc(centerName || 'your center');
+    const batch = esc(batchNumber || '—');
+    const subject = `SEIF: Assessment Access Details — ${centerName || 'Center'}`;
+
+    const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+    const attachments = [];
+    let qrHtml = '';
+
+    if (qrCodePath && fs.existsSync(qrCodePath)) {
+      const ext = path.extname(qrCodePath).toLowerCase();
+      const filename = qrCodeName || path.basename(qrCodePath);
+      const attachment = { filename, path: qrCodePath };
+
+      if (IMAGE_EXTS.includes(ext)) {
+        attachment.cid = 'essci-qrcode';
+        attachments.push(attachment);
+        qrHtml = `
+          <div style="margin-top:20px;text-align:center;">
+            <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#374151;">Assessment QR Code</p>
+            <img src="cid:essci-qrcode" alt="Assessment QR Code" style="max-width:220px;height:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;" />
+          </div>`;
+      } else {
+        attachments.push(attachment);
+        qrHtml = `
+          <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+            <p style="margin:0;font-size:13px;color:#166534;">
+              <strong>QR Code:</strong> Attached as <strong>${esc(filename)}</strong>
+            </p>
+          </div>`;
+      }
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; margin: 0; background: #f3f4f6; }
+          .container { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+          .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+          .header { background: #009530; color: #ffffff; padding: 20px 24px; }
+          .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+          .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.92; }
+          .body { padding: 24px; }
+          .section { margin-bottom: 20px; }
+          .section-title { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7280; margin: 0 0 10px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+          .item-label { font-size: 12px; color: #6b7280; margin: 0 0 2px; }
+          .item-value { font-size: 14px; color: #111827; margin: 0; font-weight: 600; word-break: break-word; }
+          .access-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+          .access-row { margin: 0 0 10px; font-size: 14px; }
+          .access-row:last-child { margin-bottom: 0; }
+          .access-label { display: inline-block; min-width: 88px; font-weight: 700; color: #374151; }
+          .access-value { color: #111827; word-break: break-all; }
+          .link { color: #009530; text-decoration: none; font-weight: 600; }
+          .footer { padding: 0 24px 24px; font-size: 12px; color: #9ca3af; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="card">
+            <div class="header">
+              <h1>Assessment Access Details</h1>
+              <p>ESSCI has shared certification assessment access for your center batch.</p>
+            </div>
+            <div class="body">
+              <p style="margin-top:0;">Hello <strong>${safeName}</strong>,</p>
+              <p style="margin-bottom:20px;">
+                Please use the details below for <strong>${center}</strong> (batch <strong>${batch}</strong>).
+              </p>
+
+              <div class="section">
+                <p class="section-title">Batch Details</p>
+                <div class="grid">
+                  <div>
+                    <p class="item-label">Partner</p>
+                    <p class="item-value">${partner}</p>
+                  </div>
+                  <div>
+                    <p class="item-label">Center</p>
+                    <p class="item-value">${center}</p>
+                  </div>
+                  <div>
+                    <p class="item-label">Batch</p>
+                    <p class="item-value">${batch}</p>
+                  </div>
+                  <div>
+                    <p class="item-label">Assessment Date</p>
+                    <p class="item-value">${fmtDate(assessmentDate)}</p>
+                  </div>
+                  <div>
+                    <p class="item-label">Batch Start</p>
+                    <p class="item-value">${fmtDate(batchStartDate)}</p>
+                  </div>
+                  <div>
+                    <p class="item-label">Batch End</p>
+                    <p class="item-value">${fmtDate(batchEndDate)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="section">
+                <p class="section-title">Assessment Login</p>
+                <div class="access-box">
+                  ${responseLink ? `<p class="access-row"><span class="access-label">Link</span><span class="access-value"><a class="link" href="${esc(responseLink)}">${esc(responseLink)}</a></span></p>` : ''}
+                  ${responseId ? `<p class="access-row"><span class="access-label">ID</span><span class="access-value">${esc(responseId)}</span></p>` : ''}
+                  ${responsePassword ? `<p class="access-row"><span class="access-label">Password</span><span class="access-value">${esc(responsePassword)}</span></p>` : ''}
+                </div>
+                ${qrHtml}
+              </div>
+            </div>
+            <div class="footer">This is an automated email from SEIF Portal. Please do not reply.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Hello ${recipientName || 'Center Spoke Person'},`,
+      '',
+      `ESSCI has shared assessment access details for ${centerName || 'your center'} (batch ${batchNumber || 'N/A'}).`,
+      '',
+      'Batch Details',
+      `Partner: ${partnerName || '—'}`,
+      `Center: ${centerName || '—'}`,
+      `Batch: ${batchNumber || '—'}`,
+      `Assessment Date: ${fmtDate(assessmentDate)}`,
+      `Batch Start: ${fmtDate(batchStartDate)}`,
+      `Batch End: ${fmtDate(batchEndDate)}`,
+      '',
+      'Assessment Login',
+      responseLink ? `Link: ${responseLink}` : '',
+      responseId ? `ID: ${responseId}` : '',
+      responsePassword ? `Password: ${responsePassword}` : '',
+      qrCodePath ? `QR Code: ${attachments.length ? 'attached to this email' : 'not available'}` : '',
+      '',
+      'This is an automated email from SEIF Portal.',
+    ]
+      .filter((line) => line !== '')
+      .join('\n');
+
+    const info = await this.transporter.sendMail({
+      from: `"${this.fromName}" <${this.fromEmail}>`,
+      to: toEmail,
+      subject,
+      text,
+      html,
+      attachments,
     });
 
     return { success: true, messageId: info.messageId };

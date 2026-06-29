@@ -12,13 +12,17 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: true, // Listen on all addresses
+    host: true, // Listen on all addresses (e.g. http://192.168.x.x:5173)
     strictPort: true,
-    hmr: {
-      protocol: "ws",
-      host: "localhost",
-      port: 5173,
-      clientPort: 5173,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:5000",
+        changeOrigin: true,
+      },
+      "/uploads": {
+        target: "http://127.0.0.1:5000",
+        changeOrigin: true,
+      },
     },
   },
 });

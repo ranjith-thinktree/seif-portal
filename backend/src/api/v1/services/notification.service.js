@@ -1,4 +1,5 @@
 const pool = require('../../../database/connection').pool;
+const { emitToRole } = require('../../../websocket/socket');
 
 /**
  * Notification Service
@@ -563,6 +564,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
     // Covers: eligibility alerts, new request, approved, rejected, completed, response
     // For 'refurbishment' exact-match (action-required) notifications, we join
     // refurbishment_requests to detect whether the partner already submitted.
+    // For acknowledgment alerts we join by request id to detect partner_completed_at.
     const refurbishmentQuery = `
       SELECT 
         n.id,
@@ -579,14 +581,24 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
         'refurbishment' as notification_type,
         CASE
           WHEN n.alert_type = 'refurbishment'
-               AND rr.id IS NOT NULL
+               AND rr_center.id IS NOT NULL
           THEN 1
           ELSE 0
-        END AS partner_responded
+        END AS partner_responded,
+        CASE
+          WHEN n.alert_type = 'refurbishment_acknowledgment_submitted' THEN 1
+          WHEN n.alert_type = 'refurbishment_acknowledgment_due'
+               AND rr_request.partner_completed_at IS NOT NULL
+          THEN 1
+          ELSE 0
+        END AS acknowledgment_submitted
       FROM notifications n
-      LEFT JOIN refurbishment_requests rr
-        ON rr.center_id = n.related_entity_id
+      LEFT JOIN refurbishment_requests rr_center
+        ON rr_center.center_id = n.related_entity_id
         AND n.alert_type = 'refurbishment'
+      LEFT JOIN refurbishment_requests rr_request
+        ON rr_request.id = n.related_entity_id
+        AND n.related_entity_type = 'refurbishment_request'
       ${whereClause}
         ${inboxVisibilityClause}
         AND n.alert_type LIKE 'refurbishment%'
@@ -647,6 +659,30 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
     `;
     const [totResults] = await pool.query(totQuery, params);
+
+    // Certification notifications (partner submissions + ESSCI processing updates)
+    const certificationQuery = `
+      SELECT 
+        n.id,
+        n.related_entity_id,
+        n.related_entity_type,
+        n.created_at,
+        n.type,
+        n.alert_type,
+        n.title,
+        n.message,
+        n.remark,
+        n.is_read,
+        n.payload,
+        'certification' as notification_type
+      FROM notifications n
+      ${whereClause}
+        ${inboxVisibilityClause}
+        AND n.related_entity_type IN ('certification_upload', 'certification_pdf')
+      ORDER BY n.created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
+    `;
+    const [certificationResults] = await pool.query(certificationQuery, params);
+
     // Process center notifications (simple format)
     const processedfCenterNotifications = centerNotifications.map((notif) => {
       const payload = notif.payload ? JSON.parse(notif.payload) : {};
@@ -747,19 +783,34 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
     // Process refurbishment notifications
     const processedRefurbishmentNotifications = refurbishmentResults.map((notif) => {
       const payload = notif.payload ? JSON.parse(notif.payload) : {};
+      const acknowledgmentSubmitted = Boolean(notif.acknowledgment_submitted);
+      const effectiveAlertType =
+        notif.alert_type === 'refurbishment_acknowledgment_due' && acknowledgmentSubmitted
+          ? 'refurbishment_acknowledgment_submitted'
+          : notif.alert_type;
+
       return {
         id: notif.id,
         type: notif.type,
-        alert_type: notif.alert_type,
-        title: notif.title,
-        message: notif.message,
+        alert_type: effectiveAlertType,
+        title:
+          effectiveAlertType === 'refurbishment_acknowledgment_submitted' &&
+          notif.alert_type === 'refurbishment_acknowledgment_due'
+            ? notif.title.replace(/^Acknowledgment Required/i, 'Acknowledgment Submitted')
+            : notif.title,
+        message:
+          effectiveAlertType === 'refurbishment_acknowledgment_submitted' &&
+          notif.alert_type === 'refurbishment_acknowledgment_due'
+            ? 'Your acknowledgment has been received. Admin will review and complete the request.'
+            : notif.message,
         remark: notif.remark,
-        is_read: Boolean(notif.is_read),
+        is_read: Boolean(notif.is_read) || acknowledgmentSubmitted,
         created_at: notif.created_at,
         related_entity_type: notif.related_entity_type,
         related_entity_id: notif.related_entity_id,
         notification_type: 'refurbishment',
         partner_responded: Boolean(notif.partner_responded),
+        acknowledgment_submitted: acknowledgmentSubmitted,
         payload,
       };
     });
@@ -838,6 +889,25 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       };
     });
 
+    // Process certification notifications (individual, not grouped)
+    const processedCertificationNotifications = certificationResults.map((notif) => {
+      const payload = notif.payload ? JSON.parse(notif.payload) : {};
+      return {
+        id: notif.id,
+        type: notif.type,
+        alert_type: notif.alert_type || 'info',
+        title: notif.title,
+        message: notif.message,
+        remark: notif.remark,
+        is_read: Boolean(notif.is_read),
+        created_at: notif.created_at,
+        related_entity_type: notif.related_entity_type,
+        related_entity_id: notif.related_entity_id,
+        notification_type: 'certification',
+        payload,
+      };
+    });
+
     // Merge center, refurbishment, upload and employment notifications, sort by created_at
     const allNotifications = [
       ...processedfCenterNotifications,
@@ -845,6 +915,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       ...processedUploadNotifications,
       ...processedEmploymentNotifications,
       ...processedTotNotifications,
+      ...processedCertificationNotifications,
     ];
     allNotifications.sort((a, b) => {
       const dateA = new Date(a.created_at);
@@ -1699,8 +1770,9 @@ const submitRefurbishmentResponse = async (
                 file_size_bytes,
                 file_mime_type,
                 uploaded_by,
+                attachment_type,
                 created_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'package_attachment', NOW())
             `,
               [
                 attachmentId,
@@ -1723,11 +1795,13 @@ const submitRefurbishmentResponse = async (
     const supportingDocuments = [
       {
         doc: refurbishmentDocument,
+        attachmentType: 'refurbishment_submission',
         fallbackName: 'refurbishment-document',
         fallbackType: 'application/octet-stream',
       },
       {
         doc: upgradationDocument,
+        attachmentType: 'upgradation_submission',
         fallbackName: 'upgradation-document',
         fallbackType: 'application/octet-stream',
       },
@@ -1746,8 +1820,9 @@ const submitRefurbishmentResponse = async (
             file_size_bytes,
             file_mime_type,
             uploaded_by,
+            attachment_type,
             created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `,
           [
             uuid.v4(),
@@ -1758,6 +1833,7 @@ const submitRefurbishmentResponse = async (
             entry.doc.size || null,
             entry.doc.type || entry.fallbackType,
             userId,
+            entry.attachmentType,
           ]
         );
       }
@@ -1846,6 +1922,8 @@ const submitRefurbishmentResponse = async (
     const [partner] = await connection.query('SELECT name FROM partners WHERE id = ?', [partnerId]);
 
     const adminNotificationId = uuid.v4();
+    const notificationTitle = `Partner Response - ${requestNumber}`;
+    const notificationMessage = `${partner[0]?.name || 'Partner'} has submitted their package selections for ${center[0]?.center_name || 'center'}. ${selectedPackages.length} package(s) selected.${upgradation ? ' Upgradation request included.' : ''}`;
     await connection.query(
       `
       INSERT INTO notifications (
@@ -1863,13 +1941,34 @@ const submitRefurbishmentResponse = async (
     `,
       [
         adminNotificationId,
-        `Partner Response - ${requestNumber}`,
-        `${partner[0]?.name || 'Partner'} has submitted their package selections for ${center[0]?.center_name || 'center'}. ${selectedPackages.length} package(s) selected.${upgradation ? ' Upgradation request included.' : ''}`,
+        notificationTitle,
+        notificationMessage,
         refurbishmentRequestId,
       ]
     );
 
     await connection.commit();
+
+    try {
+      const socketPayload = {
+        id: adminNotificationId,
+        type: 'alert',
+        alert_type: 'refurbishment_response',
+        title: notificationTitle,
+        message: notificationMessage,
+        related_entity_type: 'refurbishment_request',
+        related_entity_id: refurbishmentRequestId,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      };
+      emitToRole('ADMIN', 'notification:new', socketPayload);
+      emitToRole('SUPER_ADMIN', 'notification:new', socketPayload);
+    } catch (socketError) {
+      console.error(
+        'Failed to emit refurbishment response socket notification:',
+        socketError.message
+      );
+    }
 
     return {
       refurbishment_request_id: refurbishmentRequestId,

@@ -8,9 +8,18 @@ import {
   getUnreadCount,
 } from "../services/notification.service";
 
-const SOCKET_URL =
-  import.meta.env.VITE_API_URL?.replace("/api/v1", "") ||
-  "http://localhost:5000";
+const resolveSocketUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl?.startsWith("http")) {
+    return apiUrl.replace("/api/v1", "");
+  }
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return "http://localhost:5000";
+};
+
+const SOCKET_URL = resolveSocketUrl();
 
 /**
  * Notification Provider

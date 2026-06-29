@@ -10,6 +10,129 @@ import {
 import apiClient from "../../api/client";
 import refurbishmentService from "../../services/refurbishment.service";
 import { toast } from "react-toastify";
+import {
+  isPartnerImageFile,
+  resolvePartnerFileUrl,
+} from "../../utils/refurbishmentUtils";
+
+const PreviewUploadThumb = ({ file, label, accent = "green" }) => {
+  const [previewUrl, setPreviewUrl] = React.useState(null);
+  const [imageFailed, setImageFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!file) return undefined;
+    if (file instanceof File && isPartnerImageFile(file)) {
+      const objectUrl = URL.createObjectURL(file);
+      setPreviewUrl(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
+    }
+    const remoteUrl = resolvePartnerFileUrl(file.url || file.file_url);
+    if (remoteUrl && isPartnerImageFile({ ...file, url: remoteUrl })) {
+      setPreviewUrl(remoteUrl);
+    }
+    return undefined;
+  }, [file]);
+
+  if (!file) return null;
+
+  const name = file.name || file.file_name || "Document";
+  const borderCls =
+    accent === "purple"
+      ? "border-purple-200 bg-purple-50/40"
+      : "border-green-200 bg-green-50/40";
+  const showImage = previewUrl && isPartnerImageFile(file) && !imageFailed;
+
+  if (showImage) {
+    return (
+      <div
+        className={`w-[148px] border rounded-xl overflow-hidden bg-white ${borderCls}`}
+      >
+        <a
+          href={previewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block"
+          title={`Open ${name}`}
+        >
+          <div className="aspect-square bg-gray-50 overflow-hidden">
+            <img
+              src={previewUrl}
+              alt={name}
+              className="w-full h-full object-cover"
+              onError={() => setImageFailed(true)}
+            />
+          </div>
+        </a>
+        <div className="px-2.5 py-2 border-t border-gray-100">
+          <p className="text-[10px] font-semibold text-gray-700 truncate">
+            {label}
+          </p>
+          <p className="text-[10px] text-gray-500 truncate" title={name}>
+            {name}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`border rounded-xl p-4 ${borderCls} min-w-[200px]`}>
+      <p className="text-xs font-semibold text-gray-700">{label}</p>
+      <p className="text-sm text-gray-800 mt-1 truncate" title={name}>
+        {name}
+      </p>
+    </div>
+  );
+};
+
+const PackagePreviewThumb = ({ file, variant = "new" }) => {
+  const [previewUrl, setPreviewUrl] = React.useState(null);
+  const [imageFailed, setImageFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!file) return undefined;
+    if (file instanceof File) {
+      const objectUrl = URL.createObjectURL(file);
+      setPreviewUrl(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
+    }
+    const remoteUrl = resolvePartnerFileUrl(file.url || file.file_url);
+    setPreviewUrl(remoteUrl || null);
+    return undefined;
+  }, [file]);
+
+  if (!file || !previewUrl || imageFailed) {
+    const name = file?.name || file?.file_name || "Image";
+    return (
+      <span className="px-2.5 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-700">
+        {name}
+      </span>
+    );
+  }
+
+  const name = file.name || file.file_name || "Image";
+  const chipCls =
+    variant === "existing"
+      ? "border-blue-100 bg-blue-50"
+      : "border-gray-200 bg-gray-100";
+
+  return (
+    <a
+      href={previewUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`block w-20 h-20 rounded-lg overflow-hidden border ${chipCls}`}
+      title={name}
+    >
+      <img
+        src={previewUrl}
+        alt={name}
+        className="w-full h-full object-cover"
+        onError={() => setImageFailed(true)}
+      />
+    </a>
+  );
+};
 
 /**
  * RefurbishmentResponseModal Component
@@ -1285,14 +1408,178 @@ const RefurbishmentResponseModal = ({
               <h2 className="text-2xl font-bold text-gray-900">
                 {isFinalPreview ? "Confirm & submit" : "Refurbishment preview"}
               </h2>
-              {!isFinalPreview && details.has_upgradation_packages && (
+              {isFinalPreview ? (
                 <p className="text-sm text-gray-500 mt-1">
-                  Review your selected refurbishment packages, then continue to
-                  the upgradation step.
+                  Review your submission documents and package details before submitting.
                 </p>
+              ) : (
+                details.has_upgradation_packages && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    Review your selected refurbishment packages, then continue to
+                    the upgradation step.
+                  </p>
+                )
               )}
             </div>
 
+            {isFinalPreview ? (
+              <div className="flex-1 overflow-y-auto px-8 pb-6 space-y-6 scrollbar-subtle min-h-0">
+                <section className="space-y-3">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
+                    Submission documents
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {refurbishmentDoc || existingRefurbishmentDocUrl ? (
+                      <PreviewUploadThumb
+                        file={refurbishmentDoc || existingRefurbishmentDocUrl}
+                        label="Refurbishment document"
+                      />
+                    ) : (
+                      <div className="border border-dashed border-gray-200 rounded-xl p-4 text-sm text-gray-400 min-w-[200px]">
+                        Refurbishment document — attach below before submitting.
+                      </div>
+                    )}
+                    {upgradationRequested &&
+                      (upgradationDoc || existingUpgradationDocUrl ? (
+                        <PreviewUploadThumb
+                          file={upgradationDoc || existingUpgradationDocUrl}
+                          label="Upgradation document"
+                          accent="purple"
+                        />
+                      ) : (
+                        <div className="border border-dashed border-gray-200 rounded-xl p-4 text-sm text-gray-400 min-w-[200px]">
+                          Upgradation document — optional, attach below if needed.
+                        </div>
+                      ))}
+                  </div>
+                </section>
+
+                {coursesWithSelections.map((course) => {
+                  const selectedPkgs = course.packages.filter(
+                    (pkg) => selections[pkg.package_id],
+                  );
+                  if (selectedPkgs.length === 0) return null;
+
+                  return (
+                    <section key={course.course_id} className="space-y-3">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
+                        {course.course_name}
+                      </p>
+                      {selectedPkgs.map((pkg) => {
+                        const pkgId = pkg.package_id;
+                        const pkgJustification = justifications[pkgId] || "";
+                        const newUploads = imageFiles[pkgId] || [];
+                        const priorUploads = existingImageUrls[pkgId] || [];
+
+                        return (
+                          <div
+                            key={pkgId}
+                            className="border border-gray-200 rounded-xl p-4 bg-white space-y-3"
+                          >
+                            <p className="text-sm font-bold text-gray-900">
+                              {pkg.package_name}
+                            </p>
+                            {pkgJustification.trim() && (
+                              <p className="text-sm text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg px-3 py-2">
+                                {pkgJustification.trim()}
+                              </p>
+                            )}
+                            <div>
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                                Package uploads
+                                {(newUploads.length + priorUploads.length) > 0 &&
+                                  ` (${newUploads.length + priorUploads.length})`}
+                              </p>
+                              {newUploads.length === 0 && priorUploads.length === 0 ? (
+                                <p className="text-sm text-gray-400">
+                                  No images attached for this package.
+                                </p>
+                              ) : (
+                                <div className="flex flex-wrap gap-2">
+                                  {priorUploads.map((img, idx) => (
+                                    <PackagePreviewThumb
+                                      key={`existing-${pkgId}-${idx}`}
+                                      file={img}
+                                      variant="existing"
+                                    />
+                                  ))}
+                                  {newUploads.map((file, idx) => (
+                                    <PackagePreviewThumb
+                                      key={`new-${pkgId}-${idx}`}
+                                      file={file}
+                                      variant="new"
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </section>
+                  );
+                })}
+
+                {upgradationRequested && (
+                  <section className="space-y-3">
+                    <p className="text-[11px] font-semibold text-purple-500 uppercase tracking-widest">
+                      Upgradation
+                    </p>
+                    {selectedUpgradationPkgs.length > 0 ? (
+                      selectedUpgradationPkgs.map((pkg) => {
+                        const pkgId = pkg.package_id || pkg.id;
+                        const pkgJustification =
+                          upgradationJustifications[pkgId] || "";
+                        const pkgFiles = upgradationImageFiles[pkgId] || [];
+
+                        return (
+                          <div
+                            key={pkgId}
+                            className="border border-purple-200 rounded-xl p-4 bg-purple-50/20 space-y-3"
+                          >
+                            <p className="text-sm font-bold text-purple-800">
+                              {pkg.package_name}
+                            </p>
+                            {pkgJustification.trim() && (
+                              <p className="text-sm text-gray-600 whitespace-pre-wrap bg-white/70 rounded-lg px-3 py-2">
+                                {pkgJustification.trim()}
+                              </p>
+                            )}
+                            <div>
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                                Package uploads
+                                {pkgFiles.length > 0 && ` (${pkgFiles.length})`}
+                              </p>
+                              {pkgFiles.length === 0 ? (
+                                <p className="text-sm text-gray-400">
+                                  No images attached for this package.
+                                </p>
+                              ) : (
+                                <div className="flex flex-wrap gap-2">
+                                  {pkgFiles.map((file, idx) => (
+                                    <span
+                                      key={`${pkgId}-${idx}`}
+                                      className="px-2.5 py-1 bg-white border border-purple-100 rounded text-xs text-gray-700"
+                                    >
+                                      {file.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-sm text-gray-400">
+                        No upgradation packages selected.
+                      </p>
+                    )}
+                  </section>
+                )}
+              </div>
+            ) : (
+              <>
             {/* Course Filter Tabs (pill style) */}
             <div className="px-8 pb-3">
               <div className="inline-flex border border-gray-200 rounded-full p-0.5 bg-gray-50">
@@ -1552,6 +1839,8 @@ const RefurbishmentResponseModal = ({
                 </>
               )}
             </div>
+              </>
+            )}
 
             {/* Document Upload Section — only shown on final preview before submit */}
             {isFinalPreview && (

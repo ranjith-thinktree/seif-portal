@@ -139,7 +139,10 @@ const UploadPage = () => {
   const [certBatchStartDate, setCertBatchStartDate] = useState("");
   const [certBatchEndDate, setCertBatchEndDate] = useState("");
   const [certAssessmentDate, setCertAssessmentDate] = useState("");
-  const [certSupportDoc, setCertSupportDoc] = useState(null);
+  const [certOtherBatchNumber, setCertOtherBatchNumber] = useState("");
+  const [certSpokeName, setCertSpokeName] = useState("");
+  const [certSpokeEmail, setCertSpokeEmail] = useState("");
+  const [certSpokeMobile, setCertSpokeMobile] = useState("");
   const [certUploading, setCertUploading] = useState(false);
   const [certError, setCertError] = useState(null);
   const [certSuccess, setCertSuccess] = useState(null);
@@ -856,6 +859,7 @@ const UploadPage = () => {
   const handleCertCenterChange = async (centerId) => {
     setCertCenterId(centerId);
     setCertBatchId("");
+    setCertOtherBatchNumber("");
     setCertBatches([]);
     if (!centerId) return;
     setCertBatchesLoading(true);
@@ -871,26 +875,36 @@ const UploadPage = () => {
   };
 
   const handleCertUpload = async () => {
-    if (!certCenterId || !certBatchId) {
-      setCertError("Please select a center and a batch.");
+    const trimmedOtherBatch = certOtherBatchNumber.trim();
+    if (!certCenterId) {
+      setCertError("Please select a center.");
+      return;
+    }
+    if (!certBatchId && !trimmedOtherBatch) {
+      setCertError("Please select a batch number or enter an other batch number.");
       return;
     }
     setCertUploading(true);
     setCertError(null);
     setCertSuccess(null);
+    const selectedCenter = certCenters.find((c) => c.id === certCenterId);
     try {
-      const result = await uploadCertificationData(
-        certCenterId,
-        certBatchId,
-        certBatchStartDate || undefined,
-        certBatchEndDate || undefined,
-        certAssessmentDate || undefined,
-        certSupportDoc || undefined,
-        isAdmin ? targetPartnerId || null : null,
-      );
+      const result = await uploadCertificationData({
+        centerId: certCenterId,
+        centerName: selectedCenter?.center_name || undefined,
+        batchId: certBatchId || undefined,
+        otherBatchNumber: trimmedOtherBatch || undefined,
+        batchStartDate: certBatchStartDate || undefined,
+        batchEndDate: certBatchEndDate || undefined,
+        assessmentDate: certAssessmentDate || undefined,
+        spokeName: certSpokeName.trim() || undefined,
+        spokeEmail: certSpokeEmail.trim() || undefined,
+        spokeMobile: certSpokeMobile.trim() || undefined,
+        targetPartnerId: isAdmin ? targetPartnerId || null : null,
+      });
       if (result.success) {
         setCertSuccess(
-          "Certification data submitted successfully! Awaiting admin approval.",
+          "Certification data submitted successfully! ESSCI will process your request.",
         );
         setCertCenterId("");
         setCertBatchId("");
@@ -898,7 +912,10 @@ const UploadPage = () => {
         setCertBatchStartDate("");
         setCertBatchEndDate("");
         setCertAssessmentDate("");
-        setCertSupportDoc(null);
+        setCertOtherBatchNumber("");
+        setCertSpokeName("");
+        setCertSpokeEmail("");
+        setCertSpokeMobile("");
       } else {
         setCertError(result.message || "Upload failed. Please try again.");
       }
@@ -1200,6 +1217,8 @@ const UploadPage = () => {
                 certCenterId={certCenterId}
                 certBatchId={certBatchId}
                 setCertBatchId={setCertBatchId}
+                certOtherBatchNumber={certOtherBatchNumber}
+                setCertOtherBatchNumber={setCertOtherBatchNumber}
                 certCentersLoading={certCentersLoading}
                 certBatchesLoading={certBatchesLoading}
                 certBatchStartDate={certBatchStartDate}
@@ -1208,8 +1227,12 @@ const UploadPage = () => {
                 setCertBatchEndDate={setCertBatchEndDate}
                 certAssessmentDate={certAssessmentDate}
                 setCertAssessmentDate={setCertAssessmentDate}
-                certSupportDoc={certSupportDoc}
-                setCertSupportDoc={setCertSupportDoc}
+                certSpokeName={certSpokeName}
+                setCertSpokeName={setCertSpokeName}
+                certSpokeEmail={certSpokeEmail}
+                setCertSpokeEmail={setCertSpokeEmail}
+                certSpokeMobile={certSpokeMobile}
+                setCertSpokeMobile={setCertSpokeMobile}
                 certUploading={certUploading}
                 handleCertCenterChange={handleCertCenterChange}
                 handleCertUpload={handleCertUpload}

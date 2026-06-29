@@ -13,7 +13,8 @@ import {
   Download,
 } from "lucide-react";
 import refurbishmentService from "../../../services/refurbishment.service";
-import { resolvePartnerFileUrl } from "../../../utils/refurbishmentUtils";
+import { resolvePartnerFileUrl, isPartnerImageFile, getPartnerRefurbishmentDisplayStatus } from "../../../utils/refurbishmentUtils";
+import RefurbishmentProjectTimeline from "../RefurbishmentProjectTimeline";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 function safeParseImages(raw) {
@@ -47,7 +48,7 @@ const STATUS = {
     iconCls: "text-red-500",
   },
   material_procurement: {
-    label: "Material Procurement",
+    label: "Material Procurement Completed",
     Icon: CheckCircle2,
     cls: "bg-teal-50 text-teal-700 border-teal-200",
     iconCls: "text-teal-500",
@@ -76,6 +77,18 @@ const STATUS = {
     cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
     iconCls: "text-emerald-500",
   },
+  acknowledgement_pending: {
+    label: "Acknowledgement Pending",
+    Icon: Clock,
+    cls: "bg-purple-50 text-purple-700 border-purple-200",
+    iconCls: "text-purple-500",
+  },
+  completion_pending: {
+    label: "Completion Pending",
+    Icon: Clock,
+    cls: "bg-sky-50 text-sky-800 border-sky-200",
+    iconCls: "text-sky-500",
+  },
 };
 
 function fmt(dateStr) {
@@ -84,8 +97,6 @@ function fmt(dateStr) {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -109,8 +120,8 @@ function StatusBadge({ status }) {
 
 // ── Image/attachment thumbnail ───────────────────────────────────────────────
 function AttachmentItem({ item }) {
-  const isImage = item.type?.startsWith("image/");
-  const src = resolvePartnerFileUrl(item.url);
+  const src = resolvePartnerFileUrl(item.url || item.file_url);
+  const isImage = isPartnerImageFile({ ...item, url: src });
   return (
     <a
       href={src}
@@ -140,6 +151,173 @@ function AttachmentItem({ item }) {
         {item.name || "File"}
       </span>
     </a>
+  );
+}
+
+function packageContextLabel(pkg) {
+  if (pkg.scope === "upgradation") {
+    return pkg.course_name ? `${pkg.course_name} · Upgradation` : "Upgradation";
+  }
+  return pkg.course_name || "";
+}
+
+function PackageReviewOutcome({ request, packageModifications, courses, upgradation }) {
+  const status = request?.status;
+  const mods = packageModifications || { added: [], removed: [], hasChanges: false };
+  const isRejected = status === "rejected";
+  const isApprovedFlow = [
+    "approved",
+    "material_procurement",
+    "installation_in_progress",
+    "refurbishment_started",
+    "completed",
+  ].includes(status);
+
+  if (!isRejected && !isApprovedFlow) return null;
+
+  const approvedCoursePackages = (courses || []).flatMap((course) =>
+    (course.packages || []).map((pkg) => ({
+      ...pkg,
+      course_id: course.course_id,
+      course_name: course.course_name,
+      scope: "course",
+    })),
+  );
+  const approvedUpgradationPackages = (upgradation?.selected_packages || []).map(
+    (pkg) => ({
+      ...pkg,
+      scope: "upgradation",
+      course_name: pkg.course_names || pkg.course_name || "Upgradation",
+    }),
+  );
+  const approvedPackages = [...approvedCoursePackages, ...approvedUpgradationPackages];
+
+  if (isRejected) {
+    if (approvedPackages.length === 0) return null;
+    return (
+      <div className="mx-6 mt-5 rounded-2xl border border-red-200 bg-red-50/70 p-5 space-y-3">
+        <p className="text-sm font-semibold text-red-900">Request not approved</p>
+        <p className="text-sm text-red-800">
+          The admin rejected this request. The packages below were not approved.
+        </p>
+        <ul className="space-y-2">
+          {approvedPackages.map((pkg) => (
+            <li
+              key={`rejected-${pkg.scope || "course"}-${pkg.course_id || "upg"}-${pkg.package_id}`}
+              className="flex items-start justify-between gap-3 rounded-xl border border-red-100 bg-white px-3 py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900">{pkg.package_name}</p>
+                <p className="text-xs text-gray-500">{packageContextLabel(pkg)}</p>
+              </div>
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                Rejected
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  const hasMods =
+    mods.hasChanges || mods.added?.length > 0 || mods.removed?.length > 0;
+
+  return (
+    <div className="mx-6 mt-5 rounded-2xl border border-green-200 bg-green-50/50 p-5 space-y-4">
+      <div>
+        <p className="text-sm font-semibold text-green-900">Package review outcome</p>
+        <p className="text-xs text-green-800 mt-1">
+          {hasMods
+            ? "The admin reviewed your submission and updated the approved package list."
+            : "All packages you submitted were approved."}
+        </p>
+      </div>
+
+      {mods.removed?.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-red-700 mb-2">
+            Removed by admin
+          </p>
+          <ul className="space-y-2">
+            {mods.removed.map((pkg) => (
+              <li
+                key={`removed-${pkg.scope || "course"}-${pkg.course_id || "upg"}-${pkg.package_id}`}
+                className="flex items-start justify-between gap-3 rounded-xl border border-red-100 bg-white px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{pkg.package_name}</p>
+                  <p className="text-xs text-gray-500">{packageContextLabel(pkg)}</p>
+                </div>
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                  Removed
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {mods.added?.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-blue-700 mb-2">
+            Added by admin
+          </p>
+          <ul className="space-y-2">
+            {mods.added.map((pkg) => (
+              <li
+                key={`added-${pkg.scope || "course"}-${pkg.course_id || "upg"}-${pkg.package_id}`}
+                className="flex items-start justify-between gap-3 rounded-xl border border-blue-100 bg-white px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{pkg.package_name}</p>
+                  <p className="text-xs text-gray-500">{packageContextLabel(pkg)}</p>
+                </div>
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                  Added
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {approvedPackages.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-green-700 mb-2">
+            Approved packages
+          </p>
+          <ul className="space-y-2">
+            {approvedPackages.map((pkg) => (
+              <li
+                key={`approved-${pkg.scope || "course"}-${pkg.course_id || "upg"}-${pkg.package_id}`}
+                className="flex items-start justify-between gap-3 rounded-xl border border-green-100 bg-white px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{pkg.package_name}</p>
+                  <p className="text-xs text-gray-500">{packageContextLabel(pkg)}</p>
+                </div>
+                <span
+                  className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
+                    pkg.added_by_admin ||
+                    (pkg.scope === "upgradation" &&
+                      mods.added?.some((p) => p.package_id === pkg.package_id))
+                      ? "text-blue-700 bg-blue-50 border-blue-100"
+                      : "text-green-700 bg-green-50 border-green-100"
+                  }`}
+                >
+                  {pkg.added_by_admin ||
+                  (pkg.scope === "upgradation" &&
+                    mods.added?.some((p) => p.package_id === pkg.package_id))
+                    ? "Added"
+                    : "Approved"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -230,7 +408,29 @@ export default function PartnerPastRequestDetailModal({
   }, [activeTab, details]);
 
   const req = details?.request ?? request;
-  const showCompletion =
+  const statusTimeline = details?.status_timeline || null;
+  const partnerAcknowledgment = details?.partner_acknowledgment || null;
+  const packageModifications = details?.package_modifications || null;
+  const removedUpgradationPackages = (packageModifications?.removed || []).filter(
+    (pkg) => pkg.scope === "upgradation",
+  );
+  const hasPackageReviewData =
+    (details?.courses || []).some((course) => (course.packages || []).length > 0) ||
+    (packageModifications?.removed || []).length > 0 ||
+    (packageModifications?.added || []).length > 0 ||
+    (details?.upgradation?.selected_packages || []).length > 0 ||
+    removedUpgradationPackages.length > 0;
+  const showPackageReview =
+    hasPackageReviewData &&
+    (req?.status === "rejected" ||
+      [
+        "approved",
+        "material_procurement",
+        "installation_in_progress",
+        "refurbishment_started",
+        "completed",
+      ].includes(req?.status));
+  const showAcknowledgmentForm =
     req?.completion_notified_at &&
     req?.status !== "completed" &&
     req?.status !== "rejected" &&
@@ -266,7 +466,11 @@ export default function PartnerPastRequestDetailModal({
                 Submitted {fmt(req?.created_at || request?.created_at)}
               </p>
               <div className="flex items-center gap-2 shrink-0">
-                <StatusBadge status={req?.status} />
+                <StatusBadge
+                  status={
+                    getPartnerRefurbishmentDisplayStatus(req || request).badgeKey
+                  }
+                />
               </div>
             </div>
           </div>
@@ -297,11 +501,19 @@ export default function PartnerPastRequestDetailModal({
             </div>
           ) : (
             <div className="flex flex-col h-full">
-              {req?.has_admin_modifications && (
-                <div className="mx-6 mt-5 px-5 py-3 rounded-2xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
-                  <span className="font-semibold">Admin Note:</span> The admin
-                  has curated the package list for this request.
+              {!loading && !error && statusTimeline && (
+                <div className="mx-6 mt-5">
+                  <RefurbishmentProjectTimeline timeline={statusTimeline} />
                 </div>
+              )}
+
+              {showPackageReview && (
+                <PackageReviewOutcome
+                  request={req}
+                  packageModifications={packageModifications}
+                  courses={details?.courses}
+                  upgradation={details?.upgradation}
+                />
               )}
 
               {/* Admin remarks / rejection reason banner */}
@@ -322,17 +534,51 @@ export default function PartnerPastRequestDetailModal({
                 </div>
               )}
 
-              {showCompletion && onSubmitCompletion && (
+              {showAcknowledgmentForm && onSubmitCompletion && (
                 <div className="mx-6 mt-5 px-5 py-4 rounded-2xl bg-purple-50 border border-purple-200">
-                  <p className="text-sm text-purple-800 font-semibold mb-2">
-                    Refurbishment Complete — Confirmation Required
+                  <p className="text-sm text-purple-800 font-semibold mb-1">
+                    Acknowledgment Required
+                  </p>
+                  <p className="text-sm text-purple-700 mb-3">
+                    Please submit your acknowledgment statement and supporting
+                    files for this refurbishment request.
                   </p>
                   <button
                     onClick={() => onSubmitCompletion(request)}
                     className="px-4 py-2 text-sm bg-purple-600 text-white rounded-full font-semibold hover:bg-purple-700 transition-colors"
                   >
-                    Submit Completion
+                    Submit Acknowledgment
                   </button>
+                </div>
+              )}
+
+              {partnerAcknowledgment && (
+                <div className="mx-6 mt-5 px-5 py-4 rounded-2xl bg-green-50 border border-green-200 space-y-3">
+                  <p className="text-sm font-semibold text-green-900">
+                    Your acknowledgment was submitted
+                  </p>
+                  <p className="text-xs text-green-800">
+                    Submitted {fmt(partnerAcknowledgment.submitted_at)}
+                  </p>
+                  {partnerAcknowledgment.statement && (
+                    <p className="text-sm text-green-900 whitespace-pre-wrap leading-relaxed">
+                      {partnerAcknowledgment.statement}
+                    </p>
+                  )}
+                  {partnerAcknowledgment.files?.length > 0 && (
+                    <div className="flex flex-wrap gap-3">
+                      {partnerAcknowledgment.files.map((file, idx) => (
+                        <AttachmentItem
+                          key={idx}
+                          item={{
+                            url: file.url,
+                            name: file.name,
+                            type: file.type || "application/octet-stream",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -369,14 +615,16 @@ export default function PartnerPastRequestDetailModal({
                 <div className="flex flex-1 min-h-0 overflow-hidden mx-6 mb-6 mt-3 gap-4">
                   {/* Left: package list */}
                   <div className="w-56 shrink-0 overflow-y-auto space-y-2 pr-1">
-                    {activeCourse.packages.length === 0 ? (
+                    {activeCourse.packages.length === 0 &&
+                    !(packageModifications?.removed || []).some(
+                      (p) => p.course_id === activeCourse.course_id,
+                    ) ? (
                       <p className="text-xs text-gray-400 text-center py-8">
                         No packages selected for this course.
                       </p>
                     ) : (
-                      activeCourse.packages
-                        .filter((pkg) => !pkg.removed_by_admin)
-                        .map((pkg) => (
+                      <>
+                        {activeCourse.packages.map((pkg) => (
                           <button
                             key={pkg.package_id}
                             onClick={() => setSelectedPkg(pkg)}
@@ -394,13 +642,33 @@ export default function PartnerPastRequestDetailModal({
                                 <ChevronRight className="w-4 h-4 shrink-0 text-green-600" />
                               )}
                             </div>
-                            {pkg.added_by_admin && (
+                            {pkg.added_by_admin ? (
                               <span className="text-[10px] text-blue-600 font-normal">
-                                ✦ Admin added
+                                Added by admin
                               </span>
-                            )}
+                            ) : showPackageReview && req?.status !== "rejected" ? (
+                              <span className="text-[10px] text-green-600 font-normal">
+                                Approved
+                              </span>
+                            ) : null}
                           </button>
-                        ))
+                        ))}
+                        {(packageModifications?.removed || [])
+                          .filter((p) => p.course_id === activeCourse.course_id)
+                          .map((pkg) => (
+                            <div
+                              key={`removed-${pkg.package_id}`}
+                              className="w-full text-left px-4 py-3 rounded-2xl border border-red-200 bg-red-50/60 text-sm opacity-90"
+                            >
+                              <span className="block truncate leading-snug text-gray-700 line-through">
+                                {pkg.package_name}
+                              </span>
+                              <span className="text-[10px] text-red-600 font-normal">
+                                Removed by admin
+                              </span>
+                            </div>
+                          ))}
+                      </>
                     )}
                   </div>
 
@@ -577,7 +845,8 @@ export default function PartnerPastRequestDetailModal({
                   )}
 
                   {/* Selected upgradation packages */}
-                  {details.upgradation.selected_packages?.length > 0 && (
+                  {(details.upgradation.selected_packages?.length > 0 ||
+                    removedUpgradationPackages.length > 0) && (
                     <div>
                       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-3">
                         <Package className="w-4 h-4 text-green-600" />
@@ -589,12 +858,45 @@ export default function PartnerPastRequestDetailModal({
                             key={pkg.package_id}
                             className="bg-white border border-green-200 rounded-xl p-4"
                           >
-                            <p className="text-sm font-semibold text-gray-900">
-                              {pkg.package_name}
-                            </p>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-900">
+                                {pkg.package_name}
+                              </p>
+                              {showPackageReview && req?.status !== "rejected" && (
+                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-green-700 bg-green-50 border border-green-100 px-2 py-0.5 rounded-full">
+                                  {packageModifications?.added?.some(
+                                    (p) =>
+                                      p.scope === "upgradation" &&
+                                      p.package_id === pkg.package_id,
+                                  )
+                                    ? "Added"
+                                    : "Approved"}
+                                </span>
+                              )}
+                            </div>
                             {pkg.description && (
                               <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                                 {pkg.description}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                        {removedUpgradationPackages.map((pkg) => (
+                          <div
+                            key={`removed-upg-${pkg.package_id}`}
+                            className="bg-red-50/60 border border-red-200 rounded-xl p-4 opacity-90"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-700 line-through">
+                                {pkg.package_name}
+                              </p>
+                              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                                Removed
+                              </span>
+                            </div>
+                            {pkg.course_name && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {packageContextLabel(pkg)}
                               </p>
                             )}
                           </div>
@@ -613,50 +915,112 @@ export default function PartnerPastRequestDetailModal({
                     <FileText className="w-4 h-4 text-green-600" />
                     Attached Documents
                   </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex flex-wrap gap-3">
                     {details.refurbishment_document && (
-                      <a
-                        href={resolvePartnerFileUrl(
+                      isPartnerImageFile({
+                        ...details.refurbishment_document,
+                        url: resolvePartnerFileUrl(
                           details.refurbishment_document.url,
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-3 bg-gray-50 border border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors group"
-                      >
-                        <FileText className="w-8 h-8 text-green-600 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">
+                        ),
+                      }) ? (
+                        <a
+                          href={resolvePartnerFileUrl(
+                            details.refurbishment_document.url,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-[148px] border border-gray-200 rounded-xl overflow-hidden bg-white hover:border-green-400 transition-colors"
+                        >
+                          <img
+                            src={resolvePartnerFileUrl(
+                              details.refurbishment_document.url,
+                            )}
+                            alt={
+                              details.refurbishment_document.name ||
+                              "Refurbishment document"
+                            }
+                            className="aspect-square w-full object-cover"
+                          />
+                          <p className="px-2 py-1.5 text-[10px] text-gray-600 truncate border-t border-gray-100">
                             {details.refurbishment_document.name ||
                               "Refurbishment Document"}
                           </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            Refurbishment Doc
-                          </p>
-                        </div>
-                        <Download className="w-4 h-4 text-gray-400 ml-auto group-hover:text-green-600 transition-colors" />
-                      </a>
+                        </a>
+                      ) : (
+                        <a
+                          href={resolvePartnerFileUrl(
+                            details.refurbishment_document.url,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 bg-gray-50 border border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors group min-w-[220px]"
+                        >
+                          <FileText className="w-8 h-8 text-green-600 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">
+                              {details.refurbishment_document.name ||
+                                "Refurbishment Document"}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              Refurbishment Doc
+                            </p>
+                          </div>
+                          <Download className="w-4 h-4 text-gray-400 ml-auto group-hover:text-green-600 transition-colors" />
+                        </a>
+                      )
                     )}
                     {details.upgradation_document && (
-                      <a
-                        href={resolvePartnerFileUrl(
+                      isPartnerImageFile({
+                        ...details.upgradation_document,
+                        url: resolvePartnerFileUrl(
                           details.upgradation_document.url,
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-3 bg-gray-50 border border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors group"
-                      >
-                        <FileText className="w-8 h-8 text-purple-500 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">
+                        ),
+                      }) ? (
+                        <a
+                          href={resolvePartnerFileUrl(
+                            details.upgradation_document.url,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-[148px] border border-purple-200 rounded-xl overflow-hidden bg-white hover:border-purple-400 transition-colors"
+                        >
+                          <img
+                            src={resolvePartnerFileUrl(
+                              details.upgradation_document.url,
+                            )}
+                            alt={
+                              details.upgradation_document.name ||
+                              "Upgradation document"
+                            }
+                            className="aspect-square w-full object-cover"
+                          />
+                          <p className="px-2 py-1.5 text-[10px] text-gray-600 truncate border-t border-purple-100">
                             {details.upgradation_document.name ||
                               "Upgradation Document"}
                           </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            Upgradation Doc
-                          </p>
-                        </div>
-                        <Download className="w-4 h-4 text-gray-400 ml-auto group-hover:text-purple-500 transition-colors" />
-                      </a>
+                        </a>
+                      ) : (
+                        <a
+                          href={resolvePartnerFileUrl(
+                            details.upgradation_document.url,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 bg-gray-50 border border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors group min-w-[220px]"
+                        >
+                          <FileText className="w-8 h-8 text-purple-500 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">
+                              {details.upgradation_document.name ||
+                                "Upgradation Document"}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              Upgradation Doc
+                            </p>
+                          </div>
+                          <Download className="w-4 h-4 text-gray-400 ml-auto group-hover:text-purple-500 transition-colors" />
+                        </a>
+                      )
                     )}
                   </div>
                 </div>

@@ -733,7 +733,8 @@ const refurbishmentService = {
    * Admin approves refurbishment request
    * @param {string} requestId - Refurbishment request UUID
    * @param {string} adminRemarks - Optional remarks
-   * @param {Object} modifications - Optional package modifications { adminAddedPackages, removedPackageIds }
+   * @param {Object} modifications - Optional package modifications
+   *   { adminAddedPackages, removedPackageIds, finalUpgradationPackageIds }
    * @returns {Promise<Object>} - Success response
    */
   approveRefurbishmentRequest: async (
@@ -748,6 +749,7 @@ const refurbishmentService = {
           adminRemarks,
           adminAddedPackages: modifications.adminAddedPackages || [],
           removedPackageIds: modifications.removedPackageIds || [],
+          finalUpgradationPackageIds: modifications.finalUpgradationPackageIds,
         },
       );
       return response.data;
@@ -860,19 +862,55 @@ const refurbishmentService = {
   },
 
   /**
+   * Admin requests partner acknowledgment before final completion.
+   * @param {string} requestId
+   */
+  requestPartnerAcknowledgment: async (requestId) => {
+    try {
+      const response = await api.post(
+        `/admin/refurbishment/requests/${requestId}/request-partner-acknowledgment`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error requesting partner acknowledgment:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Admin advances lifecycle status (approved → material_procurement → installation_in_progress)
    * @param {string} requestId
    * @param {string} status - new status
+   * @param {{ status_date?: string }} [options]
    */
-  updateRequestStatus: async (requestId, status) => {
+  updateRequestStatus: async (requestId, status, options = {}) => {
     try {
       const response = await api.patch(
         `/admin/refurbishment/requests/${requestId}/status`,
-        { status },
+        { status, status_date: options.status_date },
       );
       return response.data;
     } catch (error) {
       console.error("Error updating refurbishment status:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Save a workflow step date without advancing status
+   * @param {string} requestId
+   * @param {string} step - approved | material_procurement | installation_in_progress
+   * @param {string} statusDate - YYYY-MM-DD
+   */
+  saveWorkflowStepDate: async (requestId, step, statusDate) => {
+    try {
+      const response = await api.patch(
+        `/admin/refurbishment/requests/${requestId}/step-date`,
+        { step, status_date: statusDate },
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error saving workflow step date:", error);
       throw error;
     }
   },

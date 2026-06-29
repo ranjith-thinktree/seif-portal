@@ -48,8 +48,10 @@ import PartnerReviewEmploymentPage from "../pages/Employment/PartnerReviewEmploy
 import MyDataPage from "../pages/Partner/MyDataPage";
 import MyRequestsPage from "../pages/Partner/MyRequestsPage";
 import CertificatesPage from "../pages/Partner/CertificatesPage";
+import AdminCertificatesPage from "../pages/Admin/AdminCertificatesPage";
 import ESSCIDataPage from "../pages/ESSCI/ESSCIDataPage";
 import ESSCIBatchDetailPage from "../pages/ESSCI/ESSCIBatchDetailPage";
+import ESSCIRequestsPage from "../pages/ESSCI/ESSCIRequestsPage";
 import SettingsPage from "../pages/Settings/SettingsPage";
 import HelpPage from "../pages/Help/HelpPage";
 import ReportsPage from "../pages/Reports/ReportsPage";
@@ -69,6 +71,14 @@ const PlaceholderPage = ({ title }) => (
 );
 
 const ADMIN_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
+const ESSCI_ROLES = [ROLES.ESSCI];
+const DATA_MANAGEMENT_ROLES = [
+  ROLES.SUPER_ADMIN,
+  ROLES.ADMIN,
+  ROLES.PARTNER,
+  ROLES.SEIF_READONLY,
+  ROLES.SEIF_READONLY_DOWNLOAD,
+];
 const SUPER_ADMIN_ONLY_ROLES = [ROLES.SUPER_ADMIN];
 // Admin pages that SEIF_READONLY and SEIF_READONLY_DOWNLOAD can view (read-only)
 const ADMIN_READONLY_ROLES = [
@@ -188,7 +198,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.DATA_MANAGEMENT}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={DATA_MANAGEMENT_ROLES}>
                 <DataManagementPage />
               </ProtectedRoute>
             }
@@ -197,7 +207,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.PARTNERS}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={DATA_MANAGEMENT_ROLES}>
                 <PartnersPage />
               </ProtectedRoute>
             }
@@ -206,7 +216,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.PARTNER_CENTERS}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={DATA_MANAGEMENT_ROLES}>
                 <CentersPage />
               </ProtectedRoute>
             }
@@ -215,7 +225,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.CENTER_STUDENTS}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={DATA_MANAGEMENT_ROLES}>
                 <StudentsPage />
               </ProtectedRoute>
             }
@@ -224,7 +234,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.BATCH_STUDENTS}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={DATA_MANAGEMENT_ROLES}>
                 <StudentsPage />
               </ProtectedRoute>
             }
@@ -233,7 +243,7 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.CENTER_DETAILS}
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={DATA_MANAGEMENT_ROLES}>
                 <CenterDetailsPage />
               </ProtectedRoute>
             }
@@ -260,8 +270,8 @@ const AppRoutes = () => {
           <Route
             path={ROUTES.REQUESTS}
             element={
-              <ProtectedRoute>
-                <PlaceholderPage title="Requests" />
+              <ProtectedRoute allowedRoles={ESSCI_ROLES}>
+                <ESSCIRequestsPage />
               </ProtectedRoute>
             }
           />
@@ -543,7 +553,16 @@ const AppRoutes = () => {
             }
           />
 
-          {/* ESSCI Certification */}
+          <Route
+            path={ROUTES.ADMIN_CERTIFICATES}
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                <AdminCertificatesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ESSCI Certification — admin-only legacy data views */}
           <Route
             path={ROUTES.ESSCI_DATA}
             element={

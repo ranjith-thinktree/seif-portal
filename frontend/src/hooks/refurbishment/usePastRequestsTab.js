@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
 import useTableSearch from "./useTableSearch";
 import refurbishmentService from "../../services/refurbishment.service";
-import { getDisplayRequestType, getFinancialYear } from "../../utils/refurbishmentUtils";
+import { getDisplayRequestType, getFinancialYear, REFURBISHMENT_PAST_REQUEST_STATUSES } from "../../utils/refurbishmentUtils";
 import { FY_OPTIONS } from "../../constants/refurbishment";
 
 export default function usePastRequestsTab({ pastRequests, setLoading }) {
@@ -23,15 +23,14 @@ export default function usePastRequestsTab({ pastRequests, setLoading }) {
 
     if (filters.status?.length > 0) {
       filtered = filtered.filter((r) => {
-        const displayStatus =
-          r.status === "completed"
-            ? "Completed"
-            : r.status === "rejected"
-              ? "Resolved"
-              : r.status === "sent_back"
-                ? "Sent back"
-                : "In-review";
-        return filters.status.includes(displayStatus);
+        const displayKey =
+          r.display_status ||
+          (r.partner_completed_at && r.status !== "completed"
+            ? "ready_to_complete"
+            : r.completion_notified_at && !r.partner_completed_at
+              ? "acknowledgement_pending"
+              : r.status);
+        return filters.status.includes(displayKey) || filters.status.includes(r.status);
       });
     }
 
@@ -88,12 +87,7 @@ export default function usePastRequestsTab({ pastRequests, setLoading }) {
 
       setPastRequestsFilterOptions({
         types: uniqueTypes.sort().map((t) => ({ value: t, label: t })),
-        statuses: [
-          { value: "Completed", label: "Completed" },
-          { value: "In-review", label: "In-review" },
-          { value: "Sent back", label: "Sent back" },
-          { value: "Resolved", label: "Resolved" },
-        ],
+        statuses: REFURBISHMENT_PAST_REQUEST_STATUSES,
         centers: uniqueCenters.sort().map((c) => ({ value: c, label: c })),
         financialYears: FY_OPTIONS,
       });

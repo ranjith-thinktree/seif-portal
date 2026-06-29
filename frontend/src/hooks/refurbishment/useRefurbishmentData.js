@@ -19,6 +19,7 @@ export const useRefurbishmentData = (selectedYear) => {
     alerts: [],
     activeRequests: [],
     pastRequests: [],
+    pastRequestsReadyToCompleteCount: 0,
     packages: [],
   });
 
@@ -211,10 +212,18 @@ export const useRefurbishmentData = (selectedYear) => {
           ? response.data
           : response.data?.requests || [];
         setDataState("pastRequests", requests);
+        setDataState(
+          "pastRequestsReadyToCompleteCount",
+          response.data?.readyToCompleteCount ?? 0,
+        );
+        return requests;
       }
+      return [];
     } catch (error) {
       console.error("Error loading past requests:", error);
       setDataState("pastRequests", []);
+      setDataState("pastRequestsReadyToCompleteCount", 0);
+      return [];
     } finally {
       setLoadingState("pastRequests", false);
     }

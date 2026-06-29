@@ -40,8 +40,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
-    'ESSCI',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',
@@ -86,8 +85,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
-    'ESSCI',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',
@@ -105,8 +103,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
-    'ESSCI',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',
@@ -131,7 +128,7 @@ router.get(
 /**
  * @route   GET /api/v1/centers/export
  * @desc    Export centers as CSV
- * @access  Private (Admin, SUPER_ADMIN, ESSCI, PARTNER)
+ * @access  Private (Admin, SUPER_ADMIN, PARTNER)
  */
 router.get(
   '/export',
@@ -150,8 +147,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
-    'ESSCI',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',

@@ -9,7 +9,7 @@ import {
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import EnhancedDataTable from "../../common/EnhancedDataTable";
 import AdvancedSearchBar from "../../common/AdvancedSearchBar";
-import { getDisplayRequestType } from "../../../utils/refurbishmentUtils";
+import { getDisplayRequestType, getRefurbishmentStatusLabel, getRefurbishmentStatusBadgeClass, getRefurbishmentDisplayStatus } from "../../../utils/refurbishmentUtils";
 
 /**
  * PastRequestsTab Component
@@ -40,50 +40,57 @@ const PastRequestsTab = ({
     totalPages: table.totalPages,
   };
 
-  // Status display config — matches Figma labels & badge styles
-  // "In-review" = yellow filled  |  "Completed" = green outlined  |  "Resolved" = grey outlined
-  const STATUS_MAP = {
-    submitted: {
-      label: "In-review",
-      cls: "bg-yellow-50 border border-yellow-400 text-yellow-700",
-    },
-    sent_back: {
-      label: "Sent back",
-      cls: "bg-amber-50 border border-amber-400 text-amber-800",
-    },
-    approved: {
-      label: "In-review",
-      cls: "bg-yellow-50 border border-yellow-400 text-yellow-700",
-    },
-    material_procurement: {
-      label: "In-review",
-      cls: "bg-yellow-50 border border-yellow-400 text-yellow-700",
-    },
-    installation_in_progress: {
-      label: "In-review",
-      cls: "bg-yellow-50 border border-yellow-400 text-yellow-700",
-    },
-    refurbishment_started: {
-      label: "In-review",
-      cls: "bg-yellow-50 border border-yellow-400 text-yellow-700",
-    },
-    completed: {
-      label: "Completed",
-      cls: "border border-green-500 text-green-600 bg-white",
-    },
-    rejected: {
-      label: "Resolved",
-      cls: "border border-gray-400 text-gray-500 bg-white",
-    },
-  };
-
-  // Statuses that can be advanced by the admin (clicking badge opens change modal)
-  const CHANGEABLE_STATUSES = [
+  // Statuses that open the workflow modal (update or view history)
+  const STATUS_MODAL_STATUSES = [
     "approved",
     "material_procurement",
     "installation_in_progress",
     "refurbishment_started",
+    "completed",
+    "rejected",
   ];
+
+  const renderStatusBadge = (req, asButton = false) => {
+    const label = getRefurbishmentStatusLabel(req);
+    const cls = getRefurbishmentStatusBadgeClass(req);
+    const opensModal = STATUS_MODAL_STATUSES.includes(req.status);
+    const isViewOnly = req.status === "completed" || req.status === "rejected";
+    const displayStatus = getRefurbishmentDisplayStatus(req);
+    const showReadyIndicator = displayStatus.key === "ready_to_complete";
+
+    if (asButton && opensModal && onStatusChange) {
+      return (
+        <button
+          onClick={() => onStatusChange(req)}
+          disabled={loading}
+          title={
+            req.status === "completed"
+              ? "View complete status history"
+              : req.status === "rejected"
+                ? "View rejection details"
+                : "Click to update status"
+          }
+          className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer hover:brightness-95 transition-all ${cls}`}
+        >
+          {showReadyIndicator && (
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+          )}
+          {label}
+        </button>
+      );
+    }
+
+    return (
+      <span
+        className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${cls}`}
+      >
+        {showReadyIndicator && (
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+        )}
+        {label}
+      </span>
+    );
+  };
 
   // Column definitions
   const columns = useMemo(
@@ -151,39 +158,12 @@ const PastRequestsTab = ({
         id: "status",
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => {
-          const req = row.original;
-          const status = req.status;
-          const cfg = STATUS_MAP[status] || {
-            label: status || "Unknown",
-            cls: "border border-gray-300 text-gray-500 bg-white",
-          };
-          const isChangeable = CHANGEABLE_STATUSES.includes(status);
-
-          if (isChangeable && onStatusChange) {
-            return (
-              <button
-                onClick={() => onStatusChange(req)}
-                disabled={loading}
-                title="Click to update status"
-                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold cursor-pointer hover:opacity-75 transition-opacity ${cfg.cls}`}
-              >
-                {cfg.label}
-              </button>
-            );
-          }
-
-          return (
-            <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${cfg.cls}`}
-            >
-              {cfg.label}
-            </span>
-          );
-        },
-        size: 150,
+        cell: ({ row }) => renderStatusBadge(row.original, true),
+        size: 220,
+        minSize: 160,
         enableHiding: true,
         enableResizing: true,
+        meta: { noTruncate: true },
       },
       {
         id: "actions",
@@ -264,6 +244,12 @@ const PastRequestsTab = ({
     return Array.from({ length: 5 }, (_, i) => currentYear - i);
   }, []);
 
+  const hasActiveTableFilters = (filters = {}) =>
+    Object.values(filters).some((value) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return Boolean(value);
+    });
+
   return (
     <div className="space-y-4">
       {/* Figma header row: New request (left) + FY dropdown (right) */}
@@ -323,7 +309,11 @@ const PastRequestsTab = ({
         pagination={paginationInfo}
         onPageChange={(page) => table.goToPage(page)}
         isLoading={loading}
-        emptyMessage="No past requests found"
+        emptyMessage={
+          table.total === 0 && !table.searchTerm && !hasActiveTableFilters(table.activeFilters)
+            ? `No past requests found for ${selectedYear}. Try selecting FY${String(selectedYear).slice(-2)} (current year) or another year from the dropdown above.`
+            : "No past requests match your search or filters. Try clearing filters."
+        }
         showSerialNumber={true}
         storageKey="refurbishment-past-requests"
         onTableReady={(t) => setTableInstance(t)}

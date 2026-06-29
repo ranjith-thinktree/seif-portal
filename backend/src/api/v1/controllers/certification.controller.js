@@ -30,11 +30,10 @@ const cleanupFile = (fp) => {
 
 /**
  * POST /certification/upload
- * Multipart: supportDoc (optional)
- * Body: centerId, batchId, batchStartDate, batchEndDate, assessmentDate
+ * Body: centerId, centerName, batchId?, otherBatchNumber?, batchStartDate, batchEndDate,
+ *       assessmentDate, spokeName, spokeEmail, spokeMobile
  */
 exports.uploadCertificationData = async (req, res) => {
-  const supportDoc = req.file; // single file from uploadCertificationFiles middleware
   try {
     const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
     const targetPartnerId = req.body.targetPartnerId || null;
@@ -43,34 +42,51 @@ exports.uploadCertificationData = async (req, res) => {
       partnerId = targetPartnerId;
     }
     const uploadedBy = req.user.id;
-    const { centerId, batchId, batchStartDate, batchEndDate, assessmentDate } = req.body;
+    const {
+      centerId,
+      centerName,
+      batchId,
+      otherBatchNumber,
+      batchStartDate,
+      batchEndDate,
+      assessmentDate,
+      spokeName,
+      spokeEmail,
+      spokeMobile,
+    } = req.body;
 
-    if (!centerId || !batchId) {
-      cleanupFile(supportDoc?.path);
-      return res.status(400).json({ success: false, message: 'centerId and batchId are required' });
+    const trimmedOtherBatch = otherBatchNumber ? String(otherBatchNumber).trim() : '';
+
+    if (!centerId) {
+      return res.status(400).json({ success: false, message: 'centerId is required' });
     }
-
-    const supportDocUrl = supportDoc ? toFileUrl(supportDoc.path) : null;
+    if (!batchId && !trimmedOtherBatch) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Select a batch or enter an other batch number' });
+    }
 
     const result = await certService.createCertificationUpload({
       partnerId,
       centerId,
-      batchId,
+      centerName: centerName ? String(centerName).trim() : null,
+      batchId: batchId || null,
+      otherBatchNumber: trimmedOtherBatch || null,
       batchStartDate: batchStartDate || null,
       batchEndDate: batchEndDate || null,
       assessmentDate: assessmentDate || null,
-      supportDocUrl,
-      supportDocName: supportDoc?.originalname || null,
+      spokeName: spokeName ? String(spokeName).trim() : null,
+      spokeEmail: spokeEmail ? String(spokeEmail).trim() : null,
+      spokeMobile: spokeMobile ? String(spokeMobile).trim() : null,
       uploadedBy,
     });
 
     res.json({
       success: true,
-      message: 'Certification data submitted successfully. Awaiting admin approval.',
+      message: 'Certification data submitted successfully. ESSCI will process your request.',
       data: result,
     });
   } catch (error) {
-    cleanupFile(supportDoc?.path);
     console.error('[certController] uploadCertificationData error:', error);
     res.status(500).json({ success: false, message: error.message || 'Upload failed' });
   }
@@ -117,6 +133,25 @@ exports.getPartnerCertificates = async (req, res) => {
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('[certController] getPartnerCertificates error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /certification/requests  (partner certification request list)
+ */
+exports.getPartnerCertificationRequests = async (req, res) => {
+  try {
+    const partnerId = req.user.partner_id || req.user.id;
+    const { page = 1, limit = 1000 } = req.query;
+    const result = await certService.listCertificationRequests({
+      partnerId,
+      page,
+      limit,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('[certController] getPartnerCertificationRequests error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -185,6 +220,20 @@ exports.adminGetPDFs = async (req, res) => {
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('[certController] adminGetPDFs error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /certification/admin/requests  (admin certification request list)
+ */
+exports.adminGetCertificationRequests = async (req, res) => {
+  try {
+    const { page = 1, limit = 1000 } = req.query;
+    const result = await certService.listCertificationRequests({ page, limit });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('[certController] adminGetCertificationRequests error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -298,14 +347,64 @@ exports.essciGetBatches = async (req, res) => {
 };
 
 /**
+ * POST /certification/essci/step1
+ * Multipart: qrCode (optional image/PDF)
+ * Body: uploadId, responseLink, responseId, responsePassword
+ */
+exports.essciSubmitStep1 = async (req, res) => {
+  const qrCode = req.files?.qrCode?.[0];
+  try {
+    const { uploadId, responseLink, responseId, responsePassword } = req.body;
+
+    if (!uploadId) {
+      cleanupFile(qrCode?.path);
+      return res.status(400).json({ success: false, message: 'uploadId is required' });
+    }
+    if (!responseLink?.trim() || !responseId?.trim() || !responsePassword?.trim()) {
+      cleanupFile(qrCode?.path);
+      return res.status(400).json({
+        success: false,
+        message: 'Link, ID, and password are required',
+      });
+    }
+
+    const result = await certService.submitESSCIStep1Response({
+      uploadId,
+      responseLink: String(responseLink).trim(),
+      responseId: String(responseId).trim(),
+      responsePassword: String(responsePassword).trim(),
+      qrCodeUrl: qrCode ? toFileUrl(qrCode.path) : null,
+      qrCodeName: qrCode?.originalname || null,
+      qrCodePath: qrCode?.path || null,
+      submittedBy: req.user.id,
+    });
+
+    res.json({
+      success: true,
+      message: 'Initial response submitted and shared with the center spoke person',
+      data: result,
+    });
+  } catch (error) {
+    cleanupFile(qrCode?.path);
+    console.error('[certController] essciSubmitStep1 error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Submit failed' });
+  }
+};
+
+/**
  * POST /certification/essci/upload-pdf
- * Multipart: zipFile (archive) + studentListDoc (document)
- * Body: partnerId, centerId, batchId, [certificationUploadId],
- *       traineesAttended, traineesPassed, traineesFailed, traineesAbsent
+ * Multipart: certificateFiles (1–10) and/or legacy zipFile + studentListDoc
+ * Body: partnerId, centerId, batchId, certificationUploadId,
+ *       traineesRegistered, traineesAttended, traineesPassed, traineesFailed
  */
 exports.essciUploadPDF = async (req, res) => {
   const zipFile = req.files?.zipFile?.[0];
   const studentListDoc = req.files?.studentListDoc?.[0];
+  const certificateFiles = req.files?.certificateFiles || [];
+  const allFiles = [zipFile, studentListDoc, ...certificateFiles].filter(Boolean);
+
+  const cleanupAll = () => allFiles.forEach((f) => cleanupFile(f?.path));
+
   try {
     const uploadedBy = req.user.id;
     const {
@@ -313,52 +412,77 @@ exports.essciUploadPDF = async (req, res) => {
       centerId,
       batchId,
       certificationUploadId,
+      traineesRegistered,
       traineesAttended,
       traineesPassed,
       traineesFailed,
       traineesAbsent,
     } = req.body;
 
-    if (!partnerId || !centerId || !batchId) {
-      cleanupFile(zipFile?.path);
-      cleanupFile(studentListDoc?.path);
+    if (!certificationUploadId) {
+      cleanupAll();
+      return res.status(400).json({ success: false, message: 'certificationUploadId is required' });
+    }
+    if (!partnerId || !centerId) {
+      cleanupAll();
       return res
         .status(400)
-        .json({ success: false, message: 'partnerId, centerId, and batchId are required' });
+        .json({ success: false, message: 'partnerId and centerId are required' });
     }
-    if (!zipFile) {
-      cleanupFile(studentListDoc?.path);
-      return res.status(400).json({ success: false, message: 'ZIP archive file is required' });
+
+    const reg = parseInt(traineesRegistered, 10);
+    const att = parseInt(traineesAttended, 10);
+    const pass = parseInt(traineesPassed, 10);
+    const fail = parseInt(traineesFailed, 10);
+    if ([reg, att, pass, fail].some((n) => Number.isNaN(n))) {
+      cleanupAll();
+      return res.status(400).json({
+        success: false,
+        message: 'Registered, attended, passed, and failed counts are required',
+      });
     }
-    if (!studentListDoc) {
-      cleanupFile(zipFile?.path);
-      return res.status(400).json({ success: false, message: 'Student list document is required' });
+
+    if (allFiles.length === 0) {
+      cleanupAll();
+      return res.status(400).json({
+        success: false,
+        message: 'Upload at least one certificate document (ZIP, PDF, or other supported format)',
+      });
     }
+
+    const fileEntries = allFiles.map((f) => ({
+      url: toFileUrl(f.path),
+      name: f.originalname,
+    }));
+
+    const primary = fileEntries[0];
+    const secondary = fileEntries[1] || null;
 
     const result = await certService.uploadCertificatePDF({
       partnerId,
       centerId,
       batchId,
-      certificationUploadId: certificationUploadId || null,
-      traineesAttended: parseInt(traineesAttended) || 0,
-      traineesPassed: parseInt(traineesPassed) || 0,
-      traineesFailed: parseInt(traineesFailed) || 0,
-      traineesAbsent: parseInt(traineesAbsent) || 0,
-      zipFileUrl: toFileUrl(zipFile.path),
-      zipFileName: zipFile.originalname,
-      studentListUrl: toFileUrl(studentListDoc.path),
-      studentListName: studentListDoc.originalname,
+      certificationUploadId,
+      traineesRegistered: reg,
+      traineesAttended: att,
+      traineesPassed: pass,
+      traineesFailed: fail,
+      traineesAbsent: parseInt(traineesAbsent, 10) || 0,
+      zipFileUrl: primary?.url || null,
+      zipFileName: primary?.name || null,
+      studentListUrl: secondary?.url || null,
+      studentListName: secondary?.name || null,
+      certificationFilesJson: JSON.stringify(fileEntries),
       uploadedBy,
     });
 
     res.json({
       success: true,
-      message: 'Certificate data uploaded and pending admin review',
+      message: 'Assessment results and certificates submitted successfully',
       data: result,
     });
   } catch (error) {
-    cleanupFile(zipFile?.path);
-    cleanupFile(studentListDoc?.path);
+    cleanupAll();
     console.error('[certController] essciUploadPDF error:', error);
     res.status(500).json({ success: false, message: error.message || 'Upload failed' });
   }

@@ -6,7 +6,7 @@ const STATUS_CONFIG = {
   submitted: { label: "Submitted", cls: "bg-blue-50 text-blue-700" },
   approved: { label: "Approved", cls: "bg-green-50 text-green-700" },
   material_procurement: {
-    label: "Material Procurement",
+    label: "Material Procurement Completed",
     cls: "bg-teal-50 text-teal-700",
   },
   installation_in_progress: {

@@ -13,7 +13,13 @@ import { XMarkIcon } from "@heroicons/react/24/outline";
  * @param {Object} notification - The notification object from the inbox
  * @param {Function} onDismiss  - Callback when the dismiss / close button is clicked
  */
-const RefurbishmentStatusCard = ({ notification, onDismiss, onReviewData }) => {
+const RefurbishmentStatusCard = ({
+  notification,
+  onDismiss,
+  onReviewData,
+  onSubmitAcknowledgment,
+  acknowledgmentLoading = false,
+}) => {
   const fmtDate = (d) =>
     d
       ? new Date(d).toLocaleDateString("en-GB", {
@@ -113,6 +119,48 @@ const RefurbishmentStatusCard = ({ notification, onDismiss, onReviewData }) => {
             </svg>
           ),
         };
+      case "refurbishment_acknowledgment_due":
+        return {
+          label: "Action Required",
+          badgeCls: "bg-purple-100 text-purple-700 border border-purple-200",
+          iconCls: "text-purple-500",
+          icon: (
+            <svg
+              className="h-10 w-10"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          ),
+        };
+      case "refurbishment_acknowledgment_submitted":
+        return {
+          label: "Acknowledgment Submitted",
+          badgeCls: "bg-sky-100 text-sky-800 border border-sky-300",
+          iconCls: "text-sky-500",
+          icon: (
+            <svg
+              className="h-10 w-10"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          ),
+        };
       default:
         return {
           label: "Notification",
@@ -137,7 +185,18 @@ const RefurbishmentStatusCard = ({ notification, onDismiss, onReviewData }) => {
     }
   };
 
-  const { label, badgeCls, iconCls, icon } = getConfig(notification.alert_type);
+  const isAcknowledgmentSubmitted =
+    notification.alert_type === "refurbishment_acknowledgment_submitted" ||
+    notification.acknowledgment_submitted === true;
+  const isAcknowledgmentDue =
+    notification.alert_type === "refurbishment_acknowledgment_due" &&
+    !isAcknowledgmentSubmitted;
+  const displayAlertType =
+    isAcknowledgmentSubmitted &&
+    notification.alert_type === "refurbishment_acknowledgment_due"
+      ? "refurbishment_acknowledgment_submitted"
+      : notification.alert_type;
+  const { label, badgeCls, iconCls, icon } = getConfig(displayAlertType);
 
   return (
     <Card className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
@@ -172,6 +231,38 @@ const RefurbishmentStatusCard = ({ notification, onDismiss, onReviewData }) => {
 
       {/* Body */}
       <div className="flex-1 px-6 py-5 space-y-4 overflow-y-auto">
+        {isAcknowledgmentDue && onSubmitAcknowledgment && (
+          <div className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-4 space-y-3">
+            <p className="text-sm font-semibold text-purple-900">
+              Your acknowledgment is required
+            </p>
+            <p className="text-sm text-purple-800 leading-relaxed">
+              Submit your statement and supporting files here. You do not need to
+              go to Past Requests.
+            </p>
+            <button
+              type="button"
+              onClick={onSubmitAcknowledgment}
+              disabled={acknowledgmentLoading}
+              className="w-full px-4 py-2.5 rounded-full bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+            >
+              {acknowledgmentLoading ? "Opening…" : "Submit Acknowledgment"}
+            </button>
+          </div>
+        )}
+
+        {isAcknowledgmentSubmitted && (
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4">
+            <p className="text-sm font-semibold text-sky-900">
+              Acknowledgment is submitted
+            </p>
+            <p className="text-sm text-sky-800 leading-relaxed mt-1">
+              Your acknowledgment has been received. Admin will review and
+              complete the request.
+            </p>
+          </div>
+        )}
+
         {/* Message */}
         <div>
           <p className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase mb-1.5">
@@ -197,10 +288,71 @@ const RefurbishmentStatusCard = ({ notification, onDismiss, onReviewData }) => {
             </div>
           </div>
         )}
+
+        {notification.alert_type === "refurbishment_approved" &&
+          (() => {
+            let payload = notification.payload;
+            if (typeof payload === "string") {
+              try {
+                payload = JSON.parse(payload);
+              } catch {
+                payload = null;
+              }
+            }
+            const mods = payload?.package_modifications;
+            if (!mods) return null;
+            return (
+              <div>
+                <p className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase mb-1.5">
+                  Package changes
+                </p>
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 space-y-3">
+                  {mods.removed?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-red-700 mb-1">
+                        Removed packages
+                      </p>
+                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                        {mods.removed.map((pkg, idx) => (
+                          <li key={`removed-${idx}`}>
+                            {pkg.package_name}
+                            {pkg.scope === "upgradation"
+                              ? " (Upgradation)"
+                              : pkg.course_name
+                                ? ` (${pkg.course_name})`
+                                : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {mods.added?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-green-700 mb-1">
+                        Added packages
+                      </p>
+                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                        {mods.added.map((pkg, idx) => (
+                          <li key={`added-${idx}`}>
+                            {pkg.package_name}
+                            {pkg.scope === "upgradation"
+                              ? " (Upgradation)"
+                              : pkg.course_name
+                                ? ` (${pkg.course_name})`
+                                : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+      <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
         {onReviewData && (
           <button
             onClick={onReviewData}

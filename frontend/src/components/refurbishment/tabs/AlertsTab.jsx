@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
 import { Checkbox } from "../../ui/checkbox";
+import { REFURBISHMENT_STATUS_LABELS } from "../../../utils/refurbishmentUtils";
 
 // Columns that can be shown/hidden (Action is always visible)
 const ALERT_COLUMNS = [
@@ -390,7 +391,7 @@ const AlertsTab = ({
                                     : s === "refurbishment_started"
                                       ? "In Progress"
                                       : s === "material_procurement"
-                                        ? "Procurement"
+                                        ? REFURBISHMENT_STATUS_LABELS.material_procurement
                                         : "Installation"}
                                 </span>
                               );

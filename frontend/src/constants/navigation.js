@@ -59,6 +59,12 @@ export const SIDEBAR_MENU = [
     ],
   },
   {
+    name: "Requests",
+    path: ROUTES.REQUESTS,
+    icon: ClipboardDocumentListIcon,
+    roles: [ROLES.ESSCI],
+  },
+  {
     name: "Upload",
     path: ROUTES.UPLOAD_DATA,
     icon: ArrowUpTrayIcon,
@@ -87,6 +93,12 @@ export const SIDEBAR_MENU = [
     path: ROUTES.PARTNER_CERTIFICATES,
     icon: AcademicCapIcon,
     roles: [ROLES.PARTNER],
+  },
+  {
+    name: "Certificates",
+    path: ROUTES.ADMIN_CERTIFICATES,
+    icon: AcademicCapIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {
     name: "Organization Management",
@@ -124,7 +136,6 @@ export const SIDEBAR_MENU = [
     roles: [
       ROLES.SUPER_ADMIN,
       ROLES.ADMIN,
-      ROLES.ESSCI,
       ROLES.SEIF_READONLY,
       ROLES.SEIF_READONLY_DOWNLOAD,
       ROLES.PARTNER,

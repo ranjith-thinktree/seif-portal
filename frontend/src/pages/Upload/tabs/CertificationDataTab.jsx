@@ -1,9 +1,6 @@
 import React from "react";
-import {
-  CheckCircleIcon,
-  XCircleIcon,
-  ArrowUpTrayIcon,
-} from "@heroicons/react/24/outline";
+import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import RefurbishmentDatePicker from "../../../components/refurbishment/RefurbishmentDatePicker";
 
 const CertificationDataTab = ({
   certNoteOpen,
@@ -15,6 +12,8 @@ const CertificationDataTab = ({
   certCenterId,
   certBatchId,
   setCertBatchId,
+  certOtherBatchNumber,
+  setCertOtherBatchNumber,
   certCentersLoading,
   certBatchesLoading,
   certBatchStartDate,
@@ -23,14 +22,20 @@ const CertificationDataTab = ({
   setCertBatchEndDate,
   certAssessmentDate,
   setCertAssessmentDate,
-  certSupportDoc,
-  setCertSupportDoc,
+  certSpokeName,
+  setCertSpokeName,
+  certSpokeEmail,
+  setCertSpokeEmail,
+  certSpokeMobile,
+  setCertSpokeMobile,
   certUploading,
   handleCertCenterChange,
   handleCertUpload,
 }) => {
+  const canSubmit =
+    certCenterId && (certBatchId || certOtherBatchNumber.trim().length > 0);
+
   return (
-    /* ── Certification Data Tab ─────────────────────────────────── */
     <div>
       {/* Collapsible Note */}
       <div className="mb-6 border-l-4 border-amber-500 rounded-r-lg overflow-hidden">
@@ -75,19 +80,14 @@ const CertificationDataTab = ({
           <div className="bg-amber-50 px-4 pb-4 pt-1 border-t border-amber-200">
             <p className="text-amber-700 text-sm">
               You can only submit certification data for{" "}
-              <strong>approved batches</strong>. Ensure the center and batch you
-              select have been approved by the admin. The assessment dates are
-              optional but recommended for accurate records.
-            </p>
-            <p className="text-amber-700 text-sm mt-2">
-              👉 You can attach a supporting document (PDF, image, Word) as
-              evidence for the certification submission.
+              <strong>approved centers</strong>. Select a batch from the list or
+              enter an other batch number if it is not listed. Submitted data is
+              sent directly to ESSCI for certificate processing.
             </p>
           </div>
         )}
       </div>
 
-      {/* Success Message */}
       {certSuccess && (
         <div className="mb-6 bg-primary-50 border border-primary-500 rounded-lg p-4 flex items-start gap-3">
           <CheckCircleIcon className="h-6 w-6 text-primary-500 flex-shrink-0 mt-0.5" />
@@ -100,7 +100,6 @@ const CertificationDataTab = ({
         </div>
       )}
 
-      {/* Error Message */}
       {certError && (
         <div className="mb-6 bg-destructive/10 border border-destructive rounded-lg p-4">
           <div className="flex items-start gap-3">
@@ -115,48 +114,56 @@ const CertificationDataTab = ({
         </div>
       )}
 
-      {/* Main Content - Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 border border-[#A5A5A5] p-6 bg-white rounded-2xl">
-        {/* Left Column - Form */}
         <div className="border-r border-[#A5A5A5] pr-6">
           <div className="space-y-5">
-            {/* Center + Batch */}
+            {/* Center */}
             <div>
               <h2 className="font-semibold text-gray-800 mb-3">
-                Select Center &amp; Batch
+                Center Details
+              </h2>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Center *
+                </label>
+                <select
+                  value={certCenterId}
+                  onChange={(e) => handleCertCenterChange(e.target.value)}
+                  disabled={certCentersLoading}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50"
+                >
+                  <option value="">
+                    {certCentersLoading
+                      ? "Loading centers…"
+                      : certCenters.length === 0
+                        ? "No approved centers found"
+                        : "-- Select center --"}
+                  </option>
+                  {certCenters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.center_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Batch */}
+            <div>
+              <h2 className="font-semibold text-gray-800 mb-3">
+                Batch Details
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Center *
-                  </label>
-                  <select
-                    value={certCenterId}
-                    onChange={(e) => handleCertCenterChange(e.target.value)}
-                    disabled={certCentersLoading}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50"
-                  >
-                    <option value="">
-                      {certCentersLoading
-                        ? "Loading centers…"
-                        : certCenters.length === 0
-                          ? "No approved centers found"
-                          : "-- Select center --"}
-                    </option>
-                    {certCenters.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.center_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Batch *
+                    Batch Number
                   </label>
                   <select
                     value={certBatchId}
-                    onChange={(e) => setCertBatchId(e.target.value)}
+                    onChange={(e) => {
+                      setCertBatchId(e.target.value);
+                      if (e.target.value) setCertOtherBatchNumber("");
+                    }}
                     disabled={!certCenterId || certBatchesLoading}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50"
                   >
@@ -176,7 +183,27 @@ const CertificationDataTab = ({
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Other Batch Number
+                  </label>
+                  <input
+                    type="text"
+                    value={certOtherBatchNumber}
+                    onChange={(e) => {
+                      setCertOtherBatchNumber(e.target.value);
+                      if (e.target.value.trim()) setCertBatchId("");
+                    }}
+                    disabled={!certCenterId}
+                    placeholder="Enter if not in the list above"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50"
+                  />
+                </div>
               </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Select a batch from the dropdown or enter an other batch number
+                (one is required).
+              </p>
             </div>
 
             {/* Dates */}
@@ -189,96 +216,95 @@ const CertificationDataTab = ({
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Batch Start Date
                   </label>
-                  <input
-                    type="date"
+                  <RefurbishmentDatePicker
                     value={certBatchStartDate}
-                    onChange={(e) => setCertBatchStartDate(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                    onChange={setCertBatchStartDate}
+                    placeholder="Pick start date"
+                    className="max-w-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Batch End Date
                   </label>
-                  <input
-                    type="date"
+                  <RefurbishmentDatePicker
                     value={certBatchEndDate}
-                    onChange={(e) => setCertBatchEndDate(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                    onChange={setCertBatchEndDate}
+                    placeholder="Pick end date"
+                    minDate={
+                      certBatchStartDate
+                        ? new Date(`${certBatchStartDate}T00:00:00`)
+                        : undefined
+                    }
+                    className="max-w-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Assessment Date
                   </label>
-                  <input
-                    type="date"
+                  <RefurbishmentDatePicker
                     value={certAssessmentDate}
-                    onChange={(e) => setCertAssessmentDate(e.target.value)}
+                    onChange={setCertAssessmentDate}
+                    placeholder="Pick assessment date"
+                    className="max-w-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Center Spoke */}
+            <div>
+              <h2 className="font-semibold text-gray-800 mb-3">
+                Center Spoke Details
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={certSpokeName}
+                    onChange={(e) => setCertSpokeName(e.target.value)}
+                    placeholder="Spoke contact name"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={certSpokeEmail}
+                    onChange={(e) => setCertSpokeEmail(e.target.value)}
+                    placeholder="Spoke contact email"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={certSpokeMobile}
+                    onChange={(e) => setCertSpokeMobile(e.target.value)}
+                    placeholder="Spoke contact mobile"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Supporting Document */}
-            <div>
-              <h2 className="font-semibold text-gray-800 mb-3">
-                Supporting Document{" "}
-                <span className="text-gray-400 font-normal text-xs">
-                  (optional)
-                </span>
-              </h2>
-              <div
-                className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors border-gray-300 hover:border-primary-400 hover:bg-gray-50"
-                onClick={() =>
-                  document.getElementById("certSupportDocInput").click()
-                }
-              >
-                <input
-                  id="certSupportDocInput"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx,.xls"
-                  className="hidden"
-                  onChange={(e) => setCertSupportDoc(e.target.files[0] || null)}
-                />
-                <ArrowUpTrayIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                {certSupportDoc ? (
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 truncate">
-                      {certSupportDoc.name}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCertSupportDoc(null);
-                      }}
-                      className="mt-1 text-xs text-destructive hover:text-destructive/80"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">
-                      Click to attach a document
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      PDF, JPEG, PNG, Word, CSV, XLSX
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Submit Button */}
             <div className="flex justify-center pt-2">
               <button
+                type="button"
                 onClick={handleCertUpload}
-                disabled={certUploading || !certCenterId || !certBatchId}
+                disabled={certUploading || !canSubmit}
                 className={`px-12 py-4 rounded-full text-lg font-semibold transition-all w-full ${
-                  certUploading || !certCenterId || !certBatchId
+                  certUploading || !canSubmit
                     ? "bg-muted text-muted-foreground cursor-not-allowed"
                     : "bg-primary-500 text-white hover:bg-primary-600 shadow-lg hover:shadow-xl"
                 }`}
@@ -311,7 +337,6 @@ const CertificationDataTab = ({
           </div>
         </div>
 
-        {/* Right Column - Instructions */}
         <div className="pl-6">
           <div className="bg-white rounded-lg h-full">
             <div className="mb-8">
@@ -329,11 +354,10 @@ const CertificationDataTab = ({
                 </span>
                 <div className="pt-1.5">
                   <p className="text-base font-semibold text-foreground">
-                    Select Center &amp; Batch
+                    Select Center
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Choose an approved center, then select the batch from the
-                    list.
+                    Choose an approved center from the list.
                   </p>
                 </div>
               </div>
@@ -343,11 +367,12 @@ const CertificationDataTab = ({
                 </span>
                 <div className="pt-1.5">
                   <p className="text-base font-semibold text-foreground">
-                    Fill Dates &amp; Attach Document
+                    Enter Batch &amp; Dates
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Enter batch and assessment dates. Optionally attach a
-                    supporting document (PDF, image, Word).
+                    Select a batch number from the list or type an other batch
+                    number. Add batch and assessment dates and spoke contact
+                    details.
                   </p>
                 </div>
               </div>
@@ -357,10 +382,11 @@ const CertificationDataTab = ({
                 </span>
                 <div className="pt-1.5">
                   <p className="text-base font-semibold text-foreground">
-                    Submit &amp; Await Approval
+                    Submit &amp; Await ESSCI Processing
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Admin will review and approve or reject your submission.
+                    Your submission is sent directly to ESSCI for certificate
+                    processing.
                   </p>
                 </div>
               </div>

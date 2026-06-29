@@ -33,7 +33,7 @@ const upload = multer({
 /**
  * @route   GET /api/v1/partners
  * @desc    Get all partners with pagination
- * @access  Private (Admin, SUPER_ADMIN, ESSCI, SEIF_READONLY)
+ * @access  Private (Admin, SUPER_ADMIN, SEIF_READONLY)
  */
 router.get(
   '/',
@@ -47,7 +47,7 @@ router.get(
 /**
  * @route   GET /api/v1/partners/filter-options
  * @desc    Get filter options for partners
- * @access  Private (Admin, SUPER_ADMIN, ESSCI, SEIF_READONLY)
+ * @access  Private (Admin, SUPER_ADMIN, SEIF_READONLY)
  */
 router.get(
   '/filter-options',
@@ -96,7 +96,7 @@ router.get(
 /**
  * @route   GET /api/v1/partners/export
  * @desc    Export partners as CSV
- * @access  Private (Admin, SUPER_ADMIN, ESSCI)
+ * @access  Private (Admin, SUPER_ADMIN)
  */
 router.get(
   '/export',
@@ -120,7 +120,7 @@ router.get(
 /**
  * @route   GET /api/v1/partners/:id
  * @desc    Get partner by ID
- * @access  Private (Admin, SUPER_ADMIN, ESSCI, SEIF_READONLY)
+ * @access  Private (Admin, SUPER_ADMIN, SEIF_READONLY)
  */
 router.get(
   '/:id',

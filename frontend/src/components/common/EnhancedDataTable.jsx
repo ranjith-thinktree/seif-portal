@@ -178,10 +178,10 @@ const EnhancedDataTable = ({
           </div>
         ),
         enableHiding: false,
-        enableResizing: false,
+        enableResizing: true,
         size: 90,
-        minSize: 90,
-        maxSize: 90,
+        minSize: 60,
+        maxSize: 160,
       },
       ...tableColumns,
     ];
@@ -331,21 +331,20 @@ const EnhancedDataTable = ({
                         )}
                       </div>
                     )}
-                    {/* Only show resize handle if column can be resized AND is not the serial column */}
-                    {header.column.getCanResize() &&
-                      header.column.id !== "serial" && (
-                        <div
-                          onDoubleClick={() => header.column.resetSize()}
-                          onMouseDown={header.getResizeHandler()}
-                          onTouchStart={header.getResizeHandler()}
-                          className={`resize-handle absolute top-0 h-full w-4 cursor-col-resize select-none touch-none -right-2 z-10 flex justify-center before:absolute before:w-px before:inset-y-0 before:bg-border before:translate-x-px ${
-                            header.column.getIsResizing() ? "is-resizing" : ""
-                          }`}
-                          style={{
-                            userSelect: "none",
-                          }}
-                        />
-                      )}
+                    {/* Resize handle */}
+                    {header.column.getCanResize() && (
+                      <div
+                        onDoubleClick={() => header.column.resetSize()}
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`resize-handle absolute top-0 h-full w-4 cursor-col-resize select-none touch-none -right-2 z-10 flex justify-center before:absolute before:w-px before:inset-y-0 before:bg-border before:translate-x-px ${
+                          header.column.getIsResizing() ? "is-resizing" : ""
+                        }`}
+                        style={{
+                          userSelect: "none",
+                        }}
+                      />
+                    )}
                   </TableHead>
                 ))}
               </TableRow>
@@ -366,7 +365,8 @@ const EnhancedDataTable = ({
                       key={cell.id}
                       className={cn(
                         "px-6 py-4 text-sm",
-                        cell.column.id === "actions"
+                        cell.column.id === "actions" ||
+                          cell.column.columnDef.meta?.noTruncate
                           ? "overflow-visible relative"
                           : "truncate",
                       )}

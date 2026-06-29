@@ -18,9 +18,6 @@ import {
   ArrowTrendingDownIcon,
   ChevronDownIcon,
   ArrowDownTrayIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import {
   AreaChart,
@@ -39,6 +36,7 @@ import IndiaTrainingCard from "../../components/dashboard/IndiaTrainingCard";
 import { useNavigate } from "react-router-dom";
 import dataService from "../../services/data.service";
 import { essciGetData } from "../../services/certification.service";
+import { getCertificationNotificationNavigation } from "../../utils/certificationUtils";
 import {
   KPI_CARD_DEFINITIONS,
   resolveKpiCardTitle,
@@ -1363,6 +1361,7 @@ const SeifReadOnlyDashboard = ({ userName }) => {
  */
 const EssciDashboard = ({ userName }) => {
   const navigate = useNavigate();
+  const { notifications, markNotificationAsRead } = useNotifications();
   const [selectedYear, setSelectedYear] = useState("all");
   const [certStats, setCertStats] = useState({
     total: 0,
@@ -1379,14 +1378,14 @@ const EssciDashboard = ({ userName }) => {
         const yearParam = selectedYear !== "all" ? { year: selectedYear } : {};
         const [allRes, doneRes, reviewRes, ongoingRes] = await Promise.all([
           essciGetData({ page: 1, limit: 1, ...yearParam }),
-          essciGetData({ page: 1, limit: 1, status: "Done", ...yearParam }),
+          essciGetData({ page: 1, limit: 1, filter: "done", ...yearParam }),
           essciGetData({
             page: 1,
             limit: 1,
-            status: "Under review",
+            filter: "under_review",
             ...yearParam,
           }),
-          essciGetData({ page: 1, limit: 1, status: "Ongoing", ...yearParam }),
+          essciGetData({ page: 1, limit: 1, filter: "ongoing", ...yearParam }),
         ]);
         setCertStats({
           total: allRes?.data?.total ?? allRes?.total ?? 0,
@@ -1403,58 +1402,49 @@ const EssciDashboard = ({ userName }) => {
     fetchStats();
   }, [selectedYear]);
 
+  const buildTrendGraphData = (value) => {
+    const numericValue = Number(value) || 0;
+    if (numericValue === 0) {
+      return [{ value: 0 }, { value: 0 }, { value: 0 }];
+    }
+    return Array.from({ length: 7 }, (_, index) => ({
+      value: Math.round((numericValue * (index + 1)) / 7),
+    }));
+  };
+
   const statCards = [
     {
-      label: "Total Uploads",
+      key: "total",
+      title: "Total Uploads",
       value: certStats.total,
-      icon: ClipboardDocumentListIcon,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
+      trend: "up",
     },
     {
-      label: "Done",
+      key: "done",
+      title: "Completed",
       value: certStats.done,
-      icon: CheckCircleIcon,
-      color: "text-green-600",
-      bg: "bg-green-50",
+      trend: "up",
     },
     {
-      label: "Under Review",
+      key: "underReview",
+      title: "Under Review",
       value: certStats.underReview,
-      icon: ClockIcon,
-      color: "text-yellow-600",
-      bg: "bg-yellow-50",
+      trend: "down",
     },
     {
-      label: "Ongoing",
+      key: "ongoing",
+      title: "Ongoing",
       value: certStats.ongoing,
-      icon: ArrowPathIcon,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
+      trend: "up",
     },
   ];
 
   const quickActions = [
     {
-      label: "Upload Certificate PDF",
-      description: "Submit a new certificate PDF for a batch",
-      icon: ArrowDownTrayIcon,
-      action: () => navigate(ROUTES.ESSCI_UPLOAD),
-      variant: "primary",
-    },
-    {
-      label: "Download Partner Data",
-      description: "Export complete partner database as CSV",
-      icon: DocumentTextIcon,
-      action: () => dataService.downloadPartnersCSV?.(),
-      variant: "secondary",
-    },
-    {
-      label: "Download Student Records",
-      description: "Export all student data as CSV",
-      icon: DocumentTextIcon,
-      action: () => dataService.downloadStudentsCSV?.(),
-      variant: "secondary",
+      label: "View Certification Requests",
+      description: "Review submissions and track certificate processing status",
+      icon: ClipboardDocumentListIcon,
+      action: () => navigate(ROUTES.REQUESTS),
     },
   ];
 
@@ -1467,7 +1457,7 @@ const EssciDashboard = ({ userName }) => {
             Welcome back, {userName}!
           </h1>
           <p className="text-muted-foreground mt-2">
-            Manage certifications and export data for analysis.
+            Manage certification requests and processing status.
           </p>
         </div>
 
@@ -1488,61 +1478,123 @@ const EssciDashboard = ({ userName }) => {
       </div>
 
       {/* Certification Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {statCards.map(({ label, value, icon: Icon, color, bg }) => (
-          <div
-            key={label}
-            className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4"
-          >
-            <div className={`${bg} p-3 rounded-lg`}>
-              <Icon className={`h-6 w-6 ${color}`} />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">{label}</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {statsLoading ? "â€”" : value}
-              </p>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {statCards.map(({ key, title, value, trend }) => (
+          <StatCard
+            key={key}
+            title={title}
+            value={statsLoading ? "—" : value.toLocaleString()}
+            trend={trend}
+            graphData={buildTrendGraphData(value)}
+          />
         ))}
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>
-            Navigate to key certification workflows
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {quickActions.map(
-              ({ label, description, icon: Icon, action, variant }) => (
-                <button
-                  key={label}
-                  onClick={action}
-                  className={`p-4 border rounded-lg text-left transition-colors ${
-                    variant === "primary"
-                      ? "border-blue-200 hover:border-blue-400 hover:bg-blue-50"
-                      : "border-gray-200 hover:border-gray-400 hover:bg-gray-50"
-                  }`}
-                >
-                  <Icon
-                    className={`h-8 w-8 mb-2 ${
-                      variant === "primary" ? "text-blue-600" : "text-gray-500"
-                    }`}
-                  />
-                  <p className="font-medium text-gray-900">{label}</p>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {description}
-                  </p>
-                </button>
-              ),
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Quick Actions & Notifications */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="bg-white rounded-xl shadow-sm border-[#A5A5A5] border h-full">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+            <CardDescription>
+              Navigate to key certification workflows
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-4">
+              {quickActions.map(
+                ({ label, description, icon: Icon, action }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={action}
+                    className="p-4 border border-border rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
+                  >
+                    <Icon className="h-8 w-8 text-primary-500 mb-2" />
+                    <p className="font-medium">{label}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {description}
+                    </p>
+                  </button>
+                ),
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative bg-white rounded-xl shadow-sm border-[#A5A5A5] border h-full">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-xl font-bold">Notifications</CardTitle>
+            <CardDescription>
+              Click a notification to open the related certification request
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-y-auto max-h-96">
+              {notifications && notifications.length > 0 ? (
+                notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    role="button"
+                    tabIndex={0}
+                    className="flex items-start gap-4 px-6 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => {
+                      const target = getCertificationNotificationNavigation(
+                        notification,
+                        ROLES.ESSCI,
+                      );
+                      if (!notification.is_read) {
+                        markNotificationAsRead(notification.id);
+                      }
+                      navigate(target?.path || ROUTES.INBOX);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        const target = getCertificationNotificationNavigation(
+                          notification,
+                          ROLES.ESSCI,
+                        );
+                        if (!notification.is_read) {
+                          markNotificationAsRead(notification.id);
+                        }
+                        navigate(target?.path || ROUTES.INBOX);
+                      }
+                    }}
+                  >
+                    <div className="relative flex-shrink-0">
+                      <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
+                        <ClipboardDocumentListIcon className="w-6 h-6 text-blue-600" />
+                      </div>
+                      {!notification.is_read && (
+                        <span className="absolute -top-1 -left-1 bg-[#FF4B4A] text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                          New
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-[#111827] text-base mb-1">
+                        {notification.title}
+                      </h3>
+                      <p className="text-sm text-[#6B7280] leading-relaxed">
+                        {notification.message}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="flex-shrink-0 px-6 py-2 border border-gray-300 rounded-3xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      View
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center py-12 text-gray-400">
+                  <p>No notifications</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

@@ -106,42 +106,31 @@ const CompletionModal = ({
 
   // Handle form submission
   const handleSubmit = async () => {
-    // Validation
-    if (!completionStatement || completionStatement.trim() === "") {
-      toast.error("Completion statement is required");
-      return;
-    }
-
-    if (completionImages.length === 0) {
-      toast.error("At least one completion image is required");
-      return;
-    }
-
     setLoading(true);
     try {
-      // Upload images to S3 first
-      const formData = new FormData();
-      completionImages.forEach((file) => {
-        formData.append("images", file);
-      });
+      let uploadedImages = [];
+      if (completionImages.length > 0) {
+        const formData = new FormData();
+        completionImages.forEach((file) => {
+          formData.append("images", file);
+        });
 
-      // Upload to S3 and get URLs
-      const uploadResponse = await refurbishmentService.uploadCompletionImages(
-        requestId,
-        formData,
-      );
+        const uploadResponse = await refurbishmentService.uploadCompletionImages(
+          requestId,
+          formData,
+        );
 
-      if (!uploadResponse.success || !uploadResponse.data?.images) {
-        throw new Error("Failed to upload images to S3");
+        if (!uploadResponse.success || !uploadResponse.data?.images) {
+          throw new Error("Failed to upload images to S3");
+        }
+
+        uploadedImages = uploadResponse.data.images;
       }
 
-      const uploadedImages = uploadResponse.data.images;
-
-      // Call API to mark as completed with S3 URLs
       await refurbishmentService.completeRefurbishment(requestId, {
-        completion_statement: completionStatement,
+        completion_statement: completionStatement.trim() || undefined,
         completion_date: completionDate,
-        completion_images: uploadedImages, // Real S3 URLs from upload
+        completion_images: uploadedImages.length > 0 ? uploadedImages : undefined,
       });
 
       toast.success("Refurbishment marked as completed");
@@ -210,7 +199,8 @@ const CompletionModal = ({
               htmlFor="completion-statement"
               className="text-sm font-semibold text-gray-700"
             >
-              Completion Statement <span className="text-red-500">*</span>
+              Completion Statement{" "}
+              <span className="text-gray-400 font-normal">(optional)</span>
             </Label>
             <Textarea
               id="completion-statement"
@@ -228,7 +218,8 @@ const CompletionModal = ({
           {/* Completion Images */}
           <div>
             <Label className="text-sm font-semibold text-gray-700">
-              Completion Images <span className="text-red-500">*</span>
+              Completion Images{" "}
+              <span className="text-gray-400 font-normal">(optional)</span>
             </Label>
             <p className="text-xs text-gray-500 mt-1 mb-2">
               Upload images showing completed refurbishment work (max 10 images,
@@ -307,9 +298,7 @@ const CompletionModal = ({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={
-              loading || !completionStatement || completionImages.length === 0
-            }
+            disabled={loading}
             className="bg-green-600 hover:bg-green-700"
           >
             {loading ? "Submitting..." : "Mark as Completed"}

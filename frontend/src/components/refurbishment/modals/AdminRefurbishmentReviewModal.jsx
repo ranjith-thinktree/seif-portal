@@ -2,7 +2,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogTitle } from "../../ui/dialog";
 import { toast } from "react-toastify";
 import refurbishmentService from "../../../services/refurbishment.service";
-import { resolvePartnerFileUrl } from "../../../utils/refurbishmentUtils";
+import {
+  resolvePartnerFileUrl,
+  getRefurbishmentStatusLabel,
+  getRefurbishmentStatusBadgeClass,
+  isPartnerImageFile,
+} from "../../../utils/refurbishmentUtils";
 
 const REJECTION_REASONS = [
   "Budget constraints",
@@ -12,26 +17,51 @@ const REJECTION_REASONS = [
   "Other",
 ];
 
-const isImageUpload = (item, url) => {
-  const mime = (item?.type || item?.file_mime_type || "").toLowerCase();
-  if (mime.startsWith("image/")) return true;
-  return /\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(url || "");
-};
-
 const PartnerUploadTile = ({ item, showDownload = true }) => {
   const [imageFailed, setImageFailed] = useState(false);
+  const [activeSrc, setActiveSrc] = useState("");
   const rawUrl = item?.url || item?.file_url;
-  const url = resolvePartnerFileUrl(rawUrl);
+  const resolvedUrl = resolvePartnerFileUrl(rawUrl);
   const name = item?.name || item?.file_name || "Upload";
 
-  if (!url) return null;
+  const fallbackSrc = React.useMemo(() => {
+    if (!rawUrl || typeof rawUrl !== "string") return "";
+    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+      try {
+        const parsed = new URL(rawUrl);
+        if (parsed.pathname.startsWith("/uploads/")) {
+          return parsed.pathname;
+        }
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  }, [rawUrl]);
 
-  const showImage = isImageUpload(item, url) && !imageFailed;
+  React.useEffect(() => {
+    setImageFailed(false);
+    setActiveSrc(resolvedUrl || fallbackSrc);
+  }, [resolvedUrl, fallbackSrc]);
+
+  if (!activeSrc && !resolvedUrl) return null;
+
+  const displaySrc = activeSrc || resolvedUrl;
+  const showImage =
+    isPartnerImageFile({ ...item, url: displaySrc }) && !imageFailed;
+
+  const handleImageError = () => {
+    if (fallbackSrc && displaySrc !== fallbackSrc) {
+      setActiveSrc(fallbackSrc);
+      return;
+    }
+    setImageFailed(true);
+  };
 
   return (
     <div className="w-[148px] border border-gray-200 rounded-xl overflow-hidden bg-white hover:border-green-300 hover:shadow-sm transition-all">
       <a
-        href={url}
+        href={displaySrc}
         target="_blank"
         rel="noopener noreferrer"
         className="block"
@@ -40,11 +70,11 @@ const PartnerUploadTile = ({ item, showDownload = true }) => {
         <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
           {showImage ? (
             <img
-              src={url}
+              src={displaySrc}
               alt={name}
               className="w-full h-full object-cover"
               loading="lazy"
-              onError={() => setImageFailed(true)}
+              onError={handleImageError}
             />
           ) : (
             <div className="flex flex-col items-center gap-1.5 p-3 text-gray-400">
@@ -72,7 +102,7 @@ const PartnerUploadTile = ({ item, showDownload = true }) => {
         </p>
         {showDownload && (
           <a
-            href={url}
+            href={displaySrc}
             download={name}
             target="_blank"
             rel="noopener noreferrer"
@@ -301,14 +331,6 @@ const AdminRefurbishmentReviewModal = ({
     return raw.url || raw.file_url || null;
   };
 
-  const classifySupportingDoc = (file) => {
-    if (file?.document_type) return file.document_type;
-    const name = (file?.name || file?.file_name || "").toLowerCase();
-    if (name.includes("upgradation")) return "upgradation";
-    if (name.includes("refurbishment")) return "refurbishment";
-    return "other";
-  };
-
   const fmtDate = (d) => {
     if (!d) return "—";
     try {
@@ -316,6 +338,21 @@ const AdminRefurbishmentReviewModal = ({
         day: "2-digit",
         month: "short",
         year: "numeric",
+      });
+    } catch {
+      return d;
+    }
+  };
+
+  const fmtDateTime = (d) => {
+    if (!d) return "—";
+    try {
+      return new Date(d).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       });
     } catch {
       return d;
@@ -342,10 +379,30 @@ const AdminRefurbishmentReviewModal = ({
         );
       });
 
-      await refurbishmentService.approveRefurbishmentRequest(requestId, null, {
+      const modifications = {
         adminAddedPackages,
         removedPackageIds,
-      });
+      };
+
+      if (requestDetails?.upgradation?.is_requested) {
+        const partnerUpgradationIds = (
+          requestDetails?.upgradation?.selected_packages || []
+        )
+          .map((p) => p.package_id)
+          .filter((id) => !partnerUpgradationRemoved.has(id));
+        modifications.finalUpgradationPackageIds = [
+          ...new Set([
+            ...partnerUpgradationIds,
+            ...Array.from(adminUpgradationAdded),
+          ]),
+        ];
+      }
+
+      await refurbishmentService.approveRefurbishmentRequest(
+        requestId,
+        null,
+        modifications,
+      );
       // Show in-dialog success screen; callback fires when user closes
       setApproveSuccess(true);
     } catch (err) {
@@ -529,8 +586,8 @@ const AdminRefurbishmentReviewModal = ({
   const {
     request,
     partner_packages_by_course = [],
-    partner_images = [],
-    supporting_documents = [],
+    status_timeline = null,
+    completion_summary = null,
     upgradation = {
       is_requested: false,
       rooms: [],
@@ -539,44 +596,13 @@ const AdminRefurbishmentReviewModal = ({
     },
   } = requestDetails;
 
-  const resolvedSupportingDocs =
-    supporting_documents.length > 0
-      ? supporting_documents
-      : partner_images.filter((f) => {
-          const mime = (f.file_mime_type || "").toLowerCase();
-          const name = (f.file_name || "").toLowerCase();
-          return (
-            !mime.startsWith("image/") ||
-            name.includes("document") ||
-            name.includes("refurbishment-document") ||
-            name.includes("upgradation-document")
-          );
-        });
-
-  const refurbishmentSubmissionDoc = resolvedSupportingDocs.find(
-    (f) => classifySupportingDoc(f) === "refurbishment",
-  );
-  const upgradationSubmissionDoc = resolvedSupportingDocs.find(
-    (f) => classifySupportingDoc(f) === "upgradation",
-  );
-  const otherSupportingDocs = resolvedSupportingDocs.filter(
-    (f) => classifySupportingDoc(f) === "other",
-  );
-
   const courseTabs = partner_packages_by_course;
   const activeCourse = courseTabs[activeCourseIdx];
   const activeCourseId = activeCourse?.course_id;
 
   // Only allow actions on submitted requests
   const isActionable = request.status === "submitted";
-  const statusColors = {
-    approved: "bg-green-100 text-green-700",
-    rejected: "bg-red-100 text-red-700",
-    sent_back: "bg-amber-100 text-amber-700",
-    pending: "bg-yellow-100 text-yellow-700",
-  };
-  const statusBadgeCls =
-    statusColors[request.status] || "bg-gray-100 text-gray-700";
+  const statusBadgeCls = getRefurbishmentStatusBadgeClass(request.status);
 
   // Partner package IDs for the active course
   const partnerPkgIds = new Set(
@@ -684,63 +710,6 @@ const AdminRefurbishmentReviewModal = ({
   const renderImageGallery = (images, emptyLabel, showDownload = false) =>
     renderPartnerUploadGrid(images, emptyLabel, showDownload);
 
-  const renderFileDownloadCard = (file, { title, subtitle } = {}) => {
-    const url = resolvePartnerFileUrl(file?.url || file?.file_url);
-    const name = file?.name || file?.file_name || title || "Document";
-    if (!url) return null;
-    const mime = (file?.type || file?.file_mime_type || "").toLowerCase();
-    const isImage = mime.startsWith("image/") || isImageUpload(file, url);
-
-    if (isImage) {
-      return (
-        <PartnerUploadTile
-          item={{ ...file, url, name, type: mime }}
-          showDownload
-        />
-      );
-    }
-
-    return (
-      <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between gap-3 bg-white hover:border-green-200 transition-colors">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0">
-            <svg
-              className="w-5 h-5 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">
-              {title || name}
-            </p>
-            {subtitle && (
-              <p className="text-xs text-gray-500">{subtitle}</p>
-            )}
-            <p className="text-xs text-gray-400 truncate">{name}</p>
-          </div>
-        </div>
-        <a
-          href={url}
-          download={name}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition-colors flex-shrink-0"
-        >
-          Download
-        </a>
-      </div>
-    );
-  };
-
   const renderPackageDetailPanel = (pkg, { courseName, onClear, badge }) => {
     const catalogImgs = parseImages(pkg.images);
     const partnerUploads = pkg.partner_uploaded_images || [];
@@ -813,96 +782,14 @@ const AdminRefurbishmentReviewModal = ({
   };
 
   const renderSummaryTab = () => {
-    const partnerDocs = [
-      refurbishmentSubmissionDoc && {
-        file: refurbishmentSubmissionDoc,
-        title: "Refurbishment document",
-        subtitle: "Partner final submission",
-      },
-      upgradationSubmissionDoc && {
-        file: upgradationSubmissionDoc,
-        title: "Upgradation document",
-        subtitle: "Partner final submission",
-      },
-    ].filter(Boolean);
-
-    const coursePackageCount = courseTabs.reduce(
-      (sum, c) => sum + (c.packages?.length || 0),
-      0,
-    );
-    const partnerImageCount =
-      courseTabs.reduce(
-        (sum, c) =>
-          sum +
-          (c.packages || []).reduce(
-            (pSum, p) => pSum + (p.partner_uploaded_images?.length || 0),
-            0,
-          ),
-        0,
-      ) +
-      (upgradation.rooms || []).reduce(
-        (sum, r) => sum + (r.photos?.length || 0),
-        0,
-      ) +
-      (upgradation.selected_packages || []).reduce(
-        (sum, p) => sum + (p.partner_uploaded_images?.length || 0),
-        0,
-      );
+    const hasPackageContent =
+      courseTabs.some((c) => (c.packages || []).length > 0) ||
+      (upgradation.is_requested &&
+        ((upgradation.rooms || []).length > 0 ||
+          (upgradation.selected_packages || []).length > 0));
 
     return (
       <div className="flex-1 overflow-y-auto px-8 pb-6 space-y-6 scrollbar-subtle min-h-0">
-        <div className="rounded-2xl border border-green-100 bg-gradient-to-br from-green-50/80 to-white p-5">
-          <h3 className="text-base font-bold text-gray-900">Full review</h3>
-          <p className="text-sm text-gray-600 mt-1">
-            Partner-submitted files only — photos and documents uploaded during the response.
-          </p>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white border border-gray-200 text-xs font-medium text-gray-700">
-              {coursePackageCount} package{coursePackageCount !== 1 ? "s" : ""}
-            </span>
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white border border-gray-200 text-xs font-medium text-gray-700">
-              {partnerImageCount} upload{partnerImageCount !== 1 ? "s" : ""}
-            </span>
-            {partnerDocs.length > 0 && (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white border border-gray-200 text-xs font-medium text-gray-700">
-                {partnerDocs.length} document{partnerDocs.length !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {partnerDocs.length > 0 && (
-          <section className="space-y-3">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-              Partner submission documents
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {partnerDocs.map(({ file, title, subtitle }) => (
-                <div key={file.id || title}>
-                  {renderFileDownloadCard(file, { title, subtitle })}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {otherSupportingDocs.length > 0 && (
-          <section className="space-y-3">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-              Other partner files
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {otherSupportingDocs.map((f, idx) => (
-                <div key={f.id || idx}>
-                  {renderFileDownloadCard(f, {
-                    title: f.name || f.file_name || `File ${idx + 1}`,
-                  })}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
         {courseTabs.map((course) => (
           <section key={course.course_id} className="space-y-3">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
@@ -1016,14 +903,11 @@ const AdminRefurbishmentReviewModal = ({
           </section>
         )}
 
-        {courseTabs.length === 0 &&
-          !upgradation.is_requested &&
-          partnerDocs.length === 0 &&
-          otherSupportingDocs.length === 0 && (
-            <div className="border border-dashed border-gray-200 rounded-xl py-12 text-center text-sm text-gray-400">
-              No partner uploads found for this request.
-            </div>
-          )}
+        {!hasPackageContent && (
+          <div className="border border-dashed border-gray-200 rounded-xl py-12 text-center text-sm text-gray-400">
+            No partner package uploads found for this request.
+          </div>
+        )}
       </div>
     );
   };
@@ -1063,9 +947,9 @@ const AdminRefurbishmentReviewModal = ({
             Status:
           </p>
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold capitalize ${statusBadgeCls}`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${statusBadgeCls}`}
           >
-            {request.status || "pending"}
+            {getRefurbishmentStatusLabel(request.status)}
           </span>
         </div>
       </div>
@@ -1081,43 +965,135 @@ const AdminRefurbishmentReviewModal = ({
         </div>
       </div>
 
-      {resolvedSupportingDocs.length > 0 && (
-        <div>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
-            Supporting documents
-          </p>
-          <div className="space-y-2">
-            {refurbishmentSubmissionDoc &&
-              renderFileDownloadCard(refurbishmentSubmissionDoc, {
-                title: "Refurbishment document",
-              })}
-            {upgradationSubmissionDoc &&
-              renderFileDownloadCard(upgradationSubmissionDoc, {
-                title: "Upgradation document",
-              })}
-            {otherSupportingDocs.map((f, idx) => (
-              <div key={f.id || idx}>
-                {renderFileDownloadCard(f, {
-                  title: f.name || f.file_name || `File ${idx + 1}`,
-                })}
-              </div>
-            ))}
-          </div>
-          <p className="text-[10px] text-gray-400 mt-2">
-            Click a package on the left to view its justification and uploaded
-            images. Use the Full review tab to see everything at once.
-          </p>
-        </div>
-      )}
-
-      {resolvedSupportingDocs.length === 0 && (
-        <p className="text-[10px] text-gray-400">
-          Click a package on the left to view partner justification and uploaded
-          images. Open Full review to see the complete submission.
-        </p>
-      )}
+      <p className="text-[10px] text-gray-400">
+        Click a package on the left to view partner justification and uploaded
+        images. Open Summary to see all package submissions at once.
+      </p>
     </div>
   );
+
+  const renderStatusTimelinePanel = () => {
+    const events = status_timeline?.events || [];
+    if (events.length === 0) return null;
+
+    return (
+      <div className="mx-8 mb-4 border border-gray-200 rounded-2xl p-5 bg-gray-50/60">
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p className="text-sm font-semibold text-gray-900">Status Timeline</p>
+          {status_timeline?.current_status_label && (
+            <span
+              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getRefurbishmentStatusBadgeClass(status_timeline.current_status)}`}
+            >
+              Current: {status_timeline.current_status_label}
+            </span>
+          )}
+        </div>
+        <div className="space-y-0">
+          {events.map((event, idx) => (
+            <div key={`${event.key}-${idx}`} className="flex gap-3">
+              <div className="flex flex-col items-center pt-1">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    event.is_current ? "bg-green-600 ring-4 ring-green-100" : "bg-gray-300"
+                  }`}
+                />
+                {idx < events.length - 1 && (
+                  <div className="w-px flex-1 min-h-[20px] bg-gray-200 mt-1" />
+                )}
+              </div>
+              <div className={`pb-4 min-w-0 ${idx === events.length - 1 ? "pb-0" : ""}`}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-gray-900">{event.label}</p>
+                  <span className="text-xs text-gray-400">
+                    {fmtDateTime(event.occurred_at)}
+                  </span>
+                </div>
+                {event.detail && (
+                  <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap leading-relaxed">
+                    {event.detail}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCompletionSummaryPanel = () => {
+    if (
+      !completion_summary?.admin &&
+      !completion_summary?.partner &&
+      !completion_summary?.completion_notified_at
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="mx-8 mb-4 border border-green-200 rounded-2xl p-5 bg-green-50/40">
+        <p className="text-sm font-semibold text-gray-900 mb-4">Completion Summary</p>
+
+        {completion_summary.completion_notified_at && (
+          <div className="mb-4 text-xs text-gray-600">
+            Partner notified for completion on{" "}
+            <span className="font-medium text-gray-800">
+              {fmtDateTime(completion_summary.completion_notified_at)}
+            </span>
+          </div>
+        )}
+
+        {completion_summary.partner && (
+          <div className="mb-4 rounded-xl border border-white bg-white/80 p-4">
+            <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">
+              Partner Completion
+            </p>
+            <p className="text-xs text-gray-500 mb-2">
+              Submitted {fmtDateTime(completion_summary.partner.submitted_at)}
+            </p>
+            {completion_summary.partner.description && (
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {completion_summary.partner.description}
+              </p>
+            )}
+            {completion_summary.partner.files?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {completion_summary.partner.files.map((file, idx) => (
+                  <PartnerUploadTile key={file.id || idx} item={file} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {completion_summary.admin && (
+          <div className="rounded-xl border border-white bg-white/80 p-4">
+            <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">
+              Admin Completion
+            </p>
+            <p className="text-xs text-gray-500 mb-2">
+              Marked complete {fmtDateTime(completion_summary.admin.completed_at)}
+              {completion_summary.admin.completed_by_name
+                ? ` by ${completion_summary.admin.completed_by_name}`
+                : ""}
+            </p>
+            {completion_summary.admin.statement && (
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {completion_summary.admin.statement}
+              </p>
+            )}
+            {completion_summary.admin.files?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {completion_summary.admin.files.map((file, idx) => (
+                  <PartnerUploadTile key={file.id || idx} item={file} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -1172,7 +1148,13 @@ const AdminRefurbishmentReviewModal = ({
                 <h2 className="text-xl font-bold text-gray-900">
                   Refurbishment Request – {request.partner_name || "Partner"}
                 </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {request.center_name || "—"}
+                </p>
               </div>
+
+              {!isActionable && renderStatusTimelinePanel()}
+              {!isActionable && renderCompletionSummaryPanel()}
 
               {/* Course pill tabs */}
               <div className="px-8 pb-4">
@@ -1225,7 +1207,7 @@ const AdminRefurbishmentReviewModal = ({
                         : "text-gray-500 hover:text-green-700"
                     }`}
                   >
-                    Full review
+                    Summary
                   </button>
                 </div>
               </div>
@@ -1538,12 +1520,14 @@ const AdminRefurbishmentReviewModal = ({
                               {showUpgradationAddPanel && (
                                 <div className="flex flex-col gap-2 pt-1">
                                   <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-                                    Available to Add
+                                    Available to add
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Upgradation and lab packages for this center
                                   </p>
                                   {addableUpgradationPackages.length === 0 && (
                                     <p className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-200 rounded-xl">
-                                      No additional upgradation packages
-                                      available
+                                      No additional packages available to add
                                     </p>
                                   )}
                                   {addableUpgradationPackages.map((pkg) => {
@@ -1551,6 +1535,8 @@ const AdminRefurbishmentReviewModal = ({
                                     const isAdded = adminUpgradationAdded.has(
                                       pkg.id,
                                     );
+                                    const isLabPackage =
+                                      pkg.category === "refurbishment";
                                     return (
                                       <button
                                         key={pkg.id}
@@ -1588,9 +1574,20 @@ const AdminRefurbishmentReviewModal = ({
                                             )}
                                           </div>
                                           <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-gray-800">
-                                              {pkg.name || pkg.package_name}
-                                            </p>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <p className="text-sm font-semibold text-gray-800">
+                                                {pkg.name || pkg.package_name}
+                                              </p>
+                                              <span
+                                                className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                                  isLabPackage
+                                                    ? "bg-green-100 text-green-700"
+                                                    : "bg-purple-100 text-purple-700"
+                                                }`}
+                                              >
+                                                {isLabPackage ? "Lab" : "Upgradation"}
+                                              </span>
+                                            </div>
                                             <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
                                               {pkg.description}
                                             </p>
@@ -1966,9 +1963,9 @@ const AdminRefurbishmentReviewModal = ({
                 ) : (
                   <>
                     <span
-                      className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold capitalize ${statusBadgeCls}`}
+                      className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${statusBadgeCls}`}
                     >
-                      This request has already been {request.status}
+                      Status: {getRefurbishmentStatusLabel(request.status)}
                     </span>
                     <button
                       onClick={() => onOpenChange(false)}

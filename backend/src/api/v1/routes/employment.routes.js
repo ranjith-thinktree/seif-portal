@@ -127,7 +127,7 @@ router.post(
 router.get(
   '/admin/records',
   authenticate,
-  checkRole(['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'SEIF_READONLY', 'PARTNER']),
+  checkRole(['ADMIN', 'SUPER_ADMIN', 'SEIF_READONLY', 'PARTNER']),
   employmentController.getApprovedEmploymentRecords
 );
 

@@ -7,34 +7,45 @@ const BASE = "/certification";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Upload certification data (form-based, no CSV).
- * @param {string} centerId
- * @param {string} batchId
- * @param {string} batchStartDate  - ISO date string
- * @param {string} batchEndDate    - ISO date string
- * @param {string} assessmentDate  - ISO date string
- * @param {File|null} supportDoc   - PDF/image/Word/CSV/XLSX (optional)
+ * Upload certification data (form-based).
+ * @param {Object} payload
+ * @param {string} payload.centerId
+ * @param {string} [payload.centerName]
+ * @param {string} [payload.batchId]
+ * @param {string} [payload.otherBatchNumber]
+ * @param {string} [payload.batchStartDate]
+ * @param {string} [payload.batchEndDate]
+ * @param {string} [payload.assessmentDate]
+ * @param {string} [payload.spokeName]
+ * @param {string} [payload.spokeEmail]
+ * @param {string} [payload.spokeMobile]
+ * @param {string|null} [payload.targetPartnerId]
  */
-export const uploadCertificationData = async (
+export const uploadCertificationData = async ({
   centerId,
+  centerName,
   batchId,
+  otherBatchNumber,
   batchStartDate,
   batchEndDate,
   assessmentDate,
-  supportDoc,
+  spokeName,
+  spokeEmail,
+  spokeMobile,
   targetPartnerId = null,
-) => {
-  const formData = new FormData();
-  formData.append("centerId", centerId);
-  formData.append("batchId", batchId);
-  if (batchStartDate) formData.append("batchStartDate", batchStartDate);
-  if (batchEndDate) formData.append("batchEndDate", batchEndDate);
-  if (assessmentDate) formData.append("assessmentDate", assessmentDate);
-  if (supportDoc) formData.append("supportDoc", supportDoc);
-  if (targetPartnerId) formData.append("targetPartnerId", targetPartnerId);
-
-  const response = await apiClient.post(`${BASE}/upload`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+}) => {
+  const response = await apiClient.post(`${BASE}/upload`, {
+    centerId,
+    centerName,
+    batchId: batchId || undefined,
+    otherBatchNumber: otherBatchNumber || undefined,
+    batchStartDate: batchStartDate || undefined,
+    batchEndDate: batchEndDate || undefined,
+    assessmentDate: assessmentDate || undefined,
+    spokeName: spokeName || undefined,
+    spokeEmail: spokeEmail || undefined,
+    spokeMobile: spokeMobile || undefined,
+    targetPartnerId: targetPartnerId || undefined,
   });
   return response.data;
 };
@@ -56,6 +67,14 @@ export const getCertificationUploadDetails = async (uploadId) => {
 /** Approved certificate PDFs available for partner to download */
 export const getPartnerCertificates = async (page = 1, limit = 20) => {
   const response = await apiClient.get(`${BASE}/certificates`, {
+    params: { page, limit },
+  });
+  return response.data;
+};
+
+/** Partner certification requests with derived status */
+export const getPartnerCertificationRequests = async (page = 1, limit = 1000) => {
+  const response = await apiClient.get(`${BASE}/requests`, {
     params: { page, limit },
   });
   return response.data;
@@ -104,6 +123,14 @@ export const adminGetCertificatePDFs = async ({
 } = {}) => {
   const response = await apiClient.get(`${BASE}/admin/pdfs`, {
     params: { status, page, limit },
+  });
+  return response.data;
+};
+
+/** Admin certification requests with derived status */
+export const adminGetCertificationRequests = async (page = 1, limit = 1000) => {
+  const response = await apiClient.get(`${BASE}/admin/requests`, {
+    params: { page, limit },
   });
   return response.data;
 };
@@ -167,43 +194,54 @@ export const essciGetBatches = async (centerId, partnerId) => {
   return response.data;
 };
 
+export const essciSubmitStep1 = async ({
+  uploadId,
+  responseLink,
+  responseId,
+  responsePassword,
+  qrCodeFile,
+}) => {
+  const formData = new FormData();
+  formData.append("uploadId", uploadId);
+  formData.append("responseLink", responseLink);
+  formData.append("responseId", responseId);
+  formData.append("responsePassword", responsePassword);
+  if (qrCodeFile) formData.append("qrCode", qrCodeFile);
+
+  const response = await apiClient.post(`${BASE}/essci/step1`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
 /**
- * ESSCI uploads attendance data + files for a batch.
- * @param {string} partnerId
- * @param {string} centerId
- * @param {string} batchId
- * @param {string|null} certificationUploadId
- * @param {number} traineesAttended
- * @param {number} traineesPassed
- * @param {number} traineesFailed
- * @param {number} traineesAbsent
- * @param {File} zipFile           - ZIP archive (required)
- * @param {File} studentListDoc    - Student list document (required)
+ * ESSCI step 2: assessment numbers + certificate documents.
  */
 export const essciUploadCertificatePDF = async (
   partnerId,
   centerId,
   batchId,
-  certificationUploadId = null,
+  certificationUploadId,
+  traineesRegistered,
   traineesAttended,
   traineesPassed,
   traineesFailed,
-  traineesAbsent,
-  zipFile,
-  studentListDoc,
+  certificateFiles,
+  traineesAbsent = 0,
 ) => {
   const formData = new FormData();
   formData.append("partnerId", partnerId);
   formData.append("centerId", centerId);
   formData.append("batchId", batchId);
-  if (certificationUploadId)
-    formData.append("certificationUploadId", certificationUploadId);
+  formData.append("certificationUploadId", certificationUploadId);
+  formData.append("traineesRegistered", traineesRegistered);
   formData.append("traineesAttended", traineesAttended);
   formData.append("traineesPassed", traineesPassed);
   formData.append("traineesFailed", traineesFailed);
   formData.append("traineesAbsent", traineesAbsent);
-  formData.append("zipFile", zipFile);
-  formData.append("studentListDoc", studentListDoc);
+  (certificateFiles || []).forEach((file) => {
+    formData.append("certificateFiles", file);
+  });
 
   const response = await apiClient.post(`${BASE}/essci/upload-pdf`, formData, {
     headers: { "Content-Type": "multipart/form-data" },

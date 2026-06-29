@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   CheckCircle2,
   Clock,
@@ -10,6 +10,7 @@ import {
 import refurbishmentService from "../../services/refurbishment.service";
 import PartnerPastRequestDetailModal from "../../components/refurbishment/modals/PartnerPastRequestDetailModal";
 import PartnerCompletionModal from "../../components/refurbishment/modals/PartnerCompletionModal";
+import { getPartnerRefurbishmentDisplayStatus } from "../../utils/refurbishmentUtils";
 
 const STATUS = {
   submitted: {
@@ -31,7 +32,7 @@ const STATUS = {
     dotCls: "bg-red-500",
   },
   material_procurement: {
-    label: "Material Procurement",
+    label: "Material Procurement Completed",
     Icon: CheckCircle2,
     cls: "bg-teal-50 text-teal-700 border-teal-200",
     dotCls: "bg-teal-500",
@@ -59,6 +60,18 @@ const STATUS = {
     Icon: CheckCircle2,
     cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
     dotCls: "bg-emerald-500",
+  },
+  acknowledgement_pending: {
+    label: "Acknowledgement Pending",
+    Icon: Clock,
+    cls: "bg-purple-50 text-purple-700 border-purple-200",
+    dotCls: "bg-purple-500",
+  },
+  completion_pending: {
+    label: "Completion Pending",
+    Icon: Clock,
+    cls: "bg-sky-50 text-sky-800 border-sky-200",
+    dotCls: "bg-sky-500",
   },
 };
 
@@ -252,10 +265,14 @@ export default function PartnerPastRequestsTab() {
                             <span className="text-xs text-gray-500 whitespace-nowrap">
                               {fmtDate(req.updated_at)}
                             </span>
-                            <StatusBadge status={req.status} />
+                            <StatusBadge
+                              status={
+                                getPartnerRefurbishmentDisplayStatus(req).badgeKey
+                              }
+                            />
                             {showCompletion && (
                               <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                Action Needed
+                                Acknowledgment Needed
                               </span>
                             )}
                           </div>
@@ -313,6 +330,7 @@ export default function PartnerPastRequestsTab() {
           request={completionRequest}          onClose={() => setCompletionRequest(null)}
           onSuccess={() => {
             setCompletionRequest(null);
+            setSelectedRequest(null);
             fetchRequests(page);
           }}
         />

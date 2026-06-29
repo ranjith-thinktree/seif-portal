@@ -42,7 +42,13 @@ module.exports = {
         'http://seif-portal-frontend.s3-website.ap-south-2.amazonaws.com',
       ].filter(Boolean); // Remove undefined values
 
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      const isDev = (process.env.NODE_ENV || 'development') === 'development';
+      const isLocalNetworkOrigin =
+        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(
+          origin
+        );
+
+      if (allowedOrigins.indexOf(origin) !== -1 || (isDev && isLocalNetworkOrigin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));

@@ -41,6 +41,8 @@ import RefurbishmentDetailCard from "./RefurbishmentDetailCard";
 import RefurbishmentStatusCard from "./RefurbishmentStatusCard";
 import PartnerPastRequestsTab from "./PartnerPastRequestsTab";
 import AdminRefurbishmentReviewModal from "../../components/refurbishment/modals/AdminRefurbishmentReviewModal";
+import PartnerCompletionModal from "../../components/refurbishment/modals/PartnerCompletionModal";
+import refurbishmentService from "../../services/refurbishment.service";
 
 /**
  * Format date helper
@@ -291,6 +293,8 @@ const InboxPage = () => {
   const [sortBy, setSortBy] = useState("newest");
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewRequestId, setReviewRequestId] = useState(null);
+  const [acknowledgmentRequest, setAcknowledgmentRequest] = useState(null);
+  const [openingAcknowledgment, setOpeningAcknowledgment] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -391,6 +395,72 @@ const InboxPage = () => {
     } catch (error) {
       console.error("Failed to delete notification:", error);
       toast.error("Failed to delete notification");
+    }
+  };
+
+  const parsePartnerRequestDetails = (res) => {
+    if (res?.success && res.data && typeof res.data === "object") {
+      return res.data;
+    }
+    if (res?.success && res.message && typeof res.message === "object") {
+      return res.message;
+    }
+    return null;
+  };
+
+  const handleOpenAcknowledgment = async (notification) => {
+    const requestId = notification?.related_entity_id;
+    if (!requestId) {
+      toast.error("Could not find the refurbishment request for this alert");
+      return;
+    }
+
+    setOpeningAcknowledgment(true);
+    try {
+      const res = await refurbishmentService.getPartnerRequestDetails(requestId);
+      const data = parsePartnerRequestDetails(res);
+      const centerName =
+        data?.request?.center_name ||
+        notification?.payload?.center_name ||
+        notification?.center_name ||
+        "";
+
+      if (data?.request?.partner_completed_at) {
+        toast.info("You have already submitted your acknowledgment for this request");
+        return;
+      }
+
+      setAcknowledgmentRequest({
+        request_id: requestId,
+        center_name: centerName,
+        is_upgradation_requested: Boolean(data?.request?.is_upgradation_requested),
+        upgradation_requested: Boolean(data?.upgradation_requested),
+      });
+
+      if (!notification.is_read) {
+        try {
+          await markAsRead(notification.id);
+          markNotificationAsRead(notification.id);
+          setNotifications((prev) =>
+            prev.map((notif) =>
+              notif.id === notification.id ? { ...notif, is_read: true } : notif,
+            ),
+          );
+          setSelectedNotification((prev) =>
+            prev?.id === notification.id ? { ...prev, is_read: true } : prev,
+          );
+        } catch (readErr) {
+          console.error("Failed to mark acknowledgment alert as read:", readErr);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to open acknowledgment modal:", error);
+      setAcknowledgmentRequest({
+        request_id: requestId,
+        center_name: notification?.title || "",
+      });
+    } finally {
+      setOpeningAcknowledgment(false);
     }
   };
 
@@ -781,6 +851,17 @@ const InboxPage = () => {
                               }
                             : null
                         }
+                        onSubmitAcknowledgment={
+                          isPartner &&
+                          selectedNotification.alert_type ===
+                            "refurbishment_acknowledgment_due" &&
+                          !selectedNotification.acknowledgment_submitted &&
+                          selectedNotification.related_entity_id
+                            ? () =>
+                                handleOpenAcknowledgment(selectedNotification)
+                            : null
+                        }
+                        acknowledgmentLoading={openingAcknowledgment}
                       />
                     ) : (
                       <NotificationDetailCard
@@ -838,6 +919,54 @@ const InboxPage = () => {
             setReviewModalOpen(false);
             setReviewRequestId(null);
             fetchNotifications(1);
+          }}
+        />
+      )}
+
+      {acknowledgmentRequest && (
+        <PartnerCompletionModal
+          request={acknowledgmentRequest}
+          onClose={() => setAcknowledgmentRequest(null)}
+          onSuccess={() => {
+            const requestId = acknowledgmentRequest.request_id;
+            const submittedTitle = acknowledgmentRequest.center_name
+              ? `Acknowledgment Submitted - ${acknowledgmentRequest.center_name}`
+              : "Acknowledgment Submitted";
+
+            setAcknowledgmentRequest(null);
+            setNotifications((prev) =>
+              prev.map((notif) =>
+                notif.related_entity_id === requestId &&
+                (notif.alert_type === "refurbishment_acknowledgment_due" ||
+                  notif.alert_type === "refurbishment_acknowledgment_submitted")
+                  ? {
+                      ...notif,
+                      alert_type: "refurbishment_acknowledgment_submitted",
+                      acknowledgment_submitted: true,
+                      title: submittedTitle,
+                      message:
+                        "Your acknowledgment has been received. Admin will review and complete the request.",
+                      is_read: true,
+                    }
+                  : notif,
+              ),
+            );
+            setSelectedNotification((prev) =>
+              prev?.related_entity_id === requestId &&
+              (prev?.alert_type === "refurbishment_acknowledgment_due" ||
+                prev?.alert_type === "refurbishment_acknowledgment_submitted")
+                ? {
+                    ...prev,
+                    alert_type: "refurbishment_acknowledgment_submitted",
+                    acknowledgment_submitted: true,
+                    title: submittedTitle,
+                    message:
+                      "Your acknowledgment has been received. Admin will review and complete the request.",
+                    is_read: true,
+                  }
+                : prev,
+            );
+            fetchNotifications(pagination.page);
           }}
         />
       )}

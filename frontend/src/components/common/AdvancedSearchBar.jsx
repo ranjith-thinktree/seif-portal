@@ -86,6 +86,8 @@ const AdvancedSearchBar = ({
     return true;
   }).length;
 
+  const isGroupMulti = (group) => Boolean(group?.multi ?? group?.isMulti);
+
   // Get count of selected items for a filter
   const getFilterCount = (key) => {
     const value = activeFilters[key];
@@ -129,7 +131,7 @@ const AdvancedSearchBar = ({
 
   const handleClearFilter = (key) => {
     const group = filterGroups.find((g) => g.key === key);
-    onFilterChange(key, group?.multi ? [] : "");
+    onFilterChange(key, isGroupMulti(group) ? [] : "");
   };
 
   const handleClearAllFilters = () => {
@@ -310,7 +312,7 @@ const AdvancedSearchBar = ({
                       {expandedGroup === group.key && (
                         <div className="px-3 pb-3 space-y-2">
                           {/* Search Input for Multi-Select or Large Lists */}
-                          {(group.multi ||
+                          {(isGroupMulti(group) ||
                             (group.options && group.options.length > 5)) && (
                             <div className="relative">
                               <MagnifyingGlassIcon className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -340,13 +342,13 @@ const AdvancedSearchBar = ({
                                     checked={isOptionSelected(
                                       group.key,
                                       option.value,
-                                      group.multi,
+                                      isGroupMulti(group),
                                     )}
                                     onChange={() =>
                                       handleFilterSelect(
                                         group.key,
                                         option.value,
-                                        group.multi,
+                                        isGroupMulti(group),
                                       )
                                     }
                                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"

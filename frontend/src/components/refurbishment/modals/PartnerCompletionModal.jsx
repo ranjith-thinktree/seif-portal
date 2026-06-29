@@ -8,12 +8,13 @@ import {
 } from "@heroicons/react/24/outline";
 import { toast } from "react-toastify";
 import refurbishmentService from "../../../services/refurbishment.service";
+import { buildPartnerAcknowledgmentConsentText } from "../../../utils/refurbishmentUtils";
 import apiClient from "../../../api/client";
 
 /**
  * PartnerCompletionModal
- * Allows partners to submit completion evidence (description + images + PDFs)
- * after receiving the 2-month refurbishment completion notification.
+ * Allows partners to submit acknowledgment (statement + files)
+ * after admin requests partner acknowledgment.
  */
 export default function PartnerCompletionModal({
   request,
@@ -21,10 +22,16 @@ export default function PartnerCompletionModal({
   onSuccess,
 }) {
   const [description, setDescription] = useState("");
-  const [files, setFiles] = useState([]); // { file: File, preview?: string, type: 'image' | 'document' }
+  const [files, setFiles] = useState([]);
+  const [consentChecked, setConsentChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef(null);
+
+  const includeUpgradation = Boolean(
+    request?.is_upgradation_requested || request?.upgradation_requested,
+  );
+  const consentText = buildPartnerAcknowledgmentConsentText(includeUpgradation);
 
   if (!request) return null;
 
@@ -64,19 +71,15 @@ export default function PartnerCompletionModal({
 
   // ── Upload file: S3 presigned PUT or local backend POST ─────────────────
   const uploadFile = async (item) => {
-    // Request upload endpoint from backend
-    const { data: presigned } = await apiClient.post(
-      "/partner/refurbishment/upload-url",
-      {
-        fileName: item.file.name,
-        fileType: item.file.type,
-        folder: "refurbishment-completion",
-      },
-    );
+    const res = await apiClient.post("/partner/refurbishment/upload-url", {
+      fileName: item.file.name,
+      fileType: item.file.type,
+      folder: "refurbishment-completion",
+    });
+    const presigned = res.data?.data || {};
 
     let fileUrl;
     if (presigned.storageType === "local") {
-      // S3 not configured — POST multipart to local backend endpoint
       const formData = new FormData();
       formData.append("file", item.file);
       const uploadRes = await apiClient.post(
@@ -86,28 +89,42 @@ export default function PartnerCompletionModal({
       );
       fileUrl = uploadRes.data?.data?.fileUrl;
     } else {
-      // S3: PUT directly to presigned URL
-      const res = await fetch(presigned.uploadUrl, {
+      const putRes = await fetch(presigned.uploadUrl, {
         method: "PUT",
         body: item.file,
         headers: { "Content-Type": item.file.type },
       });
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+      if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
       fileUrl = presigned.fileUrl;
     }
 
-    return { url: fileUrl, name: item.file.name, type: item.type };
+    if (!fileUrl) throw new Error("Upload did not return a file URL");
+
+    return {
+      url: fileUrl,
+      name: item.file.name,
+      type: item.file.type || item.type,
+      size: item.file.size,
+    };
   };
 
   // ── Submit ──────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!description.trim() && files.length === 0) {
-      toast.error("Please add a description or upload at least one file");
+    const trimmedStatement = description.trim();
+    if (!trimmedStatement) {
+      toast.error("Acknowledgment statement is required");
+      return;
+    }
+    if (files.length === 0) {
+      toast.error("Please upload at least one file");
+      return;
+    }
+    if (!consentChecked) {
+      toast.error("Please confirm the acknowledgment consent checkbox");
       return;
     }
     setSubmitting(true);
     try {
-      // Upload all files to S3
       const fileUrls = [];
       for (const item of files) {
         const uploaded = await uploadFile(item);
@@ -115,15 +132,19 @@ export default function PartnerCompletionModal({
       }
 
       await refurbishmentService.submitPartnerCompletion(request.request_id, {
-        description: description.trim(),
+        description: trimmedStatement,
         fileUrls,
+        consent: true,
+        consentText,
       });
 
       setSubmitted(true);
     } catch (err) {
       console.error("Error submitting completion:", err);
       toast.error(
-        err.response?.data?.message || "Failed to submit completion report",
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to submit acknowledgment",
       );
     } finally {
       setSubmitting(false);
@@ -162,12 +183,12 @@ export default function PartnerCompletionModal({
             </div>
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-900">
-                Report Submitted!
+                Acknowledgment Submitted!
               </h2>
               <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-                Your completion report has been received.
+                Your acknowledgment has been received.
                 <br />
-                The admin will review and update the status.
+                The admin will review it and complete the request.
               </p>
             </div>
             <button
@@ -194,7 +215,7 @@ export default function PartnerCompletionModal({
           <div className="flex items-start justify-between px-7 pt-7 pb-4 border-b border-gray-100">
             <div>
               <h2 className="text-lg font-bold text-gray-900">
-                Submit Completion Report
+                Submit Acknowledgment
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
                 {request.center_name}
@@ -213,25 +234,23 @@ export default function PartnerCompletionModal({
             {/* Description */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description{" "}
-                <span className="text-gray-400 font-normal">(required)</span>
+                Acknowledgment Statement{" "}
+                <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
-                placeholder="Describe the completed refurbishment work…"
+                placeholder="Describe the completed refurbishment work, key changes, and current status of the center…"
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-200 resize-none placeholder-gray-400"
               />
             </div>
 
-            {/* File upload */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Photos & Documents{" "}
-                <span className="text-gray-400 font-normal">
-                  (max 10 files)
-                </span>
+                <span className="text-red-500">*</span>
+                <span className="text-gray-400 font-normal"> (max 10)</span>
               </label>
 
               {/* Drop zone */}
@@ -288,9 +307,20 @@ export default function PartnerCompletionModal({
                 </div>
               )}
             </div>
+
+            <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-sm text-gray-700 leading-relaxed">
+                {consentText}
+              </span>
+            </label>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-end gap-3 px-7 pb-7 pt-2 border-t border-gray-100">
             <button
               onClick={onClose}
@@ -301,10 +331,15 @@ export default function PartnerCompletionModal({
             </button>
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={
+                submitting ||
+                !description.trim() ||
+                files.length === 0 ||
+                !consentChecked
+              }
               className="px-7 py-2.5 rounded-full bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors disabled:opacity-60"
             >
-              {submitting ? "Submitting…" : "Submit Report"}
+              {submitting ? "Submitting…" : "Submit Acknowledgment"}
             </button>
           </div>
         </div>

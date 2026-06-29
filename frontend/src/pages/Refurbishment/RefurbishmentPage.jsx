@@ -25,6 +25,7 @@ import usePackagesTab from "../../hooks/refurbishment/usePackagesTab";
 import useSettingsTab from "../../hooks/refurbishment/useSettingsTab";
 import useNotificationHandlers from "../../hooks/refurbishment/useNotificationHandlers";
 import useCreateRequestModal from "../../hooks/refurbishment/useCreateRequestModal";
+import { useNotifications } from "../../hooks/useNotifications";
 
 const RefurbishmentPage = () => {
   const { user } = useSelector((state) => state.auth);
@@ -37,6 +38,8 @@ const RefurbishmentPage = () => {
     loading: _refurbishmentLoading,
     refresh: refurbishmentRefresh,
   } = useRefurbishmentData(selectedYear);
+
+  const { socket } = useNotifications();
 
   const safeRefurbishmentData = useMemo(
     () => ({
@@ -59,6 +62,8 @@ const RefurbishmentPage = () => {
       pastRequests: Array.isArray(refurbishmentData?.pastRequests)
         ? refurbishmentData.pastRequests
         : [],
+      pastRequestsReadyToCompleteCount:
+        refurbishmentData?.pastRequestsReadyToCompleteCount ?? 0,
       packages: Array.isArray(refurbishmentData?.packages)
         ? refurbishmentData.packages
         : [],
@@ -72,6 +77,8 @@ const RefurbishmentPage = () => {
   const alerts = safeRefurbishmentData.alerts;
   const activeRequests = safeRefurbishmentData.activeRequests;
   const pastRequests = safeRefurbishmentData.pastRequests;
+  const pastRequestsReadyCount =
+    safeRefurbishmentData.pastRequestsReadyToCompleteCount;
   const packages = safeRefurbishmentData.packages;
 
   const alertsUnreadCount = useMemo(
@@ -95,6 +102,34 @@ const RefurbishmentPage = () => {
   }, [packages]);
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+
+  // Real-time: refresh refurbishment alerts when partner submits (or other refurb events)
+  useEffect(() => {
+    if (!socket || !isAdmin) return;
+
+    const handleNewNotification = (data) => {
+      const alertType = data?.alert_type || "";
+      if (!alertType.startsWith("refurbishment")) return;
+
+      refurbishmentRefresh.alerts();
+      if (
+        alertType === "refurbishment_response" ||
+        alertType === "refurbishment_partner_acknowledgment"
+      ) {
+        refurbishmentRefresh.pastRequests();
+      }
+    };
+
+    socket.on("notification:new", handleNewNotification);
+    return () => {
+      socket.off("notification:new", handleNewNotification);
+    };
+  }, [
+    socket,
+    isAdmin,
+    refurbishmentRefresh.alerts,
+    refurbishmentRefresh.pastRequests,
+  ]);
 
   const {
     refurbishmentSettings,
@@ -156,6 +191,7 @@ const RefurbishmentPage = () => {
     allCentersData,
     eligibleCenters,
     lastRefurbishedData,
+    refurbishmentSettings,
     setLoading,
   });
 
@@ -281,7 +317,10 @@ const RefurbishmentPage = () => {
               Requests
             </button>
             <button
-              onClick={() => setActiveTab("past-requests")}
+              onClick={() => {
+                setActiveTab("past-requests");
+                refurbishmentRefresh.pastRequests();
+              }}
               className={`
                 px-6 py-3 text-sm font-medium transition-colors duration-200
                 border-b-2 whitespace-nowrap
@@ -292,7 +331,14 @@ const RefurbishmentPage = () => {
                 }
               `}
             >
-              Past Requests
+              <span className="inline-flex items-center gap-2">
+                Past Requests
+                {pastRequestsReadyCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#fe5c73] text-white text-xs font-semibold">
+                    {pastRequestsReadyCount > 99 ? "99+" : pastRequestsReadyCount}
+                  </span>
+                )}
+              </span>
             </button>
             <button
               onClick={() => setActiveTab("packages")}
@@ -329,9 +375,22 @@ const RefurbishmentPage = () => {
           <OverviewTab
             selectedCard={selectedOverviewCard}
             onCardClick={setSelectedOverviewCard}
-            eligibleCount={eligibleTable.total}
-            lastRefurbishedCount={lastRefurbishedTable.total}
-            allCentersCount={allCentersTable.total}
+            eligibleCount={
+              selectedOverviewCard === "eligible"
+                ? eligibleTable.total
+                : safeRefurbishmentData.eligibleTotalCount ||
+                  eligibleCenters.length
+            }
+            lastRefurbishedCount={
+              selectedOverviewCard === "lastRefurbished"
+                ? lastRefurbishedTable.total
+                : lastRefurbishedData.length
+            }
+            allCentersCount={
+              selectedOverviewCard === "allCenters"
+                ? allCentersTable.total
+                : allCentersData.length
+            }
             loading={loading}
             eligibleTable={eligibleTable}
             eligibleFilterOptions={eligibleFilterOptions}
@@ -350,15 +409,31 @@ const RefurbishmentPage = () => {
             formatDate={formatDate}
             lastRefurbishedTable={lastRefurbishedTable}
             lastRefurbishedFilterOptions={lastRefurbishedFilterOptions}
-            onCreateRequestLastRefurbished={(center) => {
-              const allPackageIds = packages.map((pkg) => pkg.id);
-              setCreateFormData({
-                ...createFormData,
-                centerId: center.id,
-                partnerId: center.partner_id,
-                packages: allPackageIds,
-              });
-              setShowCreateModal(true);
+            onViewLastRefurbished={(center) => {
+              if (center.latest_request_id) {
+                setStatusChangeRequest({
+                  id: center.latest_request_id,
+                  status: "completed",
+                  center_name: center.center_name,
+                });
+              } else {
+                setStatusChangeRequest({
+                  isHistoricalRecord: true,
+                  status: "completed",
+                  center_name: center.center_name,
+                  partner_name: center.partner_name,
+                  last_refurbishment_date: center.last_refurbishment_date,
+                  months_since_last_refurbishment:
+                    center.months_since_last_refurbishment,
+                  refurbishment_frequency_months:
+                    center.refurbishment_frequency_months,
+                  year_of_establishment: center.year_of_establishment,
+                  city: center.city,
+                  state: center.state,
+                  region: center.region,
+                  center_type: center.center_type,
+                });
+              }
             }}
             onExportLastRefurbished={handleExportLastRefurbishedOverview}
             allCentersTable={allCentersTable}
@@ -403,7 +478,7 @@ const RefurbishmentPage = () => {
         {activeTab === "past-requests" && (
           <PastRequestsTab
             table={pastRequestsTable}
-            loading={loading}
+            loading={_refurbishmentLoading.pastRequests || loading}
             selectedYear={selectedYear}
             onYearChange={(year) => setSelectedYear(year)}
             formatDate={formatDate}
@@ -492,6 +567,14 @@ const RefurbishmentPage = () => {
             onSuccess={() => {
               setStatusChangeRequest(null);
               refurbishmentRefresh.all();
+            }}
+            onRefresh={async () => {
+              const requests = await refurbishmentRefresh.pastRequests();
+              if (!Array.isArray(requests) || !statusChangeRequest) return;
+              const requestId =
+                statusChangeRequest.id || statusChangeRequest.request_id;
+              const fresh = requests.find((row) => row.id === requestId);
+              if (fresh) setStatusChangeRequest(fresh);
             }}
           />
         )}

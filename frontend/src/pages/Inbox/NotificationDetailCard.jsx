@@ -7,6 +7,7 @@ import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { ROUTES } from "../../constants/routes";
+import { getCertificationNotificationNavigation } from "../../utils/certificationUtils";
 
 /**
  * NotificationDetailCard Component
@@ -65,11 +66,16 @@ const NotificationDetailCard = ({
       notification.aggregated_status || notification.alert_type || "pending";
     switch (status.toLowerCase()) {
       case "approved":
+      case "success":
         return "bg-green-100 text-green-700 border-green-200";
       case "rejected":
+      case "error":
         return "bg-red-100 text-red-700 border-red-200";
       case "partial_approved":
+      case "warning":
         return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      case "info":
+        return "bg-blue-100 text-blue-700 border-blue-200";
       case "pending":
       default:
         return "text-[#E47F00] border-[#E47F00]";
@@ -92,10 +98,18 @@ const NotificationDetailCard = ({
     switch (status.toLowerCase()) {
       case "approved":
         return "APPROVED";
+      case "success":
+        return "SUCCESS";
       case "rejected":
         return "REJECTED";
+      case "error":
+        return "ALERT";
       case "partial_approved":
         return "PARTIALLY APPROVED";
+      case "warning":
+        return "WARNING";
+      case "info":
+        return "INFO";
       case "pending":
       default:
         return "PENDING";
@@ -105,7 +119,25 @@ const NotificationDetailCard = ({
   const user = useSelector((state) => state.auth.user);
 
   const handleReviewClick = () => {
+    const certNav = getCertificationNotificationNavigation(
+      notification,
+      user?.role,
+    );
+    if (certNav?.path) {
+      navigate(certNav.path);
+      return;
+    }
+
     if (notification.related_entity_id) {
+      const certNav = getCertificationNotificationNavigation(
+        notification,
+        user?.role,
+      );
+      if (certNav?.path) {
+        navigate(certNav.path);
+        return;
+      }
+
       if (notification.related_entity_type === "tot_upload") {
         navigate(
           ROUTES.REVIEW_TOT_UPLOAD.replace(
@@ -160,6 +192,15 @@ const NotificationDetailCard = ({
     notification.related_entity_type === "tot_upload" ||
     notification.notification_type === "tot_upload" ||
     notification.type === "tot_upload";
+  const isCertificationNotification =
+    notification.related_entity_type === "certification_upload" ||
+    notification.related_entity_type === "certification_pdf" ||
+    notification.notification_type === "certification";
+  const certNavTarget = getCertificationNotificationNavigation(
+    notification,
+    user?.role,
+  );
+  const showReviewButton = !isCertificationNotification || Boolean(certNavTarget);
 
   return (
     <Card className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-[16px]">
@@ -171,9 +212,11 @@ const NotificationDetailCard = ({
               ? `New Center Created: ${
                   payload?.centerName || "Review Required"
                 }`
-              : isTotNotification
-                ? `New TOT upload: ${partnerName}`
-                : `New Data uploaded: ${partnerName}`}
+              : isCertificationNotification
+                ? notification.title
+                : isTotNotification
+                  ? `New TOT upload: ${partnerName}`
+                  : `New Data uploaded: ${partnerName}`}
           </h2>
           <div className="flex items-center gap-3">
             <Badge
@@ -241,16 +284,35 @@ const NotificationDetailCard = ({
           {/* Right Column - Center List, Employment Info, or CSV Preview */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {isEmploymentNotification
-                ? "Employment Upload Details"
-                : isTotNotification
-                  ? "TOT Upload Details"
-                  : centerDetails
-                    ? "Centers Summary"
-                    : "CSV Preview"}
+              {isCertificationNotification
+                ? "Certification Details"
+                : isEmploymentNotification
+                  ? "Employment Upload Details"
+                  : isTotNotification
+                    ? "TOT Upload Details"
+                    : centerDetails
+                      ? "Centers Summary"
+                      : "CSV Preview"}
             </label>
             <div className="border border-gray-200 rounded-[16px] overflow-auto max-h-[400px] bg-white">
-              {isEmploymentNotification ? (
+              {isCertificationNotification ? (
+                <div className="p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-400" />
+                    Certification Update
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {notification.message ||
+                      "A certification request has an update."}
+                  </p>
+                  {notification.remark && (
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium text-gray-700">Remark:</span>{" "}
+                      {notification.remark}
+                    </p>
+                  )}
+                </div>
+              ) : isEmploymentNotification ? (
                 <div className="p-5 space-y-3">
                   <div className="flex items-center gap-2 text-sm text-purple-700 font-semibold">
                     <span className="inline-block w-2.5 h-2.5 rounded-full bg-purple-400" />
@@ -459,12 +521,14 @@ const NotificationDetailCard = ({
 
       {/* Footer - Action buttons */}
       <div className="p-4 flex items-center justify-end gap-6">
-        <Button
-          onClick={handleReviewClick}
-          className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-[40px]"
-        >
-          Review data
-        </Button>
+        {showReviewButton && (
+          <Button
+            onClick={handleReviewClick}
+            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-[40px]"
+          >
+            {isCertificationNotification ? "View Request" : "Review data"}
+          </Button>
+        )}
 
         <button
           onClick={onDismiss}

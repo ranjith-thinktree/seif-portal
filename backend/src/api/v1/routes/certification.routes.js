@@ -6,8 +6,8 @@ const certController = require('../controllers/certification.controller');
 const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 const {
-  uploadCertificationFiles,
   uploadESSCIFiles,
+  uploadESSCIStep1Files,
   handleUploadError,
 } = require('../../../middleware/upload.middleware');
 
@@ -19,8 +19,6 @@ router.post(
   '/upload',
   authenticate,
   checkRole(['PARTNER', 'ADMIN', 'SUPER_ADMIN']),
-  uploadCertificationFiles,
-  handleUploadError,
   certController.uploadCertificationData
 );
 
@@ -38,6 +36,13 @@ router.get(
   authenticate,
   checkRole('PARTNER'),
   certController.getPartnerCertificates
+);
+
+router.get(
+  '/requests',
+  authenticate,
+  checkRole('PARTNER'),
+  certController.getPartnerCertificationRequests
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -72,6 +77,13 @@ router.get(
   certController.adminGetPDFs
 );
 
+router.get(
+  '/admin/requests',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  certController.adminGetCertificationRequests
+);
+
 router.put(
   '/admin/pdfs/:pdfId/approve',
   authenticate,
@@ -99,11 +111,14 @@ router.get(
   certController.essciGetBatchDetail
 );
 
-router.get('/essci/partners', authenticate, checkRole('ESSCI'), certController.essciGetPartners);
-
-router.get('/essci/centers', authenticate, checkRole('ESSCI'), certController.essciGetCenters);
-
-router.get('/essci/batches', authenticate, checkRole('ESSCI'), certController.essciGetBatches);
+router.post(
+  '/essci/step1',
+  authenticate,
+  checkRole('ESSCI'),
+  uploadESSCIStep1Files,
+  handleUploadError,
+  certController.essciSubmitStep1
+);
 
 router.post(
   '/essci/upload-pdf',

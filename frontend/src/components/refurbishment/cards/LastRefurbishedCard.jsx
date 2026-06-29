@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ArrowPathIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import EnhancedDataTable from "@/components/common/EnhancedDataTable";
 import AdvancedSearchBar from "@/components/common/AdvancedSearchBar";
 
@@ -11,7 +10,7 @@ import AdvancedSearchBar from "@/components/common/AdvancedSearchBar";
 const LastRefurbishedCard = ({
   table,
   loading = false,
-  onCreateRequest,
+  onViewRequest,
   formatDate,
   filterOptions = {},
   onExport,
@@ -63,10 +62,10 @@ const LastRefurbishedCard = ({
   // Sort options for AdvancedSearchBar
   const sortOptions = [
     { label: "Center Name", value: "center_name" },
-    { label: "Date", value: "last_refurbishment_date" },
+    { label: "Refurbished Date", value: "last_refurbishment_date" },
     { label: "Partner", value: "partner_name" },
-    { label: "Region", value: "region" },
     { label: "City", value: "city" },
+    { label: "Region", value: "region" },
   ];
 
   // Actions for AdvancedSearchBar
@@ -88,14 +87,14 @@ const LastRefurbishedCard = ({
         cell: ({ row }) => (
           <div className="font-medium">{row.original.center_name}</div>
         ),
-        size: 250,
+        size: 220,
         enableHiding: true,
         enableResizing: true,
       },
       {
         id: "last_refurbishment_date",
         accessorKey: "last_refurbishment_date",
-        header: "Date",
+        header: "Refurbished Date",
         cell: ({ row }) => (
           <span className="text-sm text-gray-600">
             {formatDate(row.original.last_refurbishment_date)}
@@ -111,10 +110,23 @@ const LastRefurbishedCard = ({
         header: "Partner",
         cell: ({ row }) => (
           <span className="text-sm text-gray-600">
-            {row.original.partner_name}
+            {row.original.partner_name || "-"}
           </span>
         ),
         size: 200,
+        enableHiding: true,
+        enableResizing: true,
+      },
+      {
+        id: "city",
+        accessorKey: "city",
+        header: "City",
+        cell: ({ row }) => (
+          <span className="text-sm text-gray-600">
+            {row.original.city || "-"}
+          </span>
+        ),
+        size: 140,
         enableHiding: true,
         enableResizing: true,
       },
@@ -123,7 +135,9 @@ const LastRefurbishedCard = ({
         accessorKey: "region",
         header: "Region",
         cell: ({ row }) => (
-          <span className="text-sm text-gray-600">{row.original.region}</span>
+          <span className="text-sm text-gray-600">
+            {row.original.region || "-"}
+          </span>
         ),
         size: 120,
         enableHiding: true,
@@ -133,21 +147,21 @@ const LastRefurbishedCard = ({
         id: "actions",
         header: "Action",
         cell: ({ row }) => (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onCreateRequest(row.original)}
+          <button
+            onClick={() => onViewRequest?.(row.original)}
             disabled={loading}
+            title="View refurbishment details"
+            className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Create Request
-          </Button>
+            View
+          </button>
         ),
-        size: 140,
+        size: 80,
         enableHiding: false,
         enableResizing: false,
       },
     ];
-  }, [formatDate, loading, onCreateRequest]);
+  }, [formatDate, loading, onViewRequest]);
 
   return (
     <div className="space-y-4">

@@ -23,8 +23,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),
@@ -44,8 +43,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),
@@ -63,8 +61,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),
@@ -82,8 +79,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),
@@ -103,8 +99,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),

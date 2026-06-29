@@ -302,10 +302,26 @@ router.post(
 router.put('/requests/:id/complete', RefurbishmentController.completeRefurbishment);
 
 /**
+ * POST /api/v1/admin/refurbishment/requests/:id/request-partner-acknowledgment
+ * Ask partner to submit acknowledgment statement and files before final completion.
+ */
+router.post(
+  '/requests/:id/request-partner-acknowledgment',
+  RefurbishmentController.requestPartnerAcknowledgment
+);
+
+/**
  * PATCH /api/v1/admin/refurbishment/requests/:id/status
  * Admin advances refurbishment lifecycle status (approved→material_procurement→installation_in_progress)
  */
 router.patch('/requests/:id/status', RefurbishmentController.updateStatus);
+
+/**
+ * PATCH /api/v1/admin/refurbishment/requests/:id/step-date
+ * Save workflow step completion date without changing status
+ * Body: { step: "installation_in_progress", status_date: "2026-06-15" }
+ */
+router.patch('/requests/:id/step-date', RefurbishmentController.updateStepDate);
 
 /**
  * GET /api/v1/admin/refurbishment/centers/:centerId/notification-history

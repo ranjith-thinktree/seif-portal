@@ -1,66 +1,68 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-toastify";
 import useTableSearch from "./useTableSearch";
 import refurbishmentService from "../../services/refurbishment.service";
-import { FY_OPTIONS, YEAR_OPTIONS } from "../../constants/refurbishment";
-import { getFinancialYear } from "../../utils/refurbishmentUtils";
+import { FY_OPTIONS } from "../../constants/refurbishment";
+import {
+  getFinancialYear,
+  getYearFilterOptions,
+  filterOverviewLastRefurbishedCenters,
+  filterOverviewEligibleCenters,
+  filterOverviewAllCenters,
+  getCenterPartnerName,
+} from "../../utils/refurbishmentUtils";
 
 export default function useOverviewTab({
   allCentersData,
   eligibleCenters,
   lastRefurbishedData,
+  refurbishmentSettings,
   setLoading,
 }) {
   const [selectedOverviewCard, setSelectedOverviewCard] = useState("eligible");
+  const yearFilterOptions = useMemo(() => getYearFilterOptions(), []);
+
+  const eligibilityCycleSettings = useMemo(
+    () => ({
+      firstCycleYears: refurbishmentSettings?.firstCycleYears ?? 5,
+      repeatCycleYears: refurbishmentSettings?.repeatCycleYears ?? 3,
+    }),
+    [
+      refurbishmentSettings?.firstCycleYears,
+      refurbishmentSettings?.repeatCycleYears,
+    ],
+  );
+
+  const eligibleCentersTableData = useMemo(() => {
+    const notifyById = new Map(
+      (Array.isArray(eligibleCenters) ? eligibleCenters : []).map((center) => [
+        center.id,
+        center,
+      ]),
+    );
+
+    return (Array.isArray(allCentersData) ? allCentersData : []).map((center) => {
+      const currentEligible = notifyById.get(center.id);
+      return {
+        ...center,
+        partner_name: getCenterPartnerName(center),
+        last_notified_at:
+          currentEligible?.last_notified_at ?? center.last_notified_at,
+        total_send_count:
+          currentEligible?.total_send_count ?? center.total_send_count,
+      };
+    });
+  }, [allCentersData, eligibleCenters]);
 
   const allCentersCustomFilters = useCallback((items, filters) => {
-    if (!Array.isArray(items)) return [];
-    let filtered = [...items];
-
-    if (filters.eligibility) {
-      filtered = filtered.filter(
-        (c) => c.eligibility_status === filters.eligibility,
-      );
-    }
-
-    if (filters.age) {
-      const ageRange = filters.age;
-      if (ageRange === "0-2") {
-        filtered = filtered.filter(
-          (c) => parseInt(c.age) >= 0 && parseInt(c.age) <= 2,
-        );
-      } else if (ageRange === "3-5") {
-        filtered = filtered.filter(
-          (c) => parseInt(c.age) >= 3 && parseInt(c.age) <= 5,
-        );
-      } else if (ageRange === "6+") {
-        filtered = filtered.filter((c) => parseInt(c.age) >= 6);
-      }
-    }
-
-    if (filters.partner?.length > 0) {
-      filtered = filtered.filter((c) =>
-        filters.partner.includes(c.partner_name),
-      );
-    }
-
-    if (filters.state?.length > 0) {
-      filtered = filtered.filter((c) => filters.state.includes(c.state));
-    }
-
-    if (filters.financialYear) {
-      filtered = filtered.filter(
-        (c) => c.financial_year === filters.financialYear,
-      );
-    }
-
-    return filtered;
+    return filterOverviewAllCenters(items, filters);
   }, []);
 
   const allCentersTable = useTableSearch(allCentersData, {
     searchFields: [
       "center_name",
       "partner_name",
+      "organization_name",
       "city",
       "state",
       "eligibility_status",
@@ -70,7 +72,10 @@ export default function useOverviewTab({
       age: "",
       partner: [],
       state: [],
+      region: [],
+      status: [],
       financialYear: "",
+      year: "",
     },
     initialSortBy: "center_name",
     initialSortOrder: "asc",
@@ -90,58 +95,35 @@ export default function useOverviewTab({
     ],
     partners: [],
     states: [],
+    regions: [],
+    statuses: [
+      { value: "Eligible", label: "Eligible" },
+      { value: "Not Eligible", label: "Not Eligible" },
+    ],
     financialYears: [],
-    years: YEAR_OPTIONS,
+    years: yearFilterOptions,
   });
 
-  const eligibleCentersCustomFilters = useCallback((items, filters) => {
-    if (!Array.isArray(items)) return [];
-    let filtered = [...items];
-
-    if (filters.partner?.length > 0) {
-      filtered = filtered.filter((c) =>
-        filters.partner.includes(c.partner_name),
+  const eligibleCentersCustomFilters = useCallback(
+    (items, filters) => {
+      return filterOverviewEligibleCenters(
+        items,
+        filters,
+        eligibilityCycleSettings,
       );
-    }
+    },
+    [eligibilityCycleSettings],
+  );
 
-    if (filters.state?.length > 0) {
-      filtered = filtered.filter((c) => filters.state.includes(c.state));
-    }
-
-    if (filters.lastNotified) {
-      const now = new Date();
-      const notifiedFilter = filters.lastNotified;
-
-      filtered = filtered.filter((c) => {
-        if (!c.last_notified_date) return false;
-        const notifiedDate = new Date(c.last_notified_date);
-        const daysDiff = Math.floor(
-          (now - notifiedDate) / (1000 * 60 * 60 * 24),
-        );
-
-        if (notifiedFilter === "last-7-days") return daysDiff <= 7;
-        if (notifiedFilter === "last-30-days") return daysDiff <= 30;
-        if (notifiedFilter === "over-30-days") return daysDiff > 30;
-        return true;
-      });
-    }
-
-    if (filters.financialYear) {
-      filtered = filtered.filter(
-        (c) => c.financial_year === filters.financialYear,
-      );
-    }
-
-    return filtered;
-  }, []);
-
-  const eligibleTable = useTableSearch(eligibleCenters, {
+  const eligibleTable = useTableSearch(eligibleCentersTableData, {
     searchFields: ["center_name", "partner_name", "city", "state"],
     initialFilters: {
       partner: [],
       state: [],
+      region: [],
       lastNotified: "",
       financialYear: "",
+      year: "",
     },
     initialSortBy: "center_name",
     initialSortOrder: "asc",
@@ -152,50 +134,13 @@ export default function useOverviewTab({
   const [eligibleFilterOptions, setEligibleFilterOptions] = useState({
     partners: [],
     states: [],
+    regions: [],
     financialYears: [],
-    years: YEAR_OPTIONS,
+    years: yearFilterOptions,
   });
 
   const lastRefurbishedCustomFilters = useCallback((items, filters) => {
-    if (!Array.isArray(items)) return [];
-    let filtered = [...items];
-
-    if (filters.partner?.length > 0) {
-      filtered = filtered.filter((c) =>
-        filters.partner.includes(c.partner_name),
-      );
-    }
-
-    if (filters.state?.length > 0) {
-      filtered = filtered.filter((c) => filters.state.includes(c.state));
-    }
-
-    if (filters.recency) {
-      const now = new Date();
-      const recencyFilter = filters.recency;
-
-      filtered = filtered.filter((c) => {
-        if (!c.last_refurbishment_date) return false;
-        const refurbDate = new Date(c.last_refurbishment_date);
-        const monthsDiff = Math.floor(
-          (now - refurbDate) / (1000 * 60 * 60 * 24 * 30),
-        );
-
-        if (recencyFilter === "last-6-months") return monthsDiff <= 6;
-        if (recencyFilter === "6-12-months")
-          return monthsDiff > 6 && monthsDiff <= 12;
-        if (recencyFilter === "over-1-year") return monthsDiff > 12;
-        return true;
-      });
-    }
-
-    if (filters.financialYear) {
-      filtered = filtered.filter(
-        (c) => c.financial_year === filters.financialYear,
-      );
-    }
-
-    return filtered;
+    return filterOverviewLastRefurbishedCenters(items, filters);
   }, []);
 
   const lastRefurbishedTable = useTableSearch(lastRefurbishedData, {
@@ -203,10 +148,12 @@ export default function useOverviewTab({
     initialFilters: {
       partner: [],
       state: [],
+      region: [],
       recency: "",
       financialYear: "",
+      year: "",
     },
-    initialSortBy: "last_refurbished",
+    initialSortBy: "last_refurbishment_date",
     initialSortOrder: "desc",
     customFilters: lastRefurbishedCustomFilters,
     pageSize: 10,
@@ -216,8 +163,9 @@ export default function useOverviewTab({
     useState({
       partners: [],
       states: [],
+      regions: [],
       financialYears: [],
-      years: YEAR_OPTIONS,
+      years: yearFilterOptions,
     });
 
   const eligibilityTabCustomFilters = useCallback((items, filters) => {
@@ -275,39 +223,49 @@ export default function useOverviewTab({
   useEffect(() => {
     if (Array.isArray(allCentersData) && allCentersData.length > 0) {
       const uniquePartners = [
-        ...new Set(allCentersData.map((c) => c.partner_name).filter(Boolean)),
+        ...new Set(allCentersData.map((c) => getCenterPartnerName(c)).filter(Boolean)),
       ];
       const uniqueStates = [
         ...new Set(allCentersData.map((c) => c.state).filter(Boolean)),
+      ];
+      const uniqueRegions = [
+        ...new Set(allCentersData.map((c) => c.region).filter(Boolean)),
       ];
 
       setAllCentersFilterOptions((prev) => ({
         ...prev,
         partners: uniquePartners.sort().map((p) => ({ value: p, label: p })),
         states: uniqueStates.sort().map((s) => ({ value: s, label: s })),
+        regions: uniqueRegions.sort().map((r) => ({ value: r, label: r })),
         financialYears: FY_OPTIONS,
-        years: YEAR_OPTIONS,
+        years: yearFilterOptions,
       }));
     }
-  }, [allCentersData]);
+  }, [allCentersData, yearFilterOptions]);
 
   useEffect(() => {
-    if (Array.isArray(eligibleCenters) && eligibleCenters.length > 0) {
+    if (Array.isArray(allCentersData) && allCentersData.length > 0) {
       const uniquePartners = [
-        ...new Set(eligibleCenters.map((c) => c.partner_name).filter(Boolean)),
+        ...new Set(
+          allCentersData.map((c) => getCenterPartnerName(c)).filter(Boolean),
+        ),
       ];
       const uniqueStates = [
-        ...new Set(eligibleCenters.map((c) => c.state).filter(Boolean)),
+        ...new Set(allCentersData.map((c) => c.state).filter(Boolean)),
+      ];
+      const uniqueRegions = [
+        ...new Set(allCentersData.map((c) => c.region).filter(Boolean)),
       ];
 
       setEligibleFilterOptions({
         partners: uniquePartners.sort().map((p) => ({ value: p, label: p })),
         states: uniqueStates.sort().map((s) => ({ value: s, label: s })),
+        regions: uniqueRegions.sort().map((r) => ({ value: r, label: r })),
         financialYears: FY_OPTIONS,
-        years: YEAR_OPTIONS,
+        years: yearFilterOptions,
       });
     }
-  }, [eligibleCenters]);
+  }, [allCentersData, yearFilterOptions]);
 
   useEffect(() => {
     if (Array.isArray(lastRefurbishedData) && lastRefurbishedData.length > 0) {
@@ -319,15 +277,19 @@ export default function useOverviewTab({
       const uniqueStates = [
         ...new Set(lastRefurbishedData.map((c) => c.state).filter(Boolean)),
       ];
+      const uniqueRegions = [
+        ...new Set(lastRefurbishedData.map((c) => c.region).filter(Boolean)),
+      ];
 
       setLastRefurbishedFilterOptions({
         partners: uniquePartners.sort().map((p) => ({ value: p, label: p })),
         states: uniqueStates.sort().map((s) => ({ value: s, label: s })),
+        regions: uniqueRegions.sort().map((r) => ({ value: r, label: r })),
         financialYears: FY_OPTIONS,
-        years: YEAR_OPTIONS,
+        years: yearFilterOptions,
       });
     }
-  }, [lastRefurbishedData]);
+  }, [lastRefurbishedData, yearFilterOptions]);
 
   useEffect(() => {
     if (Array.isArray(eligibleCenters) && eligibleCenters.length > 0) {

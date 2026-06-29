@@ -1032,14 +1032,16 @@ class RefurbishmentController {
     try {
       const { id } = req.params;
       const adminUserId = req.user.id;
-      const { adminRemarks, adminAddedPackages = [], removedPackageIds = [] } = req.body;
+      const { adminRemarks, adminAddedPackages = [], removedPackageIds = [], finalUpgradationPackageIds } =
+        req.body;
 
       const result = await RefurbishmentService.approveRefurbishmentRequest(
         id,
         adminUserId,
         adminRemarks,
         removedPackageIds,
-        adminAddedPackages
+        adminAddedPackages,
+        finalUpgradationPackageIds
       );
 
       return ApiResponse.success(res, result, result.message);
@@ -1133,7 +1135,7 @@ class RefurbishmentController {
    *
    * Body:
    * {
-   *   "completion_statement": "Completion statement (REQUIRED)",
+   *   "completion_statement": "Optional completion statement",
    *   "completion_date": "2024-01-15",
    *   "completion_images": [
    *     {"url": "s3-url", "name": "photo.jpg", "size": 123456, "type": "image/jpeg"},
@@ -1146,13 +1148,6 @@ class RefurbishmentController {
       const { id } = req.params;
       const adminUserId = req.user.id;
       const completionData = req.body;
-
-      if (
-        !completionData.completion_statement ||
-        completionData.completion_statement.trim() === ''
-      ) {
-        throw new ValidationError('Completion statement is required');
-      }
 
       const result = await RefurbishmentService.completeRefurbishment(
         id,
@@ -1258,17 +1253,49 @@ class RefurbishmentController {
   static async updateStatus(req, res) {
     try {
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, status_date } = req.body;
       const adminUserId = req.user.id;
 
       if (!status) {
         return ApiResponse.error(res, 'status is required', 400);
       }
 
-      const result = await RefurbishmentService.updateRefurbishmentStatus(id, adminUserId, status);
+      const result = await RefurbishmentService.updateRefurbishmentStatus(
+        id,
+        adminUserId,
+        status,
+        { status_date }
+      );
       return ApiResponse.success(res, result, 'Status updated successfully');
     } catch (error) {
       console.error('[RefurbishmentController] Error updating status:', error);
+      return ApiResponse.error(res, error.message, 400);
+    }
+  }
+
+  /**
+   * Save a workflow step completion date without changing status.
+   * @route PATCH /api/v1/admin/refurbishment/requests/:id/step-date
+   */
+  static async updateStepDate(req, res) {
+    try {
+      const { id } = req.params;
+      const { step, status_date } = req.body;
+      const adminUserId = req.user.id;
+
+      if (!step || !status_date) {
+        return ApiResponse.error(res, 'step and status_date are required', 400);
+      }
+
+      const result = await RefurbishmentService.updateRefurbishmentStepDate(
+        id,
+        adminUserId,
+        step,
+        status_date
+      );
+      return ApiResponse.success(res, result, 'Step date saved successfully');
+    } catch (error) {
+      console.error('[RefurbishmentController] Error saving step date:', error);
       return ApiResponse.error(res, error.message, 400);
     }
   }
@@ -1358,10 +1385,30 @@ class RefurbishmentController {
         return ApiResponse.error(res, 'No file received', 400);
       }
       const backendBase = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
-      const fileUrl = `${backendBase}/uploads/refurbishment/${req.file.filename}`;
+      const fileUrl = `/uploads/refurbishment/${req.file.filename}`;
       const key = `refurbishment/${req.file.filename}`;
       return ApiResponse.success(res, { fileUrl, key }, 'File uploaded locally');
     });
+  }
+
+  /**
+   * POST /api/v1/admin/refurbishment/requests/:id/request-partner-acknowledgment
+   * Ask the partner to submit acknowledgment before admin completes the request.
+   */
+  static async requestPartnerAcknowledgment(req, res, next) {
+    try {
+      const { id } = req.params;
+      const adminUserId = req.user.id;
+
+      const result = await RefurbishmentService.requestPartnerAcknowledgment(
+        id,
+        adminUserId
+      );
+
+      return ApiResponse.success(res, result, result.message);
+    } catch (error) {
+      next(error);
+    }
   }
 }
 

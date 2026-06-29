@@ -7,7 +7,7 @@ const { checkRole } = require('../../../middleware/role.middleware');
 /**
  * @route   GET /api/v1/data/overview-stats
  * @desc    Get overview statistics for data management page
- * @access  Admin, SUPER_ADMIN, PARTNER, ESSCI, SEIF_READONLY
+ * @access  Admin, SUPER_ADMIN, PARTNER, SEIF_READONLY
  */
 router.get(
   '/overview-stats',
@@ -15,8 +15,7 @@ router.get(
   checkRole([
     'ADMIN',
     'SUPER_ADMIN',
-    'PARTNER',
-    'ESSCI',
+    'PARTNER',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
   ]),

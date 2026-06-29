@@ -171,13 +171,31 @@ const submitPartnerCompletion = async (req, res, next) => {
       return ApiResponse.error(res, 'User is not associated with a partner', 403);
     }
 
+    if (!description || !String(description).trim()) {
+      return ApiResponse.error(res, 'Acknowledgment statement is required', 400);
+    }
+
+    if (!Array.isArray(fileUrls) || fileUrls.length === 0) {
+      return ApiResponse.error(res, 'At least one file is required', 400);
+    }
+
+    if (!req.body.consent) {
+      return ApiResponse.error(res, 'Acknowledgment consent is required', 400);
+    }
+
+    if (!req.body.consentText || !String(req.body.consentText).trim()) {
+      return ApiResponse.error(res, 'Acknowledgment consent text is required', 400);
+    }
+
     const result = await RefurbishmentService.submitPartnerCompletion(requestId, partnerId, {
       description,
       fileUrls: fileUrls || [],
+      consent: Boolean(req.body.consent),
+      consentText: req.body.consentText,
       userId: req.user.id,
     });
 
-    return ApiResponse.success(res, result, 'Completion report submitted successfully', 201);
+    return ApiResponse.success(res, result, 'Acknowledgment submitted successfully', 201);
   } catch (error) {
     console.error('Error submitting partner completion:', error);
     next(error);
@@ -253,8 +271,7 @@ const uploadLocalFile = (req, res, next) => {
     if (!req.file) {
       return ApiResponse.error(res, 'No file received', 400);
     }
-    const backendBase = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
-    const fileUrl = `${backendBase}/uploads/refurbishment/${req.file.filename}`;
+    const fileUrl = `/uploads/refurbishment/${req.file.filename}`;
     const key = `refurbishment/${req.file.filename}`;
     return ApiResponse.success(res, { fileUrl, key }, 'File uploaded locally');
   });
