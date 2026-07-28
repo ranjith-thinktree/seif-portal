@@ -999,6 +999,41 @@ class RefurbishmentService {
   }
 
   /**
+   * Centers refurbished within an inclusive calendar date range (last_refurbishment_date).
+   * Additive for Reports period modes; does not change getRefurbishmentStatsByYear.
+   */
+  static async getRefurbishmentStatsByDateRange(fromDate, toDate) {
+    try {
+      const from = String(fromDate || '').trim();
+      const to = String(toDate || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        throw new Error('fromDate and toDate must be YYYY-MM-DD');
+      }
+      if (from > to) {
+        throw new Error('fromDate must be on or before toDate');
+      }
+
+      const query = `
+        SELECT COUNT(*) as total
+        FROM centers
+        WHERE last_refurbishment_date IS NOT NULL
+          AND DATE(last_refurbishment_date) BETWEEN ? AND ?
+          AND status = 'active'
+      `;
+      const [[{ total }]] = await db.query(query, [from, to]);
+
+      return {
+        fromDate: from,
+        toDate: to,
+        totalRefurbished: parseInt(total, 10) || 0,
+      };
+    } catch (error) {
+      console.error('[RefurbishmentService] Error fetching date-range stats:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get all available refurbishment packages
    * Optionally filter by course
    * @param {string|null} courseId - Optional course ID to filter packages
@@ -1208,7 +1243,13 @@ class RefurbishmentService {
    * @param {number|null} year - Optional year filter
    * @returns {Promise<Object>} { requests: [], totalCount: 200 }
    */
-  static async getPastRefurbishmentRequests(limit = 50, offset = 0, year = null) {
+  static async getPastRefurbishmentRequests(
+    limit = 50,
+    offset = 0,
+    year = null,
+    fromDate = null,
+    toDate = null
+  ) {
     try {
       // Past Requests includes submitted plus actioned statuses.
       // Status lives on refurbishment_requests (not the legacy requests table).
@@ -1224,6 +1265,14 @@ class RefurbishmentService {
       ];
       const placeholders = activeStatuses.map(() => '?').join(', ');
 
+      const from = fromDate && /^\d{4}-\d{2}-\d{2}$/.test(String(fromDate).trim())
+        ? String(fromDate).trim()
+        : null;
+      const to = toDate && /^\d{4}-\d{2}-\d{2}$/.test(String(toDate).trim())
+        ? String(toDate).trim()
+        : null;
+      const useRange = Boolean(from && to && from <= to);
+
       let countQuery = `
         SELECT COUNT(*) as total
         FROM refurbishment_requests rr
@@ -1233,7 +1282,10 @@ class RefurbishmentService {
       `;
       const countParams = [...activeStatuses];
 
-      if (year) {
+      if (useRange) {
+        countQuery += ` AND DATE(rr.updated_at) BETWEEN ? AND ?`;
+        countParams.push(from, to);
+      } else if (year) {
         countQuery += ` AND YEAR(rr.updated_at) = ?`;
         countParams.push(year);
       }
@@ -1277,7 +1329,10 @@ class RefurbishmentService {
       `;
       const params = [...activeStatuses];
 
-      if (year) {
+      if (useRange) {
+        query += ` AND DATE(rr.updated_at) BETWEEN ? AND ?`;
+        params.push(from, to);
+      } else if (year) {
         query += ` AND YEAR(rr.updated_at) = ?`;
         params.push(year);
       }
@@ -1334,9 +1389,9 @@ class RefurbishmentService {
       const settings = await this.getRefurbishmentSettings();
       const defaultMessage = message || settings.defaultCustomMessage;
 
-      // Find the active partner user first
+      // Find the active partner user first (in-app notification recipient)
       const [partnerUserRows] = await db.query(
-        `SELECT u.id, u.email, u.full_name, p.name as partner_name
+        `SELECT u.id, u.email, u.full_name, p.name as partner_name, p.contact_email, p.contact_person
          FROM users u
          LEFT JOIN partners p ON u.partner_id = p.id
          WHERE u.partner_id = ?
@@ -1354,9 +1409,13 @@ class RefurbishmentService {
       }
 
       const recipientId = partnerUserRows[0].id;
-      const partnerEmail = partnerUserRows[0].email;
       const partnerName =
         partnerUserRows[0].partner_name || partnerUserRows[0].full_name || 'Partner';
+      // Partner-facing eligibility email: organisation primary contact only
+      const partnerEmail =
+        partnerUserRows[0].contact_email || partnerUserRows[0].email || null;
+      const partnerContactName =
+        partnerUserRows[0].contact_person || partnerName;
 
       // Fetch center name for email
       const [centerRows] = await db.query(`SELECT center_name FROM centers WHERE id = ? LIMIT 1`, [
@@ -1389,18 +1448,19 @@ class RefurbishmentService {
       // Note: Notification tracking is now handled by scheduled_notification_executions table
       // No need to update centers table anymore
 
-      // Send email notification to partner
+      // Send eligibility email to partner primary contact (template #1)
       if (partnerEmail) {
         emailService
-          .sendRefurbishmentNotificationEmail({
-            email: partnerEmail,
+          .sendRefurbishmentEligiblePartnerEmail({
+            toEmail: partnerEmail,
+            recipientName: partnerContactName,
             partnerName,
             centerName,
-            message: defaultMessage,
+            financialYear: emailService.getCurrentFinancialYearLabel(),
           })
           .catch((emailErr) => {
             console.error(
-              '[RefurbishmentService] Failed to send refurbishment email:',
+              '[RefurbishmentService] Failed to send refurbishment eligibility email:',
               emailErr.message
             );
           });

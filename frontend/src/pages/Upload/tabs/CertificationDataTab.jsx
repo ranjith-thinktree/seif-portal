@@ -1,6 +1,30 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import RefurbishmentDatePicker from "../../../components/refurbishment/RefurbishmentDatePicker";
+import { ROUTES } from "../../../constants/routes";
+
+function parseLocalDate(iso) {
+  if (!iso) return null;
+  const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function addDays(date, days) {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function startOfToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function isAfter(a, b) {
+  return a.getTime() > b.getTime();
+}
 
 const CertificationDataTab = ({
   certNoteOpen,
@@ -29,14 +53,77 @@ const CertificationDataTab = ({
   certSpokeMobile,
   setCertSpokeMobile,
   certUploading,
+  certResubmitId = "",
+  certResubmitLoading = false,
+  certResubmitRejectionReason = "",
   handleCertCenterChange,
   handleCertUpload,
 }) => {
   const canSubmit =
-    certCenterId && (certBatchId || certOtherBatchNumber.trim().length > 0);
+    certCenterId &&
+    (certBatchId || certOtherBatchNumber.trim().length > 0) &&
+    Boolean(certBatchStartDate) &&
+    Boolean(certBatchEndDate) &&
+    Boolean(certAssessmentDate) &&
+    certSpokeName.trim().length > 0 &&
+    certSpokeEmail.trim().length > 0 &&
+    certSpokeMobile.trim().length > 0;
+  const isResubmit = Boolean(certResubmitId);
+
+  const today = startOfToday();
+  const endDateObj = parseLocalDate(certBatchEndDate);
+  const assessmentMaxDate = endDateObj ? addDays(endDateObj, 30) : undefined;
+
+  const handleStartDateChange = (iso) => {
+    setCertBatchStartDate(iso);
+    // End Date has no limits relative to Start — do not clear it.
+    const currentEnd = parseLocalDate(certBatchEndDate);
+    const currentAssessment = parseLocalDate(certAssessmentDate);
+    if (
+      currentAssessment &&
+      currentEnd &&
+      isAfter(currentAssessment, addDays(currentEnd, 30))
+    ) {
+      setCertAssessmentDate("");
+    }
+  };
+
+  const handleEndDateChange = (iso) => {
+    setCertBatchEndDate(iso);
+    const nextEnd = parseLocalDate(iso);
+    if (!nextEnd) {
+      setCertAssessmentDate("");
+      return;
+    }
+    const currentAssessment = parseLocalDate(certAssessmentDate);
+    if (currentAssessment && isAfter(currentAssessment, addDays(nextEnd, 30))) {
+      setCertAssessmentDate("");
+    }
+  };
 
   return (
     <div>
+      {isResubmit && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-4">
+          <h3 className="font-semibold text-red-800 text-sm">
+            Resubmitting rejected request
+          </h3>
+          <p className="text-red-700 text-sm mt-1">
+            Update the details below and resubmit. The same request ID will be
+            used and sent back to admin for review.
+          </p>
+          {certResubmitRejectionReason && (
+            <p className="text-red-800 text-sm mt-2">
+              <span className="font-semibold">Rejection reason:</span>{" "}
+              {certResubmitRejectionReason}
+            </p>
+          )}
+          {certResubmitLoading && (
+            <p className="text-red-600 text-sm mt-2">Loading request details…</p>
+          )}
+        </div>
+      )}
+
       {/* Collapsible Note */}
       <div className="mb-6 border-l-4 border-amber-500 rounded-r-lg overflow-hidden">
         <button
@@ -82,7 +169,7 @@ const CertificationDataTab = ({
               You can only submit certification data for{" "}
               <strong>approved centers</strong>. Select a batch from the list or
               enter an other batch number if it is not listed. Submitted data is
-              sent directly to ESSCI for certificate processing.
+              sent for admin review before ESSCI certificate processing.
             </p>
           </div>
         )}
@@ -124,7 +211,7 @@ const CertificationDataTab = ({
               </h2>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Center *
+                  Center <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={certCenterId}
@@ -151,7 +238,7 @@ const CertificationDataTab = ({
             {/* Batch */}
             <div>
               <h2 className="font-semibold text-gray-800 mb-3">
-                Batch Details
+                Batch Details <span className="text-red-500">*</span>
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -200,10 +287,6 @@ const CertificationDataTab = ({
                   />
                 </div>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Select a batch from the dropdown or enter an other batch number
-                (one is required).
-              </p>
             </div>
 
             {/* Dates */}
@@ -214,39 +297,36 @@ const CertificationDataTab = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Batch Start Date
+                    Batch Start Date <span className="text-red-500">*</span>
                   </label>
                   <RefurbishmentDatePicker
                     value={certBatchStartDate}
-                    onChange={setCertBatchStartDate}
+                    onChange={handleStartDateChange}
                     placeholder="Pick start date"
+                    maxDate={today}
                     className="max-w-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Batch End Date
+                    Batch End Date <span className="text-red-500">*</span>
                   </label>
                   <RefurbishmentDatePicker
                     value={certBatchEndDate}
-                    onChange={setCertBatchEndDate}
+                    onChange={handleEndDateChange}
                     placeholder="Pick end date"
-                    minDate={
-                      certBatchStartDate
-                        ? new Date(`${certBatchStartDate}T00:00:00`)
-                        : undefined
-                    }
                     className="max-w-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Assessment Date
+                    Assessment Date <span className="text-red-500">*</span>
                   </label>
                   <RefurbishmentDatePicker
                     value={certAssessmentDate}
                     onChange={setCertAssessmentDate}
                     placeholder="Pick assessment date"
+                    maxDate={assessmentMaxDate}
                     className="max-w-none"
                   />
                 </div>
@@ -261,37 +341,42 @@ const CertificationDataTab = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Name
+                    Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={certSpokeName}
                     onChange={(e) => setCertSpokeName(e.target.value)}
                     placeholder="Spoke contact name"
+                    required
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Email
+                    Email <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="email"
                     value={certSpokeEmail}
                     onChange={(e) => setCertSpokeEmail(e.target.value)}
-                    placeholder="Spoke contact email"
+                    placeholder="name@example.com"
+                    required
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Mobile Number
+                    Mobile Number <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="tel"
                     value={certSpokeMobile}
                     onChange={(e) => setCertSpokeMobile(e.target.value)}
-                    placeholder="Spoke contact mobile"
+                    placeholder="10-digit Indian mobile"
+                    inputMode="numeric"
+                    maxLength={14}
+                    required
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
                   />
                 </div>
@@ -302,7 +387,7 @@ const CertificationDataTab = ({
               <button
                 type="button"
                 onClick={handleCertUpload}
-                disabled={certUploading || !canSubmit}
+                disabled={certUploading || certResubmitLoading || !canSubmit}
                 className={`px-12 py-4 rounded-full text-lg font-semibold transition-all w-full ${
                   certUploading || !canSubmit
                     ? "bg-muted text-muted-foreground cursor-not-allowed"
@@ -329,6 +414,8 @@ const CertificationDataTab = ({
                     </svg>
                     Submitting…
                   </span>
+                ) : isResubmit ? (
+                  "Resubmit Certification Data"
                 ) : (
                   "Submit Certification Data"
                 )}
@@ -382,11 +469,31 @@ const CertificationDataTab = ({
                 </span>
                 <div className="pt-1.5">
                   <p className="text-base font-semibold text-foreground">
-                    Submit &amp; Await ESSCI Processing
+                    Submit for Admin Review
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Your submission is sent directly to ESSCI for certificate
+                    Your submission is reviewed by admin before ESSCI certificate
                     processing.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 border border-[#E7E7E7] py-3 px-5 rounded-2xl">
+                <span className="h-10 w-10 text-lg font-bold text-foreground bg-[#e6f4ea] p-2 rounded-full flex items-center justify-center flex-shrink-0">
+                  4.
+                </span>
+                <div className="pt-1.5">
+                  <p className="text-base font-semibold text-foreground">
+                    Need ESSCI Spoke help?
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    If you have queries, open{" "}
+                    <Link
+                      to={`${ROUTES.HELP}?tab=support&focus=essci-spoke`}
+                      className="text-[#009530] font-medium underline underline-offset-2 hover:text-[#007a28]"
+                    >
+                      Support &amp; Contacts
+                    </Link>{" "}
+                    for ESSCI Spoke details.
                   </p>
                 </div>
               </div>

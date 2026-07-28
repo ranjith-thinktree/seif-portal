@@ -77,7 +77,7 @@ const AdminCertificatesPage = () => {
           onRefresh={refreshRequests}
           listIndex={detailIndex >= 0 ? detailIndex : 0}
           fetchDetail={fetchDetail}
-          readOnly
+          allowAdminReview
         />
       </div>
     </MainLayout>

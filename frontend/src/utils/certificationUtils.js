@@ -2,28 +2,20 @@ import { ROUTES } from "../constants/routes";
 
 export const CERTIFICATION_ESSCI_WORKFLOW_STEPS = [
   {
-    key: "step1",
+    key: "certificates",
     step: 1,
-    label: "Initial Response",
-    shortLabel: "Initial Response",
-    description:
-      "Upload the QR code and share assessment link, ID, and password with the center spoke person.",
-  },
-  {
-    key: "step2",
-    step: 2,
     label: "Assessment & Certificates",
     shortLabel: "Certificates",
     description:
-      "Enter student registration and assessment numbers, then upload final certification documents.",
+      "Confirm the assessment date, enter assessment numbers, upload certificate files (ZIP/PDF), and upload the student result Excel sheet.",
   },
 ];
 
 export function getCertificationWorkflowIndex(details) {
   if (!details) return 0;
+  if (details.status !== "approved") return 0;
   const pdf = details.pdf;
-  if (pdf?.status === "approved") return 1;
-  if (details.essci_step1_at && (!pdf || pdf.status === "rejected")) return 1;
+  if (pdf?.status === "approved") return 0;
   return 0;
 }
 
@@ -31,9 +23,10 @@ export function isCertificationWorkflowComplete(details) {
   return details?.pdf?.status === "approved";
 }
 
-// Certification uploads are auto-approved on submit (no admin review step),
-// so the only derived statuses are Ongoing → Under review → Done.
+// Certification uploads require admin approval before ESSCI processing.
 export const CERTIFICATION_DERIVED_STATUS_OPTIONS = [
+  { value: "Pending Admin Review", label: "Pending Admin Review" },
+  { value: "Rejected", label: "Rejected" },
   { value: "Ongoing", label: "Ongoing" },
   { value: "Under review", label: "Under review" },
   { value: "Done", label: "Done" },
@@ -81,6 +74,16 @@ export function formatCertificationDate(dateStr) {
   }
 }
 
+/** Normalize API/DB date values to YYYY-MM-DD for date inputs. */
+export function toCertificationDateInput(value) {
+  if (!value) return "";
+  const str = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+}
+
 /**
  * Resolve navigation target for certification-related notifications.
  * @returns {{ path: string, state?: object } | null}
@@ -98,8 +101,10 @@ export function getCertificationNotificationNavigation(notification, userRole) {
     type === "certification_upload" ||
     type === "certification_submitted" ||
     type === "certification_approved" ||
+    type === "certification_rejected" ||
     type === "certification_pdf_uploaded" ||
     type === "certification_essci_step1" ||
+    type === "certificate_ready" ||
     type === "certificate_pdf_rejected";
 
   if (!isCertification) return null;
@@ -112,6 +117,11 @@ export function getCertificationNotificationNavigation(notification, userRole) {
   }
 
   if (userRole === "PARTNER") {
+    if (type === "certification_rejected" && uploadId) {
+      return {
+        path: `${ROUTES.UPLOAD_DATA}?tab=certification&certResubmit=${encodeURIComponent(uploadId)}`,
+      };
+    }
     const path = uploadId
       ? `${ROUTES.PARTNER_CERTIFICATES}?uploadId=${encodeURIComponent(uploadId)}`
       : ROUTES.PARTNER_CERTIFICATES;

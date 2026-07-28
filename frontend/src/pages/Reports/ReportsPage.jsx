@@ -1,24 +1,20 @@
 ﻿// ──────────────────────────────────────────────────────────────────────────────
 // Impact & Performance Dashboard  —  Admin Customisation + Row-based DnD
 // ──────────────────────────────────────────────────────────────────────────────
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { MainLayout } from "../../components/layout";
 import StatCard from "../../components/common/StatCard";
 import {
-  ChevronDownIcon,
-  ArrowDownTrayIcon,
   Cog6ToothIcon,
   XMarkIcon,
   Bars3Icon,
-  PhotoIcon,
-  DocumentArrowDownIcon,
-  TableCellsIcon,
 } from "@heroicons/react/24/outline";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../hooks";
 import { ROLES } from "../../constants/roles";
+import { MultiSelect } from "../../components/ui/multi-select";
 import {
   getAnalyticsKpi,
   getAnalyticsGender,
@@ -36,8 +32,6 @@ import {
   saveReportPreferences,
 } from "../../services/report.service";
 import {
-  GREEN,
-  YEAR_OPTIONS,
   DEFAULT_KPI_ORDER,
   KPI_ORDER_KEY,
   LAYOUT_ROWS_KEY,
@@ -56,14 +50,41 @@ import {
   initKpiOrder,
   Skeleton,
 } from "./reports.helpers";
+import {
+  REPORT_DOMAIN_OPTIONS,
+  loadReportDomains,
+  saveReportDomains,
+  kpiVisibleForDomains,
+  sectionVisibleForDomains,
+  isDomainSelected,
+  hasAnyImpactDomain,
+  resolveReportControlsPlacement,
+} from "./reports.domains";
+import {
+  defaultReportPeriodState,
+  fyStartYearToImpactValue,
+} from "./reports.sharedPeriod";
 import ConfigDrawer from "./components/ConfigDrawer";
 import DraggableCard from "./components/DraggableCard";
 import DraggableRow from "./components/DraggableRow";
 import SectionRenderer from "./components/SectionCards";
+import CertificationReportsPanel from "./components/CertificationReportsPanel";
+import RefurbishmentReportsPanel from "./components/RefurbishmentReportsPanel";
+import ReportPeriodExportControls from "./components/ReportPeriodExportControls";
+
+const DOMAIN_SELECT_OPTIONS = REPORT_DOMAIN_OPTIONS.map((d) => ({
+  value: d.id,
+  label: d.label,
+}));
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const ReportsPage = () => {
   const { role } = useAuth();
   const canCustomise = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN;
+  const canExportExcel =
+    role === ROLES.SUPER_ADMIN ||
+    role === ROLES.ADMIN ||
+    role === ROLES.SEIF_READONLY_DOWNLOAD;
 
   const [config, setConfig] = useState(loadConfig);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -81,7 +102,12 @@ const ReportsPage = () => {
   const [kpiOverId, setKpiOverId] = useState(null);
   const [kpiOrder, setKpiOrder] = useState(initKpiOrder);
 
-  const [year, setYear] = useState("all");
+  const [year, setYear] = useState(() => {
+    const initial = defaultReportPeriodState();
+    return fyStartYearToImpactValue(initial.fyStartYear) || "all";
+  });
+  const [domains, setDomains] = useState(loadReportDomains);
+  const [reportPeriod, setReportPeriod] = useState(defaultReportPeriodState);
   const [kpi, setKpi] = useState(null);
   const [gender, setGender] = useState([]);
   const [states, setStates] = useState([]);
@@ -97,24 +123,11 @@ const ReportsPage = () => {
   const [centersPerformance, setCentersPerformance] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const saveTimer = useRef(null);
-  const exportRef = useRef(null);
   const dashboardRef = useRef(null);
   const captureRef = useRef(null);
-
-  // Close export dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (exportRef.current && !exportRef.current.contains(e.target)) {
-        setExportOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // Refs to always have latest values for the debounced DB save
   const configRef = useRef(config);
@@ -185,6 +198,22 @@ const ReportsPage = () => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   }, []);
 
+  const handleDomainsChange = useCallback((next) => {
+    if (!Array.isArray(next) || !next.length) return;
+    setDomains(next);
+    saveReportDomains(next);
+  }, []);
+
+  const handleReportPeriodChange = useCallback((next) => {
+    setReportPeriod(next);
+    if (next?.mode === "financial_year") {
+      const fy = fyStartYearToImpactValue(next.fyStartYear);
+      if (fy) setYear(fy);
+    } else {
+      setYear("all");
+    }
+  }, []);
+
   const handleReset = useCallback(() => {
     setConfig({ ...DEFAULT_CONFIG });
     setKpiOrder([...DEFAULT_KPI_ORDER]);
@@ -197,6 +226,21 @@ const ReportsPage = () => {
       /* ignore */
     }
   }, [persistLayout]);
+
+  const fyEnabled = hasAnyImpactDomain(domains);
+  const showCertification = isDomainSelected(domains, "certification");
+  const showRefurbishment = isDomainSelected(domains, "refurbishment");
+  const controlsPlacement = useMemo(
+    () => resolveReportControlsPlacement(domains),
+    [domains],
+  );
+
+  const isImpactSectionShown = useCallback(
+    (sectionId) =>
+      isSectionVisible(sectionId, config) &&
+      sectionVisibleForDomains(sectionId, domains),
+    [config, domains],
+  );
 
   // Row-level DnD handlers
   function handleDragStart(rowIdx) {
@@ -392,7 +436,7 @@ const ReportsPage = () => {
     { key: "kpi_alumni", title: "Alumni", value: kpi?.totals?.alumni },
   ];
   const visibleKpiCards = kpiOrder
-    .filter((key) => config[key])
+    .filter((key) => config[key] && kpiVisibleForDomains(key, domains))
     .map((key) => allKpiCards.find((c) => c.key === key))
     .filter(Boolean);
 
@@ -413,16 +457,23 @@ const ReportsPage = () => {
 
   // Which rows have at least one visible card
   const hasVisibleSection = layoutRows.some((row) =>
-    row.slots.some((slot) => isSectionVisible(slot.id, config)),
+    row.slots.some((slot) => isImpactSectionShown(slot.id)),
   );
-  const nothingVisible = visibleKpiCards.length === 0 && !hasVisibleSection;
+  const nothingVisible =
+    visibleKpiCards.length === 0 &&
+    !hasVisibleSection &&
+    !showCertification &&
+    !showRefurbishment;
+
+  const showImpactBlock =
+    fyEnabled && (visibleKpiCards.length > 0 || hasVisibleSection);
+  const showImpactHeader =
+    fyEnabled && (showImpactBlock || controlsPlacement.at === "impact");
 
   async function exportPng() {
-    setExportOpen(false);
     const target = captureRef.current;
     if (!target) return;
     setExporting(true);
-    // Wait for dropdown to fully unmount before capturing
     await new Promise((r) => setTimeout(r, 200));
     try {
       const yearLabel = year === "all" ? "cumulative" : year;
@@ -444,11 +495,9 @@ const ReportsPage = () => {
   }
 
   async function exportPdf() {
-    setExportOpen(false);
     const target = captureRef.current;
     if (!target) return;
     setExporting(true);
-    // Wait for dropdown to fully unmount before capturing
     await new Promise((r) => setTimeout(r, 200));
     try {
       const yearLabel = year === "all" ? "cumulative" : year;
@@ -476,7 +525,7 @@ const ReportsPage = () => {
   }
 
   function exportExcel() {
-    setExportOpen(false);
+    if (!canExportExcel) return;
     const yearLabel = year === "all" ? "cumulative" : year;
     const wb = XLSX.utils.book_new();
 
@@ -603,6 +652,19 @@ const ReportsPage = () => {
     XLSX.writeFile(wb, `SEIF_Analytics_Report_${yearLabel}.xlsx`);
   }
 
+  const periodExportControls = controlsPlacement.at ? (
+    <ReportPeriodExportControls
+      period={reportPeriod}
+      onPeriodChange={handleReportPeriodChange}
+      canExportExcel={canExportExcel}
+      exporting={exporting}
+      disabled={exporting}
+      onExportPng={exportPng}
+      onExportPdf={exportPdf}
+      onExportExcel={exportExcel}
+    />
+  ) : null;
+
   return (
     <MainLayout>
       <div
@@ -623,58 +685,18 @@ const ReportsPage = () => {
               {year !== "all" ? ` for ${year}` : ""}.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <select
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              >
-                {YEAR_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-            </div>
-            {/* ── Export dropdown ───────────────────────────────────── */}
-            <div className="relative" ref={exportRef}>
-              <button
-                onClick={() => setExportOpen((v) => !v)}
-                disabled={loading || exporting}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#009530] hover:bg-[#007a28] disabled:opacity-50 rounded-lg transition-colors"
-              >
-                <ArrowDownTrayIcon className="w-4 h-4" />
-                {exporting ? "Exporting…" : "Export"}
-                <ChevronDownIcon className="w-3 h-3 ml-0.5" />
-              </button>
-              {exportOpen && (
-                <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  <button
-                    onClick={exportPng}
-                    className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                  >
-                    <PhotoIcon className="w-4 h-4 text-gray-400" />
-                    Export as PNG
-                  </button>
-                  <button
-                    onClick={exportPdf}
-                    className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                  >
-                    <DocumentArrowDownIcon className="w-4 h-4 text-gray-400" />
-                    Export as PDF
-                  </button>
-                  <div className="my-1 border-t border-gray-100" />
-                  <button
-                    onClick={exportExcel}
-                    className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                  >
-                    <TableCellsIcon className="w-4 h-4 text-gray-400" />
-                    Export as Excel
-                  </button>
-                </div>
-              )}
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <div className="min-w-[220px] max-w-[320px]">
+              <MultiSelect
+                options={DOMAIN_SELECT_OPTIONS}
+                selected={domains}
+                onChange={handleDomainsChange}
+                placeholder="Select domains…"
+                searchPlaceholder="Search domains…"
+                emptyMessage="No domains found."
+                maxDisplay={2}
+                className="w-full"
+              />
             </div>
             {canCustomise && (
               <>
@@ -705,8 +727,8 @@ const ReportsPage = () => {
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-md flex items-start justify-between gap-3">
             <p className="text-sm text-yellow-700">
               <span className="font-medium">Notice: </span>
-              {error} — data may be incomplete. Retry by changing the year
-              filter.
+              {error} — data may be incomplete. Retry by changing the report
+              period.
             </p>
             <button
               onClick={() => setError(null)}
@@ -753,8 +775,22 @@ const ReportsPage = () => {
           </div>
         )}
 
-        {/* ── Capture target: everything below the toolbar ─────────────── */}
+        {/* ── Dashboard content ─────────────────────────────────────────── */}
         <div ref={captureRef} className="space-y-6">
+          {/* ── Impact header ────────────────────────────────────────────── */}
+          {showImpactHeader && (
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Impact</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Students, employment, courses, partners and centers
+                  {year !== "all" ? ` · ${year}` : " · All years"}
+                </p>
+              </div>
+              {controlsPlacement.at === "impact" ? periodExportControls : null}
+            </div>
+          )}
+
           {/* ── KPI Cards ─────────────────────────────────────────────────── */}
           {visibleKpiCards.length > 0 &&
             (loading ? (
@@ -798,7 +834,7 @@ const ReportsPage = () => {
             {layoutRows.map((row, rowIdx) => {
               // Filter to visible slots only
               const visibleSlots = row.slots.filter((s) =>
-                isSectionVisible(s.id, config),
+                isImpactSectionShown(s.id),
               );
               if (visibleSlots.length === 0) return null;
 
@@ -809,7 +845,7 @@ const ReportsPage = () => {
                       (r, i) =>
                         i !== rowIdx &&
                         r.slots.length === 1 &&
-                        isSectionVisible(r.slots[0].id, config),
+                        isImpactSectionShown(r.slots[0].id),
                     )
                     .map((r) => r.slots[0].id)
                 : [];
@@ -817,7 +853,7 @@ const ReportsPage = () => {
               // Effective row: if one slot of a 2-card row is hidden, show the other full-width
               const effectiveSlots =
                 row.slots.length === 2
-                  ? row.slots.filter((s) => isSectionVisible(s.id, config))
+                  ? row.slots.filter((s) => isImpactSectionShown(s.id))
                   : visibleSlots;
               const isSplit = effectiveSlots.length === 2;
 
@@ -846,7 +882,7 @@ const ReportsPage = () => {
                     className={isSplit ? "flex gap-6 items-stretch" : "block"}
                   >
                     {row.slots.map((slot, slotIdx) => {
-                      if (!isSectionVisible(slot.id, config)) return null;
+                      if (!isImpactSectionShown(slot.id)) return null;
                       return (
                         <div
                           key={slot.id}
@@ -888,6 +924,28 @@ const ReportsPage = () => {
             })}
           </div>
 
+          {showCertification && (
+            <CertificationReportsPanel
+              period={reportPeriod}
+              headerActions={
+                controlsPlacement.at === "certification"
+                  ? periodExportControls
+                  : null
+              }
+            />
+          )}
+
+          {showRefurbishment && (
+            <RefurbishmentReportsPanel
+              period={reportPeriod}
+              headerActions={
+                controlsPlacement.at === "refurbishment"
+                  ? periodExportControls
+                  : null
+              }
+            />
+          )}
+
           {/* ── Empty state ──────────────────────────────────────────────── */}
           {!loading && !error && nothingVisible && (
             <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -897,7 +955,13 @@ const ReportsPage = () => {
               </h3>
               {canCustomise && (
                 <p className="text-sm text-gray-400 mt-1">
-                  Click <strong>Customise</strong> to enable sections.
+                  Click <strong>Customise</strong> to enable sections, or select
+                  domains above.
+                </p>
+              )}
+              {!canCustomise && (
+                <p className="text-sm text-gray-400 mt-1">
+                  Select one or more domains above to view reports.
                 </p>
               )}
             </div>

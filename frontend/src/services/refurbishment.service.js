@@ -245,6 +245,22 @@ const refurbishmentService = {
   },
 
   /**
+   * Centers refurbished in a date range (Reports period modes)
+   * @param {{ fromDate: string, toDate: string }}
+   */
+  getPeriodStats: async ({ fromDate, toDate } = {}) => {
+    try {
+      const response = await api.get("/admin/refurbishment/stats/period", {
+        params: { fromDate, toDate },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching period stats:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Get all refurbishment packages for modal
    * @returns {Promise<Object>} - { success, data: Array of packages }
    */
@@ -323,11 +339,20 @@ const refurbishmentService = {
     try {
       const {
         year = new Date().getFullYear(),
+        fromDate,
+        toDate,
         limit = 50,
         offset = 0,
       } = params;
+      const queryParams = { limit, offset };
+      if (fromDate && toDate) {
+        queryParams.fromDate = fromDate;
+        queryParams.toDate = toDate;
+      } else if (year != null && year !== "") {
+        queryParams.year = year;
+      }
       const response = await api.get("/admin/refurbishment/past-requests", {
-        params: { year, limit, offset },
+        params: queryParams,
       });
       return response.data;
     } catch (error) {

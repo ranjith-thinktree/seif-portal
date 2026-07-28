@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useState,
   useRef,
   useEffect,
@@ -32,8 +32,13 @@ import {
   downloadEmploymentFile,
   checkApprovedStudents,
 } from "../../services/employment.service";
-import { uploadCertificationData } from "../../services/certification.service";
+import {
+  uploadCertificationData,
+  getCertificationUploadDetails,
+  resubmitCertificationData,
+} from "../../services/certification.service";
 import { uploadTotCSV, downloadTotTemplate } from "../../services/tot.service";
+import { isValidPhone, isValidRfcEmail } from "../../utils";
 import partnerService from "../../services/partner.service";
 import {
   getMyCenters,
@@ -146,6 +151,10 @@ const UploadPage = () => {
   const [certUploading, setCertUploading] = useState(false);
   const [certError, setCertError] = useState(null);
   const [certSuccess, setCertSuccess] = useState(null);
+  const [certResubmitId, setCertResubmitId] = useState("");
+  const [certResubmitLoading, setCertResubmitLoading] = useState(false);
+  const [certResubmitRejectionReason, setCertResubmitRejectionReason] =
+    useState("");
 
   // Collapsible note state (per tab)
   const [noteOpen, setNoteOpen] = useState(false);
@@ -167,6 +176,7 @@ const UploadPage = () => {
   const [totNoteOpen, setTotNoteOpen] = useState(false);
 
   const totFileInputRef = useRef(null);
+  const certResubmitLoadedRef = useRef("");
 
   const handleTabChange = useCallback(
     (tab) => {
@@ -186,9 +196,12 @@ const UploadPage = () => {
 
   useEffect(() => {
     const requestedTab = searchParams.get("tab");
+    const resubmitId = searchParams.get("certResubmit");
     let nextTab = VALID_UPLOAD_TABS.includes(requestedTab)
       ? requestedTab
-      : "upload";
+      : resubmitId
+        ? "certification"
+        : "upload";
 
     // Admins must not land on the history tab
     if (isAdmin && nextTab === "history") nextTab = "upload";
@@ -196,6 +209,8 @@ const UploadPage = () => {
     if (nextTab !== activeTab) {
       setActiveTab(nextTab);
     }
+
+    setCertResubmitId(resubmitId || "");
   }, [activeTab, isAdmin, searchParams]);
 
   /**
@@ -856,6 +871,79 @@ const UploadPage = () => {
       .finally(() => setCertCentersLoading(false));
   }, [activeTab, isAdmin, targetPartnerId]);
 
+  const toCertDateInput = (value) => {
+    if (!value) return "";
+    const str = String(value);
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+    const parsed = new Date(str);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return parsed.toISOString().slice(0, 10);
+  };
+
+  useEffect(() => {
+    if (!certResubmitId) {
+      certResubmitLoadedRef.current = "";
+      return;
+    }
+    if (activeTab !== "certification" || certCentersLoading) {
+      return;
+    }
+    if (certResubmitLoadedRef.current === certResubmitId) {
+      return;
+    }
+    let cancelled = false;
+    const loadRejectedRequest = async () => {
+      setCertResubmitLoading(true);
+      setCertError(null);
+      try {
+        const res = await getCertificationUploadDetails(certResubmitId);
+        const data = res?.data || res;
+        if (cancelled) return;
+        if (data.status !== "rejected") {
+          setCertError("Only rejected certification requests can be resubmitted.");
+          return;
+        }
+        certResubmitLoadedRef.current = certResubmitId;
+        setCertResubmitRejectionReason(
+          data.rejection_reason || data.remarks || "",
+        );
+        setCertCenterId(data.center_id || "");
+        setCertBatchId(data.batch_id || "");
+        setCertOtherBatchNumber(data.other_batch_number || "");
+        setCertBatchStartDate(toCertDateInput(data.batch_start_date));
+        setCertBatchEndDate(toCertDateInput(data.batch_end_date));
+        setCertAssessmentDate(toCertDateInput(data.assessment_date));
+        setCertSpokeName(data.spoke_name || "");
+        setCertSpokeEmail(data.spoke_email || "");
+        setCertSpokeMobile(data.spoke_mobile || "");
+        if (data.center_id) {
+          setCertBatchesLoading(true);
+          try {
+            const batchRes = await getBatchesByCenter(data.center_id);
+            if (!cancelled) setCertBatches(batchRes.data || batchRes || []);
+          } catch {
+            if (!cancelled) setCertBatches([]);
+          } finally {
+            if (!cancelled) setCertBatchesLoading(false);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCertError(
+            err.response?.data?.message ||
+              "Failed to load rejected request for resubmission.",
+          );
+        }
+      } finally {
+        if (!cancelled) setCertResubmitLoading(false);
+      }
+    };
+    loadRejectedRequest();
+    return () => {
+      cancelled = true;
+    };
+  }, [certResubmitId, activeTab, certCentersLoading]);
+
   const handleCertCenterChange = async (centerId) => {
     setCertCenterId(centerId);
     setCertBatchId("");
@@ -884,28 +972,121 @@ const UploadPage = () => {
       setCertError("Please select a batch number or enter an other batch number.");
       return;
     }
+
+    const parseLocalDate = (iso) => {
+      if (!iso) return null;
+      const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+      if (!y || !m || !d) return null;
+      return new Date(y, m - 1, d);
+    };
+    const addDays = (date, days) => {
+      const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      next.setDate(next.getDate() + days);
+      return next;
+    };
+    const today = (() => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    })();
+
+    const start = parseLocalDate(certBatchStartDate);
+    const end = parseLocalDate(certBatchEndDate);
+    const assessment = parseLocalDate(certAssessmentDate);
+
+    if (!start) {
+      setCertError("Batch Start Date is required.");
+      return;
+    }
+    if (!end) {
+      setCertError("Batch End Date is required.");
+      return;
+    }
+    if (!assessment) {
+      setCertError("Assessment Date is required.");
+      return;
+    }
+    if (start.getTime() > today.getTime()) {
+      setCertError("Batch Start Date cannot be in the future.");
+      return;
+    }
+    if (assessment.getTime() > addDays(end, 30).getTime()) {
+      setCertError(
+        "Assessment Date cannot be more than 30 days after Batch End Date.",
+      );
+      return;
+    }
+
+    const trimmedSpokeName = certSpokeName.trim();
+    const trimmedSpokeEmail = certSpokeEmail.trim();
+    const normalizedSpokeMobile = certSpokeMobile.replace(/[\s\-()]/g, "").trim();
+    if (!trimmedSpokeName) {
+      setCertError("Spoke Name is required.");
+      return;
+    }
+    if (!trimmedSpokeEmail) {
+      setCertError("Spoke Email is required.");
+      return;
+    }
+    if (!isValidRfcEmail(trimmedSpokeEmail)) {
+      setCertError("Please enter a valid Spoke Email address.");
+      return;
+    }
+    if (!normalizedSpokeMobile) {
+      setCertError("Spoke Mobile Number is required.");
+      return;
+    }
+    if (!isValidPhone(normalizedSpokeMobile)) {
+      setCertError(
+        "Spoke Mobile Number must be a valid 10-digit Indian mobile number.",
+      );
+      return;
+    }
+
     setCertUploading(true);
     setCertError(null);
     setCertSuccess(null);
     const selectedCenter = certCenters.find((c) => c.id === certCenterId);
+    const selectedBatch = certBatches.find((b) => b.id === certBatchId);
+    const centerLabel = selectedCenter?.center_name || "selected center";
+    const batchLabel =
+      (certBatchId
+        ? selectedBatch?.batch_number || selectedBatch?.name
+        : null) ||
+      trimmedOtherBatch ||
+      "selected batch";
+    const payload = {
+      centerId: certCenterId,
+      centerName: selectedCenter?.center_name || undefined,
+      batchId: certBatchId || undefined,
+      otherBatchNumber: trimmedOtherBatch || undefined,
+      batchStartDate: certBatchStartDate || undefined,
+      batchEndDate: certBatchEndDate || undefined,
+      assessmentDate: certAssessmentDate || undefined,
+      spokeName: trimmedSpokeName,
+      spokeEmail: trimmedSpokeEmail,
+      spokeMobile: normalizedSpokeMobile,
+    };
     try {
-      const result = await uploadCertificationData({
-        centerId: certCenterId,
-        centerName: selectedCenter?.center_name || undefined,
-        batchId: certBatchId || undefined,
-        otherBatchNumber: trimmedOtherBatch || undefined,
-        batchStartDate: certBatchStartDate || undefined,
-        batchEndDate: certBatchEndDate || undefined,
-        assessmentDate: certAssessmentDate || undefined,
-        spokeName: certSpokeName.trim() || undefined,
-        spokeEmail: certSpokeEmail.trim() || undefined,
-        spokeMobile: certSpokeMobile.trim() || undefined,
-        targetPartnerId: isAdmin ? targetPartnerId || null : null,
-      });
+      const result = certResubmitId
+        ? await resubmitCertificationData(certResubmitId, payload)
+        : await uploadCertificationData({
+            ...payload,
+            targetPartnerId: isAdmin ? targetPartnerId || null : null,
+          });
       if (result.success) {
         setCertSuccess(
-          "Certification data submitted successfully! ESSCI will process your request.",
+          certResubmitId
+            ? `Certification data for ${centerLabel} (Batch ${batchLabel}) resubmitted successfully. It is pending admin approval again.`
+            : `Certification data for ${centerLabel} (Batch ${batchLabel}) submitted successfully! It is pending admin approval.`,
         );
+        if (certResubmitId) {
+          certResubmitLoadedRef.current = "";
+          const nextParams = new URLSearchParams(searchParams);
+          nextParams.delete("certResubmit");
+          setSearchParams(nextParams, { replace: true });
+          setCertResubmitId("");
+          setCertResubmitRejectionReason("");
+        }
         setCertCenterId("");
         setCertBatchId("");
         setCertBatches([]);
@@ -1234,6 +1415,9 @@ const UploadPage = () => {
                 certSpokeMobile={certSpokeMobile}
                 setCertSpokeMobile={setCertSpokeMobile}
                 certUploading={certUploading}
+                certResubmitId={certResubmitId}
+                certResubmitLoading={certResubmitLoading}
+                certResubmitRejectionReason={certResubmitRejectionReason}
                 handleCertCenterChange={handleCertCenterChange}
                 handleCertUpload={handleCertUpload}
               />

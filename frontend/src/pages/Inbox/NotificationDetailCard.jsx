@@ -40,12 +40,11 @@ const NotificationDetailCard = ({
     }
   }
 
-  // Extract partner name from notification payload or message
+  // Extract partner / center / batch from notification payload or message
   const partnerName =
     payload?.partner_name || payload?.partnerName || "Partner";
-
-  // Extract data type from notification payload
-  // const dataType = payload?.data_type || payload?.recurrence_type || "N/A";
+  const centerName = payload?.center_name || payload?.centerName || "";
+  const batchNumber = payload?.batch_number || payload?.batchNumber || "";
 
   // Format submission date and time combined
   const submissionDateTime = new Date(notification.created_at).toLocaleString(
@@ -195,7 +194,12 @@ const NotificationDetailCard = ({
   const isCertificationNotification =
     notification.related_entity_type === "certification_upload" ||
     notification.related_entity_type === "certification_pdf" ||
-    notification.notification_type === "certification";
+    notification.notification_type === "certification" ||
+    notification.type === "certification_submitted" ||
+    notification.type === "certification_approved" ||
+    notification.type === "certification_rejected" ||
+    notification.type === "certificate_ready" ||
+    notification.type === "certificate_pdf_rejected";
   const certNavTarget = getCertificationNotificationNavigation(
     notification,
     user?.role,
@@ -258,16 +262,30 @@ const NotificationDetailCard = ({
               />
             </div>
 
-            {/* <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Data Type
-              </label>
-              <Input
-                value={dataType}
-                readOnly
-                className="bg-gray-50 cursor-not-allowed rounded-[16px]"
-              />
-            </div> */}
+            {isCertificationNotification && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Center Name
+                  </label>
+                  <Input
+                    value={centerName || "—"}
+                    readOnly
+                    className="bg-gray-50 cursor-not-allowed rounded-[16px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Batch Number
+                  </label>
+                  <Input
+                    value={batchNumber || "—"}
+                    readOnly
+                    className="bg-gray-50 cursor-not-allowed rounded-[16px]"
+                  />
+                </div>
+              </>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -305,6 +323,22 @@ const NotificationDetailCard = ({
                     {notification.message ||
                       "A certification request has an update."}
                   </p>
+                  {(partnerName || centerName || batchNumber) && (
+                    <div className="text-sm text-gray-600 space-y-1 pt-1 border-t border-gray-100">
+                      <p>
+                        <span className="font-medium text-gray-700">Partner:</span>{" "}
+                        {partnerName || "—"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-gray-700">Center:</span>{" "}
+                        {centerName || "—"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-gray-700">Batch:</span>{" "}
+                        {batchNumber || "—"}
+                      </p>
+                    </div>
+                  )}
                   {notification.remark && (
                     <p className="text-sm text-gray-500">
                       <span className="font-medium text-gray-700">Remark:</span>{" "}

@@ -49,6 +49,7 @@ import MyDataPage from "../pages/Partner/MyDataPage";
 import MyRequestsPage from "../pages/Partner/MyRequestsPage";
 import CertificatesPage from "../pages/Partner/CertificatesPage";
 import AdminCertificatesPage from "../pages/Admin/AdminCertificatesPage";
+import CertificationFilesPage from "../pages/Certification/CertificationFilesPage";
 import ESSCIDataPage from "../pages/ESSCI/ESSCIDataPage";
 import ESSCIBatchDetailPage from "../pages/ESSCI/ESSCIBatchDetailPage";
 import ESSCIRequestsPage from "../pages/ESSCI/ESSCIRequestsPage";
@@ -72,6 +73,7 @@ const PlaceholderPage = ({ title }) => (
 
 const ADMIN_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
 const ESSCI_ROLES = [ROLES.ESSCI];
+const CERTIFICATION_FILES_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.ESSCI];
 const DATA_MANAGEMENT_ROLES = [
   ROLES.SUPER_ADMIN,
   ROLES.ADMIN,
@@ -558,6 +560,15 @@ const AppRoutes = () => {
             element={
               <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                 <AdminCertificatesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={ROUTES.CERTIFICATION_FILES}
+            element={
+              <ProtectedRoute allowedRoles={CERTIFICATION_FILES_ROLES}>
+                <CertificationFilesPage />
               </ProtectedRoute>
             }
           />

@@ -341,6 +341,31 @@ class RefurbishmentController {
   }
 
   /**
+   * GET /api/v1/admin/refurbishment/stats/period
+   * Centers refurbished within fromDate..toDate (inclusive)
+   */
+  static async getPeriodStats(req, res, next) {
+    try {
+      const fromDate = req.query.fromDate ? String(req.query.fromDate).trim() : '';
+      const toDate = req.query.toDate ? String(req.query.toDate).trim() : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+        throw new ValidationError('fromDate and toDate are required (YYYY-MM-DD)');
+      }
+      if (fromDate > toDate) {
+        throw new ValidationError('fromDate must be on or before toDate');
+      }
+
+      const result = await RefurbishmentService.getRefurbishmentStatsByDateRange(
+        fromDate,
+        toDate
+      );
+      return ApiResponse.success(res, result, 'Period statistics retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/admin/refurbishment/packages
    * Get all available refurbishment packages
    */
@@ -433,9 +458,11 @@ class RefurbishmentController {
       const limit = parseInt(req.query.limit) || 50;
       const offset = parseInt(req.query.offset) || 0;
       const year = req.query.year ? parseInt(req.query.year) : null;
+      const fromDate = req.query.fromDate ? String(req.query.fromDate).trim() : null;
+      const toDate = req.query.toDate ? String(req.query.toDate).trim() : null;
 
-      if (limit < 1 || limit > 100) {
-        throw new ValidationError('Limit must be between 1 and 100');
+      if (limit < 1 || limit > 200) {
+        throw new ValidationError('Limit must be between 1 and 200');
       }
       if (offset < 0) {
         throw new ValidationError('Offset must be non-negative');
@@ -443,8 +470,25 @@ class RefurbishmentController {
       if (year && (year < 2000 || year > 2100)) {
         throw new ValidationError('Invalid year');
       }
+      if ((fromDate || toDate) && (!fromDate || !toDate)) {
+        throw new ValidationError('Both fromDate and toDate are required for date range filter');
+      }
+      if (fromDate && toDate) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+          throw new ValidationError('fromDate and toDate must be YYYY-MM-DD');
+        }
+        if (fromDate > toDate) {
+          throw new ValidationError('fromDate must be on or before toDate');
+        }
+      }
 
-      const result = await RefurbishmentService.getPastRefurbishmentRequests(limit, offset, year);
+      const result = await RefurbishmentService.getPastRefurbishmentRequests(
+        limit,
+        offset,
+        year,
+        fromDate,
+        toDate
+      );
 
       const response = {
         ...result,

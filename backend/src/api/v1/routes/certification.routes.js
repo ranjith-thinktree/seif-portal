@@ -3,11 +3,11 @@
 const express = require('express');
 const router = express.Router();
 const certController = require('../controllers/certification.controller');
+const certFileArchiveController = require('../controllers/certificationFileArchive.controller');
 const { authenticate } = require('../../../middleware/auth.middleware');
 const { checkRole } = require('../../../middleware/role.middleware');
 const {
   uploadESSCIFiles,
-  uploadESSCIStep1Files,
   handleUploadError,
 } = require('../../../middleware/upload.middleware');
 
@@ -23,6 +23,13 @@ router.post(
 );
 
 router.get('/uploads', authenticate, checkRole('PARTNER'), certController.getMyUploads);
+
+router.put(
+  '/uploads/:uploadId/resubmit',
+  authenticate,
+  checkRole('PARTNER'),
+  certController.resubmitCertificationData
+);
 
 router.get(
   '/uploads/:uploadId',
@@ -112,21 +119,61 @@ router.get(
 );
 
 router.post(
-  '/essci/step1',
-  authenticate,
-  checkRole('ESSCI'),
-  uploadESSCIStep1Files,
-  handleUploadError,
-  certController.essciSubmitStep1
-);
-
-router.post(
   '/essci/upload-pdf',
   authenticate,
   checkRole('ESSCI'),
   uploadESSCIFiles,
   handleUploadError,
   certController.essciUploadPDF
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN + ESSCI: certification file archive & reports
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FILE_ARCHIVE_ROLES = ['ADMIN', 'SUPER_ADMIN', 'ESSCI'];
+const FILE_DOWNLOAD_ROLES = ['ADMIN', 'SUPER_ADMIN', 'ESSCI', 'PARTNER'];
+
+router.get(
+  '/files/archive',
+  authenticate,
+  checkRole(FILE_ARCHIVE_ROLES),
+  certFileArchiveController.listArchivedFiles
+);
+
+router.get(
+  '/files/archive/:fileId/download',
+  authenticate,
+  checkRole(FILE_DOWNLOAD_ROLES),
+  certFileArchiveController.downloadArchivedFile
+);
+
+router.get(
+  '/files/archive/export/zip',
+  authenticate,
+  checkRole(FILE_ARCHIVE_ROLES),
+  certFileArchiveController.exportMonthlyZip
+);
+
+router.post(
+  '/files/archive/export/zip',
+  authenticate,
+  checkRole(FILE_ARCHIVE_ROLES),
+  certFileArchiveController.exportMonthlyZip
+);
+
+router.get(
+  '/files/archive/export/excel',
+  authenticate,
+  checkRole(FILE_ARCHIVE_ROLES),
+  certFileArchiveController.exportMergedExcel
+);
+
+router.post(
+  '/files/archive/export/excel',
+  authenticate,
+  checkRole(FILE_ARCHIVE_ROLES),
+  certFileArchiveController.exportMergedExcel
 );
 
 module.exports = router;

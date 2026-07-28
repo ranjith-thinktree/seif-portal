@@ -126,8 +126,15 @@ app.use(compression());
 // Serve uploaded files statically.
 // Refurbishment local uploads are stored at project-root/uploads (see partner/admin controllers).
 // Other modules may still use backend/uploads via upload.middleware.
+// Certification archives require auth — do not serve /uploads/certification publicly.
 const projectUploadsDir = path.join(__dirname, '../../uploads');
 const backendUploadsDir = path.join(__dirname, '../uploads');
+app.use('/uploads/certification', (req, res) => {
+  res.status(401).json({
+    success: false,
+    message: 'Authentication required. Download certification files via the API.',
+  });
+});
 app.use('/uploads', express.static(projectUploadsDir));
 app.use('/uploads', express.static(backendUploadsDir));
 

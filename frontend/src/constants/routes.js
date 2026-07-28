@@ -70,6 +70,7 @@ export const ROUTES = {
   // Partner Certification Routes
   PARTNER_CERTIFICATES: "/certificates",
   ADMIN_CERTIFICATES: "/admin/certificates",
+  CERTIFICATION_FILES: "/certification/files",
 
   // Common Routes
   NOTIFICATIONS: "/notifications",

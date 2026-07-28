@@ -101,6 +101,12 @@ export const SIDEBAR_MENU = [
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   },
   {
+    name: "Certification Files",
+    path: ROUTES.CERTIFICATION_FILES,
+    icon: FolderIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ESSCI],
+  },
+  {
     name: "Organization Management",
     path: ROUTES.PARTNER_ORGANIZATION_MANAGEMENT,
     icon: BuildingOfficeIcon,

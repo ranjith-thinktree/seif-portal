@@ -207,20 +207,7 @@ function assertDerived(row, expected, label) {
       { ...baseUpload, status: 'approved', reviewed_at: new Date() },
       null
     );
-    assertTimelineCurrent(tl, 'essci_step1_pending', 'Approved no step1 → essci_step1_pending');
-
-    tl = certService.buildCertificationStatusTimeline(
-      {
-        ...baseUpload,
-        status: 'approved',
-        reviewed_at: new Date(),
-        essci_step1_at: new Date(),
-        essci_response_link: 'https://example.com',
-        essci_response_id: 'id1',
-      },
-      null
-    );
-    assertTimelineCurrent(tl, 'essci_step2_pending', 'Step1 done no PDF → essci_step2_pending');
+    assertTimelineCurrent(tl, 'essci_step2_pending', 'Approved no PDF → essci_step2_pending');
 
     const pdfPending = {
       status: 'pending',
@@ -230,34 +217,19 @@ function assertDerived(row, expected, label) {
       trainees_passed: 8,
     };
     tl = certService.buildCertificationStatusTimeline(
-      {
-        ...baseUpload,
-        status: 'approved',
-        reviewed_at: new Date(),
-        essci_step1_at: new Date(),
-      },
+      { ...baseUpload, status: 'approved', reviewed_at: new Date() },
       pdfPending
     );
     assertTimelineCurrent(tl, 'pdf_under_review', 'PDF pending → pdf_under_review');
 
     tl = certService.buildCertificationStatusTimeline(
-      {
-        ...baseUpload,
-        status: 'approved',
-        reviewed_at: new Date(),
-        essci_step1_at: new Date(),
-      },
+      { ...baseUpload, status: 'approved', reviewed_at: new Date() },
       { ...pdfPending, status: 'approved', reviewed_at: new Date() }
     );
     assertTimelineCurrent(tl, 'pdf_approved', 'PDF approved → pdf_approved');
 
     tl = certService.buildCertificationStatusTimeline(
-      {
-        ...baseUpload,
-        status: 'approved',
-        reviewed_at: new Date(),
-        essci_step1_at: new Date(),
-      },
+      { ...baseUpload, status: 'approved', reviewed_at: new Date() },
       { ...pdfPending, status: 'rejected', reviewed_at: new Date(), rejection_reason: 'Bad zip' }
     );
     assertTimelineCurrent(tl, 'essci_reupload_pending', 'PDF rejected → essci_reupload_pending');
@@ -279,71 +251,48 @@ function assertDerived(row, expected, label) {
     });
     uploadId = id1;
     uploadIds.push(uploadId);
-    ok(`Created auto-approved upload ${uploadId.slice(0, 8)}...`);
+    ok(`Created pending upload ${uploadId.slice(0, 8)}...`);
 
     let detail = await certService.getUploadDetails(uploadId);
-    detail?.status === 'approved' ? ok('Detail status approved on submit') : bad('Detail status', detail?.status);
-    assertTimelineCurrent(detail?.status_timeline, 'essci_step1_pending', 'Detail timeline ready for ESSCI');
+    detail?.status === 'pending' ? ok('Detail status pending on submit') : bad('Detail status', detail?.status);
+    assertTimelineCurrent(detail?.status_timeline, 'admin_review_pending', 'Detail timeline awaiting admin');
 
-    // ── [3] ESSCI notification & list visibility (no admin step) ───────────
-    console.log('\n--- [3] ESSCI notification & list visibility ---');
+    await certService.approveCertificationUpload(uploadId, adminId, 'E2E approved');
+    detail = await certService.getUploadDetails(uploadId);
+    detail?.status === 'approved' ? ok('Detail status approved after admin') : bad('Detail status after admin', detail?.status);
+    assertTimelineCurrent(detail?.status_timeline, 'essci_step2_pending', 'Detail timeline ready for ESSCI certificates');
 
-    const [essciNotifs] = await db.query(
+    // ── [3] Admin notification on submit & ESSCI list after approval ───────
+    console.log('\n--- [3] Notifications & ESSCI list visibility ---');
+
+    const [adminNotifs] = await db.query(
       `SELECT id FROM notifications
-       WHERE recipient_role = 'ESSCI'
+       WHERE recipient_role = 'ADMIN'
          AND related_entity_type = 'certification_upload'
          AND related_entity_id = ?
        ORDER BY created_at DESC LIMIT 1`,
       [uploadId]
     );
-    essciNotifs.length > 0
-      ? ok('ESSCI notification created on partner submit')
-      : bad('ESSCI notification', 'not found');
+    adminNotifs.length > 0
+      ? ok('Admin notification created on partner submit')
+      : bad('Admin notification', 'not found');
 
     const essciData = await certService.getESSCIData({ page: 1, limit: 100 });
     const row = essciData.rows.find((r) => r.id === uploadId);
-    row ? ok('Upload appears in ESSCI data list') : bad('ESSCI data list', 'upload not found');
-    if (row) assertDerived(row, 'Ongoing', 'Derived status Ongoing after submit');
+    row ? ok('Upload appears in ESSCI data list after approval') : bad('ESSCI data list', 'upload not found');
+    if (row) assertDerived(row, 'Ongoing', 'Derived status Ongoing after approval');
 
     detail = await certService.getUploadDetails(uploadId);
     assertTimelineCurrent(
       detail?.status_timeline,
-      'essci_step1_pending',
-      'Detail timeline after submit'
+      'essci_step2_pending',
+      'Detail timeline after admin approval'
     );
     detail?.partner_name ? ok('Detail includes partner_name') : bad('Detail partner_name', 'missing');
     detail?.batch_number ? ok('Detail includes batch_number') : bad('Detail batch_number', 'missing');
 
-    // ── [4] ESSCI step 1 — initial response ───────────────────────────────
-    console.log('\n--- [4] ESSCI step 1 — initial response ---');
-    await certService.submitESSCIStep1Response({
-      uploadId,
-      responseLink: 'https://assessment.example.com/login',
-      responseId: 'E2E-ASSESS-01',
-      responsePassword: 'test-pass-123',
-      qrCodeUrl: '/uploads/test/e2e-qr.png',
-      qrCodeName: 'e2e-qr.png',
-      submittedBy: essciUserId || adminId,
-    });
-    ok('Step 1 submitted');
-
-    detail = await certService.getUploadDetails(uploadId);
-    assertTimelineCurrent(detail?.status_timeline, 'essci_step2_pending', 'Timeline after step 1');
-
-    const [partnerStep1Notifs] = await db.query(
-      `SELECT id FROM notifications
-       WHERE recipient_id = ?
-         AND type = 'certification_essci_step1'
-         AND related_entity_id = ?
-       ORDER BY created_at DESC LIMIT 1`,
-      [fixture.user_id, uploadId]
-    );
-    partnerStep1Notifs.length > 0
-      ? ok('Partner notified on step 1 submit')
-      : bad('Partner step1 notification', 'not found');
-
-    // ── [5] ESSCI step 2 — certificates → Done ───────────────────────────
-    console.log('\n--- [5] ESSCI step 2 — certificates → Done ---');
+    // ── [4] ESSCI certificates → Done ─────────────────────────────────────
+    console.log('\n--- [4] ESSCI certificates → Done ---');
     const pdfResult = await certService.uploadCertificatePDF({
       partnerId: fixture.partner_id,
       centerId: fixture.center_id,
@@ -362,6 +311,7 @@ function assertDerived(row, expected, label) {
         { url: '/uploads/test/e2e.zip', name: 'e2e.zip' },
         { url: '/uploads/test/e2e-list.pdf', name: 'e2e-list.pdf' },
       ]),
+      assessmentDate: '2026-03-15',
       uploadedBy: essciUserId || adminId,
     });
     pdfId = pdfResult.pdfId;
@@ -393,8 +343,8 @@ function assertDerived(row, expected, label) {
     });
     uploadIds.push(idOther);
     const otherDetail = await certService.getUploadDetails(idOther);
-    otherDetail?.status === 'approved'
-      ? ok('Other batch auto-approved on submit')
+    otherDetail?.status === 'pending'
+      ? ok('Other batch pending on submit')
       : bad('Other batch status', otherDetail?.status);
     otherDetail?.batch_number === `${TEST_TAG}-OTHER`
       ? ok('Other batch number in detail')
@@ -420,8 +370,8 @@ function assertDerived(row, expected, label) {
       if (detailRes.status === 200 && detailRes.body?.data?.status_timeline) {
         ok('GET /essci/data/:id includes status_timeline');
         const events = detailRes.body.data.status_timeline.events || [];
-        events.length >= 4
-          ? ok(`Timeline has ${events.length} events`)
+        events.length >= 3
+          ? ok(`Timeline has ${events.length} events (admin steps hidden for ESSCI)`)
           : bad('Timeline events', `only ${events.length}`);
       } else {
         bad('GET /essci/data/:id', `HTTP ${detailRes.status} or no timeline`);
@@ -451,6 +401,11 @@ function assertDerived(row, expected, label) {
           centerName: fixture.center_name,
           otherBatchNumber: `${TEST_TAG}-HTTP`,
           spokeName: 'HTTP Test',
+          spokeEmail: 'http-essci@test.local',
+          spokeMobile: '9876543213',
+          batchStartDate: '2026-01-10',
+          batchEndDate: '2026-01-25',
+          assessmentDate: '2026-02-01',
         },
         partnerToken
       );
@@ -462,8 +417,8 @@ function assertDerived(row, expected, label) {
           'SELECT status FROM certification_uploads WHERE id = ?',
           [httpId]
         );
-        httpRow?.status === 'approved'
-          ? ok('HTTP upload auto-approved')
+        httpRow?.status === 'pending'
+          ? ok('HTTP upload status pending (not auto-approved)')
           : bad('HTTP upload status', httpRow?.status);
       } else {
         bad('Partner HTTP upload', `HTTP ${httpSubmit.status} ${JSON.stringify(httpSubmit.body).slice(0, 80)}`);

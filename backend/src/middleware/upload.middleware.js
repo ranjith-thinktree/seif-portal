@@ -224,21 +224,21 @@ const essciFileFilter = (req, file, cb) => {
       );
     }
   } else if (file.fieldname === 'studentListDoc') {
-    const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
+    const allowed = ['.csv', '.xlsx', '.xls', '.xlsm'];
     if (!allowed.includes(ext)) {
       return cb(
-        new Error(`Student list must be PDF, image, Word, or spreadsheet. Got: ${ext}`),
+        new Error(`Student result sheet must be Excel or CSV (.xlsx, .xls, .csv). Got: ${ext}`),
         false
       );
     }
   } else if (file.fieldname === 'certificateFiles') {
     const allowed = [
       '.zip', '.tar', '.gz', '.rar', '.7z', '.bz2', '.tgz', '.tbz2',
-      '.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.csv', '.xlsx', '.xls',
+      '.pdf',
     ];
     if (!allowed.includes(ext)) {
       return cb(
-        new Error(`Certificate files must be archive, PDF, image, Word, or spreadsheet. Got: ${ext}`),
+        new Error(`Certificate files must be ZIP archive or PDF. Got: ${ext}`),
         false
       );
     }
@@ -252,30 +252,12 @@ const essciUpload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-/** Two-field upload for ESSCI step 2 legacy: zipFile + studentListDoc */
+/** Two-field upload for ESSCI legacy: zipFile + studentListDoc + certificateFiles */
 const uploadESSCIFiles = essciUpload.fields([
   { name: 'zipFile', maxCount: 1 },
   { name: 'studentListDoc', maxCount: 1 },
   { name: 'certificateFiles', maxCount: 10 },
 ]);
-
-const essciStep1FileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname).toLowerCase();
-  const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.pdf'];
-  if (!allowed.includes(ext)) {
-    return cb(new Error(`QR code must be PNG, JPG, WEBP, or PDF. Got: ${ext}`), false);
-  }
-  cb(null, true);
-};
-
-const essciStep1Upload = multer({
-  storage: makeDiskStorage('essci_uploads'),
-  fileFilter: essciStep1FileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
-
-/** ESSCI step 1: qrCode image/document */
-const uploadESSCIStep1Files = essciStep1Upload.fields([{ name: 'qrCode', maxCount: 1 }]);
 
 // ── Employment upload: Excel/CSV data file + optional PDF/ZIP attachments ────
 const employmentAttachmentFilter = (req, file, cb) => {
@@ -335,7 +317,6 @@ module.exports = {
   uploadCertificationFiles,
   uploadTotTrainerDocuments,
   uploadESSCIFiles,
-  uploadESSCIStep1Files,
   uploadEmploymentWithAttachments,
   uploadTemplateFile,
   handleUploadError,

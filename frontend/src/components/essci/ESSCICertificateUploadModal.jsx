@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 import {
 
@@ -11,6 +11,12 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { essciUploadCertificatePDF } from "../../services/certification.service";
+import RefurbishmentDatePicker from "../refurbishment/RefurbishmentDatePicker";
+import {
+  formatCertificationDate,
+  toCertificationDateInput,
+} from "../../utils/certificationUtils";
+import { parseEssciResultSummaryFile } from "../../utils/essciResultSummaryParser";
 
 
 
@@ -34,52 +40,78 @@ const ESSCICertificateUploadModal = ({ row, onClose, onSuccess }) => {
 
   const [certificateFiles, setCertificateFiles] = useState([]);
 
+  const [studentResultFile, setStudentResultFile] = useState(null);
+
+  const [assessmentDate, setAssessmentDate] = useState("");
+
+  const [parsingStudentSheet, setParsingStudentSheet] = useState(false);
+
   const [uploading, setUploading] = useState(false);
 
   const [error, setError] = useState(null);
 
   const certRef = useRef(null);
 
+  const studentSheetRef = useRef(null);
 
+  useEffect(() => {
+    setAssessmentDate(toCertificationDateInput(row?.assessment_date));
+  }, [row?.id, row?.assessment_date]);
 
   if (!row) return null;
 
+  const handleStudentResultFileChange = async (file) => {
+    setStudentResultFile(file);
+    if (!file) {
+      setRegistered("");
+      setAttended("");
+      setPassed("");
+      setFailed("");
+      return;
+    }
 
+    setRegistered("");
+    setAttended("");
+    setPassed("");
+    setFailed("");
+    setParsingStudentSheet(true);
+    setError(null);
+    try {
+      const totals = await parseEssciResultSummaryFile(file);
+      setRegistered(String(totals.registered));
+      setAttended(String(totals.attended));
+      setPassed(String(totals.passed));
+      setFailed(String(totals.failed));
+    } catch (err) {
+      setStudentResultFile(null);
+      setError(
+        err.message ||
+          "Could not read assessment numbers from the sheet. Please upload a valid result summary file with the required columns.",
+      );
+    } finally {
+      setParsingStudentSheet(false);
+    }
+  };
+
+  const assessmentNumbersReady =
+    registered !== "" &&
+    attended !== "" &&
+    passed !== "" &&
+    failed !== "";
+
+  const canSubmit =
+    Boolean(assessmentDate) &&
+    assessmentNumbersReady &&
+    certificateFiles.length > 0 &&
+    Boolean(studentResultFile) &&
+    !parsingStudentSheet &&
+    !uploading &&
+    row?.status === "approved";
 
   const handleSubmit = async () => {
-
-    if (certificateFiles.length === 0) {
-
-      setError("Upload at least one certificate document.");
-
+    if (!canSubmit) {
+      setError("Please complete all required fields before submitting.");
       return;
-
-    }
-
-    if (
-
-      registered === "" ||
-
-      attended === "" ||
-
-      passed === "" ||
-
-      failed === ""
-
-    ) {
-
-      setError("Please fill in registered, attended, passed, and failed counts.");
-
-      return;
-
-    }
-
-    if (!row.essci_step1_at) {
-
-      setError("Complete Step 1 (initial response) on the Requests page first.");
-
-      return;
-
     }
 
     setUploading(true);
@@ -107,6 +139,10 @@ const ESSCICertificateUploadModal = ({ row, onClose, onSuccess }) => {
         parseInt(failed, 10),
 
         certificateFiles,
+
+        studentResultFile,
+
+        assessmentDate,
 
       );
 
@@ -192,25 +228,61 @@ const ESSCICertificateUploadModal = ({ row, onClose, onSuccess }) => {
 
           <div>
 
-            <h3 className="text-sm font-medium text-gray-700 mb-3">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
+
+              Confirm Assessment Date *
+
+            </h3>
+
+            <p className="text-xs text-gray-500 mb-2">
+
+              Partner submitted {formatCertificationDate(row.assessment_date)} —
+
+              confirm or update before uploading.
+
+            </p>
+
+            <RefurbishmentDatePicker
+
+              value={assessmentDate}
+
+              onChange={setAssessmentDate}
+
+              placeholder="Select assessment date"
+
+            />
+
+          </div>
+
+
+
+          <div>
+
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
 
               Assessment Numbers *
 
             </h3>
 
+            <p className="text-xs text-gray-500 mb-2">
+
+              Loaded automatically from the uploaded result sheet.
+
+            </p>
+
             <div className="grid grid-cols-2 gap-3">
 
               {[
 
-                { label: "Registered", value: registered, setter: setRegistered },
+                { label: "Registered", value: registered },
 
-                { label: "Attended", value: attended, setter: setAttended },
+                { label: "Attended", value: attended },
 
-                { label: "Passed", value: passed, setter: setPassed },
+                { label: "Passed", value: passed },
 
-                { label: "Failed", value: failed, setter: setFailed },
+                { label: "Failed", value: failed },
 
-              ].map(({ label, value, setter }) => (
+              ].map(({ label, value }) => (
 
                 <div key={label}>
 
@@ -222,17 +294,15 @@ const ESSCICertificateUploadModal = ({ row, onClose, onSuccess }) => {
 
                   <input
 
-                    type="number"
+                    type="text"
 
-                    min="0"
+                    readOnly
 
                     value={value}
 
-                    onChange={(e) => setter(e.target.value)}
+                    placeholder="—"
 
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-
-                    placeholder="0"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 cursor-default"
 
                   />
 
@@ -246,69 +316,133 @@ const ESSCICertificateUploadModal = ({ row, onClose, onSuccess }) => {
 
 
 
-          <div>
+          <div className="grid grid-cols-2 gap-4">
 
-            <h3 className="text-sm font-medium text-gray-700 mb-2">
+            <div>
 
-              Certificate Documents *
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
 
-            </h3>
+                Certificates (ZIP / PDF) *
 
-            <div
+              </h3>
 
-              className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
+              <div
 
-              onClick={() => certRef.current?.click()}
+                className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
 
-            >
+                onClick={() => certRef.current?.click()}
 
-              <input
+              >
 
-                ref={certRef}
+                <input
 
-                type="file"
+                  ref={certRef}
 
-                multiple
+                  type="file"
 
-                accept=".zip,.tar,.gz,.rar,.7z,.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx,.xls"
+                  multiple
 
-                className="hidden"
+                  accept=".zip,.tar,.gz,.rar,.7z,.pdf"
 
-                onChange={(e) =>
+                  className="hidden"
 
-                  setCertificateFiles(Array.from(e.target.files || []))
+                  onChange={(e) =>
 
-                }
+                    setCertificateFiles(Array.from(e.target.files || []))
 
-              />
+                  }
 
-              <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+                />
 
-              {certificateFiles.length > 0 ? (
+                <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
 
-                <ul className="text-sm text-gray-700 space-y-1">
+                {certificateFiles.length > 0 ? (
 
-                  {certificateFiles.map((f) => (
+                  <ul className="text-sm text-gray-700 space-y-1">
 
-                    <li key={f.name} className="truncate">
+                    {certificateFiles.map((f) => (
 
-                      {f.name}
+                      <li key={f.name} className="truncate">
 
-                    </li>
+                        {f.name}
 
-                  ))}
+                      </li>
 
-                </ul>
+                    ))}
 
-              ) : (
+                  </ul>
 
-                <p className="text-sm text-gray-500">
+                ) : (
 
-                  ZIP, PDF, or other supported formats
+                  <p className="text-sm text-gray-500">
 
-                </p>
+                    ZIP archive or PDF — one or more files
 
-              )}
+                  </p>
+
+                )}
+
+              </div>
+
+            </div>
+
+
+
+            <div>
+
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+
+                Student Result Sheet (Excel) *
+
+              </h3>
+
+              <div
+
+                className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
+
+                onClick={() => studentSheetRef.current?.click()}
+
+              >
+
+                <input
+
+                  ref={studentSheetRef}
+
+                  type="file"
+
+                  accept=".xlsx,.xls,.xlsm,.csv"
+
+                  className="hidden"
+
+                  onChange={(e) =>
+
+                    handleStudentResultFileChange(e.target.files?.[0] || null)
+
+                  }
+
+                />
+
+                <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+
+                {studentResultFile ? (
+
+                  <p className="text-sm text-gray-700 truncate">{studentResultFile.name}</p>
+
+                ) : parsingStudentSheet ? (
+
+                  <p className="text-sm text-gray-500">Reading assessment numbers…</p>
+
+                ) : (
+
+                  <p className="text-sm text-gray-500">
+
+                    Result sheet (.xlsx, .xls, .xlsm, .csv)
+
+                  </p>
+
+                )}
+
+              </div>
 
             </div>
 
@@ -342,7 +476,7 @@ const ESSCICertificateUploadModal = ({ row, onClose, onSuccess }) => {
 
             onClick={handleSubmit}
 
-            disabled={uploading}
+            disabled={!canSubmit}
 
             className="px-5 py-2 text-sm bg-[#009530] text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60 flex items-center gap-2"
 

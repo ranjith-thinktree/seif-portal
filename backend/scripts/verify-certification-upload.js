@@ -183,12 +183,12 @@ async function cleanupUploadIds(ids) {
       centerName: fixture.center_name,
       batchId: null,
       otherBatchNumber: otherBatch,
-      batchStartDate: null,
-      batchEndDate: null,
-      assessmentDate: null,
-      spokeName: null,
-      spokeEmail: null,
-      spokeMobile: null,
+      batchStartDate: '2026-02-01',
+      batchEndDate: '2026-02-28',
+      assessmentDate: '2026-03-10',
+      spokeName: `${TEST_TAG} Spoke B`,
+      spokeEmail: 'verify-spoke-b@test.local',
+      spokeMobile: '9876543211',
       uploadedBy: fixture.user_id,
     });
     uploadIds.push(idB);
@@ -217,6 +217,21 @@ async function cleanupUploadIds(ids) {
     } catch (e) {
       if (String(e.message).includes('batchId or otherBatchNumber')) ok('Rejects missing batch');
       else bad('Validation', e.message);
+    }
+
+    try {
+      await certService.createCertificationUpload({
+        partnerId: fixture.partner_id,
+        centerId: fixture.center_id,
+        centerName: fixture.center_name,
+        batchId: null,
+        otherBatchNumber: `${TEST_TAG}-NO-SPOKE`,
+        uploadedBy: fixture.user_id,
+      });
+      bad('Validation', 'should reject missing spoke details');
+    } catch (e) {
+      if (String(e.message).toLowerCase().includes('spoke')) ok('Rejects missing spoke details');
+      else bad('Validation spoke', e.message);
     }
 
     // ── Scenario D: HTTP API (if backend running) ───────────────────────────
@@ -249,6 +264,11 @@ async function cleanupUploadIds(ids) {
             centerName: fixture.center_name,
             otherBatchNumber: `${TEST_TAG}-HTTP-01`,
             spokeName: `${TEST_TAG} HTTP`,
+            spokeEmail: 'http-spoke@test.local',
+            spokeMobile: '9876543212',
+            batchStartDate: '2026-01-10',
+            batchEndDate: '2026-01-25',
+            assessmentDate: '2026-02-01',
           },
           token
         );

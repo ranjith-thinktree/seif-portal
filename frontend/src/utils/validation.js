@@ -9,6 +9,17 @@ export const isValidEmail = (email) => {
 };
 
 /**
+ * Practical RFC 5322-style email check (used for spoke contact, etc.)
+ * @param {string} email
+ * @returns {boolean}
+ */
+export const isValidRfcEmail = (email) => {
+  const emailRegex =
+    /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  return emailRegex.test(String(email || "").trim());
+};
+
+/**
  * Validate password strength
  * Password must be at least 8 characters and contain:
  * - At least one uppercase letter
@@ -58,8 +69,9 @@ export const validatePassword = (password) => {
  * @returns {boolean} True if valid phone number
  */
 export const isValidPhone = (phone) => {
+  const digits = String(phone || "").replace(/[\s\-()]/g, "");
   const phoneRegex = /^[6-9]\d{9}$/;
-  return phoneRegex.test(phone);
+  return phoneRegex.test(digits);
 };
 
 /**

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import axios from "axios";
 import apiClient from "../../api/client";
@@ -31,6 +32,11 @@ const SECTIONS = [
 ];
 const TOP_TABS = ["tutorials", "support"];
 
+function isEssciSpokeContact(contact) {
+  const haystack = `${contact?.name || ""} ${contact?.title || ""}`.toLowerCase();
+  return /essci/.test(haystack) || /spoke/.test(haystack);
+}
+
 /**
  * HelpPage — User Manual with tutorial videos + Support contacts
  * - All roles: view videos organised by section, view support contacts
@@ -39,8 +45,16 @@ const TOP_TABS = ["tutorials", "support"];
 const HelpPage = () => {
   const user = useSelector((s) => s.auth?.user);
   const isAdmin = ADMIN_ROLES.includes(user?.role);
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTopTab, setActiveTopTab] = useState("tutorials");
+  const tabFromUrl = searchParams.get("tab");
+  const focusFromUrl = searchParams.get("focus");
+  const initialTab =
+    tabFromUrl === "support" || tabFromUrl === "contacts"
+      ? "support"
+      : "tutorials";
+  const [activeTopTab, setActiveTopTab] = useState(initialTab);
+  const highlightEssciSpoke = focusFromUrl === "essci-spoke";
 
   // ── Tutorials state ──────────────────────────────────────────────
   const [tutorials, setTutorials] = useState([]);
@@ -87,6 +101,38 @@ const HelpPage = () => {
   useEffect(() => {
     if (activeTopTab === "support") fetchContacts();
   }, [activeTopTab, fetchContacts]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "support" || tab === "contacts") {
+      setActiveTopTab("support");
+    } else if (tab === "tutorials") {
+      setActiveTopTab("tutorials");
+    }
+  }, [searchParams]);
+
+  const handleTopTabChange = (tab) => {
+    setActiveTopTab(tab);
+    const next = new URLSearchParams(searchParams);
+    if (tab === "support") {
+      next.set("tab", "support");
+    } else {
+      next.set("tab", "tutorials");
+      next.delete("focus");
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const displayedContacts = useMemo(() => {
+    if (!highlightEssciSpoke) return contacts;
+    const matched = [];
+    const rest = [];
+    contacts.forEach((c) => {
+      if (isEssciSpokeContact(c)) matched.push(c);
+      else rest.push(c);
+    });
+    return [...matched, ...rest];
+  }, [contacts, highlightEssciSpoke]);
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this tutorial video?")) return;
@@ -166,7 +212,7 @@ const HelpPage = () => {
           {TOP_TABS.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTopTab(tab)}
+              onClick={() => handleTopTabChange(tab)}
               className={`px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors capitalize ${
                 activeTopTab === tab
                   ? "border-[#009530] text-[#009530]"
@@ -248,6 +294,14 @@ const HelpPage = () => {
         {/* ── Support panel ─────────────────────────────────────────── */}
         {activeTopTab === "support" && (
           <>
+            {highlightEssciSpoke && (
+              <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+                Showing Support &amp; Contacts
+                {displayedContacts.some(isEssciSpokeContact)
+                  ? " — ESSCI / Spoke contacts are highlighted first."
+                  : " — add an ESSCI Spoke contact (name or title containing ESSCI or Spoke) to help partners find it."}
+              </div>
+            )}
             {contactsLoading ? (
               <div className="flex items-center justify-center py-24">
                 <ArrowPathIcon className="w-8 h-8 text-[#009530] animate-spin" />
@@ -272,11 +326,14 @@ const HelpPage = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {contacts.map((contact) => (
+                {displayedContacts.map((contact) => (
                   <SupportContactCard
                     key={contact.id}
                     contact={contact}
                     isAdmin={isAdmin}
+                    highlighted={
+                      highlightEssciSpoke && isEssciSpokeContact(contact)
+                    }
                     onEdit={() => {
                       setEditContact(contact);
                       setShowContactModal(true);
@@ -657,7 +714,13 @@ const TutorialFormModal = ({ tutorial, onClose, onSaved }) => {
 /**
  * Support contact card — shown to all users
  */
-const SupportContactCard = ({ contact, isAdmin, onEdit, onDelete }) => {
+const SupportContactCard = ({
+  contact,
+  isAdmin,
+  onEdit,
+  onDelete,
+  highlighted = false,
+}) => {
   const initials =
     contact.avatar_initials ||
     contact.name
@@ -668,7 +731,13 @@ const SupportContactCard = ({ contact, isAdmin, onEdit, onDelete }) => {
       .toUpperCase();
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col gap-3">
+    <div
+      className={`bg-white rounded-xl border shadow-sm p-5 flex flex-col gap-3 ${
+        highlighted
+          ? "border-[#009530] ring-2 ring-[#009530]/20"
+          : "border-gray-200"
+      }`}
+    >
       {/* Top row: avatar + name + actions */}
       <div className="flex items-start gap-3">
         <div className="w-11 h-11 rounded-full bg-green-100 text-[#009530] flex items-center justify-center font-bold text-sm flex-shrink-0">

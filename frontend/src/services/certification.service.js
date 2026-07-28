@@ -50,6 +50,37 @@ export const uploadCertificationData = async ({
   return response.data;
 };
 
+/** Partner resubmits a rejected certification request (same upload id). */
+export const resubmitCertificationData = async (
+  uploadId,
+  {
+    centerId,
+    centerName,
+    batchId,
+    otherBatchNumber,
+    batchStartDate,
+    batchEndDate,
+    assessmentDate,
+    spokeName,
+    spokeEmail,
+    spokeMobile,
+  },
+) => {
+  const response = await apiClient.put(`${BASE}/uploads/${uploadId}/resubmit`, {
+    centerId,
+    centerName,
+    batchId: batchId || undefined,
+    otherBatchNumber: otherBatchNumber || undefined,
+    batchStartDate: batchStartDate || undefined,
+    batchEndDate: batchEndDate || undefined,
+    assessmentDate: assessmentDate || undefined,
+    spokeName: spokeName || undefined,
+    spokeEmail: spokeEmail || undefined,
+    spokeMobile: spokeMobile || undefined,
+  });
+  return response.data;
+};
+
 /** Partner upload history */
 export const getMyCertificationUploads = async (page = 1, limit = 10) => {
   const response = await apiClient.get(`${BASE}/uploads`, {
@@ -194,29 +225,6 @@ export const essciGetBatches = async (centerId, partnerId) => {
   return response.data;
 };
 
-export const essciSubmitStep1 = async ({
-  uploadId,
-  responseLink,
-  responseId,
-  responsePassword,
-  qrCodeFile,
-}) => {
-  const formData = new FormData();
-  formData.append("uploadId", uploadId);
-  formData.append("responseLink", responseLink);
-  formData.append("responseId", responseId);
-  formData.append("responsePassword", responsePassword);
-  if (qrCodeFile) formData.append("qrCode", qrCodeFile);
-
-  const response = await apiClient.post(`${BASE}/essci/step1`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return response.data;
-};
-
-/**
- * ESSCI step 2: assessment numbers + certificate documents.
- */
 export const essciUploadCertificatePDF = async (
   partnerId,
   centerId,
@@ -227,6 +235,8 @@ export const essciUploadCertificatePDF = async (
   traineesPassed,
   traineesFailed,
   certificateFiles,
+  studentListFile,
+  assessmentDate,
   traineesAbsent = 0,
 ) => {
   const formData = new FormData();
@@ -238,16 +248,57 @@ export const essciUploadCertificatePDF = async (
   formData.append("traineesAttended", traineesAttended);
   formData.append("traineesPassed", traineesPassed);
   formData.append("traineesFailed", traineesFailed);
+  formData.append("assessmentDate", assessmentDate);
   formData.append("traineesAbsent", traineesAbsent);
   (certificateFiles || []).forEach((file) => {
     formData.append("certificateFiles", file);
   });
+  if (studentListFile) {
+    formData.append("studentListDoc", studentListFile);
+  }
 
   const response = await apiClient.post(`${BASE}/essci/upload-pdf`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return response.data;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN + ESSCI: File archive & reports
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const listCertificationFileArchive = async (params = {}) => {
+  const response = await apiClient.get(`${BASE}/files/archive`, { params });
+  return response.data;
+};
+
+export const downloadCertificationArchivedFile = async (fileId) => {
+  const response = await apiClient.get(`${BASE}/files/archive/${fileId}/download`, {
+    responseType: "blob",
+  });
+  return response.data;
+};
+
+export const exportCertificationArchiveZip = async (payload = {}) => {
+  const response = await apiClient.post(`${BASE}/files/archive/export/zip`, payload, {
+    responseType: "blob",
+  });
+  return response.data;
+};
+
+export const exportCertificationArchiveExcel = async (payload = {}) => {
+  const response = await apiClient.post(`${BASE}/files/archive/export/excel`, payload, {
+    responseType: "blob",
+  });
+  return response.data;
+};
+
+/** @deprecated Use exportCertificationArchiveZip */
+export const exportCertificationMonthlyZip = exportCertificationArchiveZip;
+
+/** @deprecated Use exportCertificationArchiveExcel */
+export const exportCertificationMergedExcel = exportCertificationArchiveExcel;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS (Admin)
 // ─────────────────────────────────────────────────────────────────────────────

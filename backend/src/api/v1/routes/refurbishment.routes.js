@@ -77,6 +77,12 @@ router.get('/dashboard', RefurbishmentController.getDashboardSummary);
 router.get('/stats/year/:year', RefurbishmentController.getYearStats);
 
 /**
+ * GET /api/v1/admin/refurbishment/stats/period
+ * Centers refurbished within fromDate..toDate (YYYY-MM-DD)
+ */
+router.get('/stats/period', RefurbishmentController.getPeriodStats);
+
+/**
  * GET /api/v1/admin/refurbishment/packages
  * Get all available refurbishment packages
  * Query params: courseId (optional UUID filter)

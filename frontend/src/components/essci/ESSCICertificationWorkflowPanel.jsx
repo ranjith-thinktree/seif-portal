@@ -4,24 +4,27 @@ import {
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
   CheckCircleIcon,
-  EyeIcon,
-  EyeSlashIcon,
 } from "@heroicons/react/24/outline";
 import { FileText } from "lucide-react";
 import { toast } from "react-toastify";
 import {
-  essciSubmitStep1,
+  downloadCertificationArchivedFile,
   essciUploadCertificatePDF,
 } from "../../services/certification.service";
-import { formatCertificationDate } from "../../utils/certificationUtils";
+import {
+  formatCertificationDate,
+  toCertificationDateInput,
+} from "../../utils/certificationUtils";
+import { parseEssciResultSummaryFile } from "../../utils/essciResultSummaryParser";
+import { downloadFile } from "../../services/data.service";
+import RefurbishmentDatePicker from "../refurbishment/RefurbishmentDatePicker";
 import {
   isPartnerImageFile,
   resolvePartnerFileUrl,
 } from "../../utils/refurbishmentUtils";
 
-const STEPS = [
-  { key: "submitted", short: "Submitted" },
-  { key: "initial_response", short: "Initial Response" },
+const WORKFLOW_STEPS = [
+  { key: "received", short: "Request Received" },
   { key: "certificates", short: "Certificates" },
 ];
 
@@ -34,70 +37,6 @@ function DetailField({ label, value }) {
   );
 }
 
-function ReadOnlyPasswordValue({ value }) {
-  const [visible, setVisible] = useState(false);
-
-  if (!value) {
-    return <p className="text-gray-800">—</p>;
-  }
-
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      <span className="text-gray-800 font-mono text-sm truncate">
-        {visible ? value : "•".repeat(Math.min(value.length, 12))}
-      </span>
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        className="shrink-0 p-1 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-        title={visible ? "Hide password" : "Show password"}
-        aria-label={visible ? "Hide password" : "Show password"}
-      >
-        {visible ? (
-          <EyeSlashIcon className="h-4 w-4" />
-        ) : (
-          <EyeIcon className="h-4 w-4" />
-        )}
-      </button>
-    </div>
-  );
-}
-
-function PasswordInputField({ label, value, onChange, required = false }) {
-  const [showPassword, setShowPassword] = useState(false);
-
-  return (
-    <div>
-      <label className="block text-xs text-gray-500 mb-1">
-        {label}
-        {required ? " *" : ""}
-      </label>
-      <div className="relative">
-        <input
-          type={showPassword ? "text" : "password"}
-          value={value}
-          onChange={onChange}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-        />
-        <button
-          type="button"
-          onClick={() => setShowPassword((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-          title={showPassword ? "Hide password" : "Show password"}
-          aria-label={showPassword ? "Hide password" : "Show password"}
-          tabIndex={-1}
-        >
-          {showPassword ? (
-            <EyeSlashIcon className="h-4 w-4" />
-          ) : (
-            <EyeIcon className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 const renderFlowConnector = (completed) => (
   <div className="flex-1 mx-2 min-w-[16px]">
     <div
@@ -106,11 +45,40 @@ const renderFlowConnector = (completed) => (
   </div>
 );
 
-function DownloadFileButton({ url, name, label = "Download" }) {
+function DownloadFileButton({ url, archiveFileId, name, label = "Download" }) {
   const resolvedUrl = resolvePartnerFileUrl(url);
   const fileName = name || "download";
+  const [downloading, setDownloading] = useState(false);
 
-  if (!resolvedUrl) return null;
+  if (!archiveFileId && !resolvedUrl) return null;
+
+  const handleClick = async (event) => {
+    if (!archiveFileId) return;
+    event.preventDefault();
+    setDownloading(true);
+    try {
+      const blob = await downloadCertificationArchivedFile(archiveFileId);
+      downloadFile(blob, fileName);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  if (archiveFileId) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={downloading}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full hover:bg-green-100 transition-colors disabled:opacity-60"
+      >
+        <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+        {downloading ? "Downloading…" : label}
+      </button>
+    );
+  }
 
   return (
     <a
@@ -128,10 +96,11 @@ function DownloadFileButton({ url, name, label = "Download" }) {
 
 function CertificationFileCard({ file, index = 0 }) {
   const fileName = file?.name || `Document ${index + 1}`;
-  const resolvedUrl = resolvePartnerFileUrl(file?.url);
-  const isImage = isPartnerImageFile({ url: file?.url, name: fileName });
+  const archiveFileId = file?.archiveFileId || null;
+  const resolvedUrl = archiveFileId ? null : resolvePartnerFileUrl(file?.url);
+  const isImage = !archiveFileId && isPartnerImageFile({ url: file?.url, name: fileName });
 
-  if (!resolvedUrl) return null;
+  if (!archiveFileId && !resolvedUrl) return null;
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 min-w-[220px]">
@@ -149,22 +118,28 @@ function CertificationFileCard({ file, index = 0 }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-gray-800 truncate">{fileName}</p>
         <div className="flex items-center gap-2 mt-1">
-          <a
-            href={resolvedUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-gray-600 hover:text-gray-900"
-          >
-            View
-          </a>
-          <DownloadFileButton url={file.url} name={fileName} />
+          {resolvedUrl && (
+            <a
+              href={resolvedUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-gray-600 hover:text-gray-900"
+            >
+              View
+            </a>
+          )}
+          <DownloadFileButton
+            url={file.url}
+            archiveFileId={archiveFileId}
+            name={fileName}
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function WorkflowStepper({ activeViewStep, isStepDone, onStepClick }) {
+function WorkflowStepper({ steps, activeViewStep, isStepDone, onStepClick }) {
   const stepCircle = (num, { active, done }) => (
     <div
       className={`flex items-center justify-center w-8 h-8 rounded-full border-2 font-semibold text-sm shrink-0 transition-colors ${
@@ -182,7 +157,7 @@ function WorkflowStepper({ activeViewStep, isStepDone, onStepClick }) {
   return (
     <div className="px-1 pt-1 pb-3 border-b border-gray-100">
       <div className="flex items-center w-full">
-        {STEPS.map((step, idx) => {
+        {steps.map((step, idx) => {
           const done = isStepDone(idx);
           const active = activeViewStep === idx;
           return (
@@ -206,48 +181,10 @@ function WorkflowStepper({ activeViewStep, isStepDone, onStepClick }) {
                   {step.short}
                 </span>
               </button>
-              {idx < STEPS.length - 1 && renderFlowConnector(done)}
+              {idx < steps.length - 1 && renderFlowConnector(done)}
             </React.Fragment>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function FileDropZone({ label, hint, accept, file, onSelect, onClear, inputRef }) {
-  return (
-    <div>
-      <h4 className="text-sm font-medium text-gray-700 mb-2">{label}</h4>
-      <div
-        className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
-        onClick={() => inputRef.current?.click()}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept={accept}
-          className="hidden"
-          onChange={(e) => onSelect(e.target.files[0] || null)}
-        />
-        <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
-        {file ? (
-          <div>
-            <p className="text-sm font-medium text-gray-700 truncate">{file.name}</p>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClear();
-              }}
-              className="text-xs text-red-500 hover:text-red-700 mt-0.5"
-            >
-              Remove
-            </button>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500">{hint}</p>
-        )}
       </div>
     </div>
   );
@@ -274,94 +211,152 @@ function SectionHeading({ title, badge }) {
   );
 }
 
+function FileUploadDropzone({
+  inputRef,
+  files,
+  onFilesChange,
+  accept,
+  emptyLabel,
+  multiple = false,
+}) {
+  const list = multiple ? files : files ? [files].filter(Boolean) : [];
+
+  return (
+    <div
+      className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
+      onClick={() => inputRef.current?.click()}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        multiple={multiple}
+        accept={accept}
+        className="hidden"
+        onChange={(e) => {
+          const selected = Array.from(e.target.files || []);
+          onFilesChange(multiple ? selected : selected[0] || null);
+          e.target.value = "";
+        }}
+      />
+      <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+      {list.length > 0 ? (
+        <ul className="text-sm text-gray-700 space-y-1">
+          {list.map((f) => (
+            <li key={f.name} className="truncate">
+              {f.name}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-gray-500">{emptyLabel}</p>
+      )}
+    </div>
+  );
+}
+
 export default function ESSCICertificationWorkflowPanel({
   details,
   onSuccess,
   readOnly = false,
+  initialStep,
 }) {
-  const step1Done = Boolean(details?.essci_step1_at);
-  const step2Done = details?.pdf?.status === "approved";
-  const canEditStep1 =
-    !readOnly && !step1Done && details?.status === "approved";
-  const canEditStep2 =
+  const certificatesDone = details?.pdf?.status === "approved";
+  const hasCertificatesUploaded = Boolean(details?.pdf?.id || details?.pdf);
+  const canEditCertificates =
     !readOnly &&
-    step1Done &&
     details?.status === "approved" &&
     (!details?.pdf || details?.pdf?.status === "rejected");
 
-  const currentActionable = !step1Done ? 1 : !step2Done ? 2 : 2;
+  /** Step 1 = Request Received (0); Step 2 = Certificates (1) */
+  const defaultViewStep = hasCertificatesUploaded ? 1 : 0;
 
-  const [activeViewStep, setActiveViewStep] = useState(currentActionable);
+  const resolveInitialStep = () => {
+    if (typeof initialStep === "number") return initialStep;
+    return defaultViewStep;
+  };
+
+  const [activeViewStep, setActiveViewStep] = useState(resolveInitialStep);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const next = !details?.essci_step1_at
-      ? 1
-      : details?.pdf?.status === "approved"
-        ? 2
-        : 2;
-    setActiveViewStep(next);
-  }, [details?.id, details?.essci_step1_at, details?.pdf?.status]);
-
-  const [responseLink, setResponseLink] = useState("");
-  const [responseId, setResponseId] = useState("");
-  const [responsePassword, setResponsePassword] = useState("");
-  const [qrCodeFile, setQrCodeFile] = useState(null);
-  const qrRef = useRef(null);
+    if (typeof initialStep === "number") {
+      setActiveViewStep(initialStep);
+      return;
+    }
+    // ESSCI/Partner View: no certs yet → Step 1; certs uploaded → Step 2
+    setActiveViewStep(defaultViewStep);
+  }, [details?.id, details?.pdf?.id, details?.pdf?.status, defaultViewStep, initialStep]);
 
   const [registered, setRegistered] = useState("");
   const [attended, setAttended] = useState("");
   const [passed, setPassed] = useState("");
   const [failed, setFailed] = useState("");
   const [certificateFiles, setCertificateFiles] = useState([]);
+  const [studentResultFile, setStudentResultFile] = useState(null);
+  const [assessmentDate, setAssessmentDate] = useState("");
+  const [parsingStudentSheet, setParsingStudentSheet] = useState(false);
   const certRef = useRef(null);
+  const studentSheetRef = useRef(null);
+
+  useEffect(() => {
+    setAssessmentDate(toCertificationDateInput(details?.assessment_date));
+  }, [details?.id, details?.assessment_date]);
 
   const isStepDone = (idx) => {
     if (idx === 0) return true;
-    if (idx === 1) return step1Done;
-    return step2Done;
+    return certificatesDone;
   };
 
-  const handleSubmitStep1 = async () => {
-    if (!responseLink.trim() || !responseId.trim() || !responsePassword.trim()) {
-      toast.error("Link, ID, and password are required.");
+  const handleStudentResultFileChange = async (file) => {
+    setStudentResultFile(file);
+    if (!file) {
+      setRegistered("");
+      setAttended("");
+      setPassed("");
+      setFailed("");
       return;
     }
-    setSubmitting(true);
+
+    setRegistered("");
+    setAttended("");
+    setPassed("");
+    setFailed("");
+    setParsingStudentSheet(true);
     try {
-      const res = await essciSubmitStep1({
-        uploadId: details.id,
-        responseLink: responseLink.trim(),
-        responseId: responseId.trim(),
-        responsePassword: responsePassword.trim(),
-        qrCodeFile,
-      });
-      if (res.success) {
-        toast.success(res.message || "Initial response submitted.");
-        onSuccess?.();
-        setActiveViewStep(2);
-      } else {
-        toast.error(res.message || "Submit failed.");
-      }
+      const totals = await parseEssciResultSummaryFile(file);
+      setRegistered(String(totals.registered));
+      setAttended(String(totals.attended));
+      setPassed(String(totals.passed));
+      setFailed(String(totals.failed));
+      toast.success("Assessment numbers loaded from the result sheet.");
     } catch (err) {
-      toast.error(err.response?.data?.message || "Submit failed.");
+      setStudentResultFile(null);
+      toast.warn(
+        err.message ||
+          "Could not read assessment numbers from the sheet. Please upload a valid result summary file with the required columns.",
+      );
     } finally {
-      setSubmitting(false);
+      setParsingStudentSheet(false);
     }
   };
 
-  const handleSubmitStep2 = async () => {
-    if (
-      registered === "" ||
-      attended === "" ||
-      passed === "" ||
-      failed === ""
-    ) {
-      toast.error("Please fill in registered, attended, passed, and failed counts.");
-      return;
-    }
-    if (certificateFiles.length === 0) {
-      toast.error("Upload at least one certificate document.");
+  const assessmentNumbersReady =
+    registered !== "" &&
+    attended !== "" &&
+    passed !== "" &&
+    failed !== "";
+
+  const canSubmitCertificates =
+    Boolean(assessmentDate) &&
+    assessmentNumbersReady &&
+    certificateFiles.length > 0 &&
+    Boolean(studentResultFile) &&
+    !parsingStudentSheet &&
+    !submitting;
+
+  const handleSubmitCertificates = async () => {
+    if (!canSubmitCertificates) {
+      toast.error("Please complete all required fields before submitting.");
       return;
     }
     setSubmitting(true);
@@ -376,6 +371,8 @@ export default function ESSCICertificationWorkflowPanel({
         parseInt(passed, 10),
         parseInt(failed, 10),
         certificateFiles,
+        studentResultFile,
+        assessmentDate,
       );
       if (res.success) {
         toast.success(res.message || "Certificates submitted.");
@@ -390,10 +387,9 @@ export default function ESSCICertificationWorkflowPanel({
     }
   };
 
-  const renderSubmittedStep = () => (
+  const renderReceivedStep = () => (
     <div className="space-y-3">
-      <SectionHeading title="Certification Data Submitted" badge={<CompletedBadge />} />
-
+      <SectionHeading title="Request Received" badge={<CompletedBadge />} />
       <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
           <DetailField label="Partner" value={details?.partner_name} />
@@ -425,91 +421,30 @@ export default function ESSCICertificationWorkflowPanel({
     </div>
   );
 
-  const renderStep1ReadOnly = () => (
-    <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-3">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-        Submitted {formatCertificationDate(details.essci_step1_at)}
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-        <div>
-          <p className="text-xs text-gray-500">Link</p>
-          <p className="text-gray-800 break-all">
-            {details.essci_response_link || "—"}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">ID</p>
-          <p className="text-gray-800">{details.essci_response_id || "—"}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Password</p>
-          <ReadOnlyPasswordValue value={details.essci_response_password} />
-        </div>
-        {details.essci_qr_code_url && (() => {
-          const qrName = details.essci_qr_code_name || "QR code";
-          const qrSrc = resolvePartnerFileUrl(details.essci_qr_code_url);
-          const isQrImage = isPartnerImageFile({
-            url: details.essci_qr_code_url,
-            name: qrName,
-          });
-
-          return (
-            <div className={isQrImage ? "sm:col-span-2" : ""}>
-              <p className="text-xs text-gray-500 mb-1">QR Code</p>
-              <div className="flex flex-col items-start gap-2">
-                {isQrImage && (
-                  <a
-                    href={qrSrc}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-block"
-                  >
-                    <img
-                      src={qrSrc}
-                      alt={qrName}
-                      className="w-28 h-28 object-contain rounded-lg border border-gray-200 bg-white p-1 hover:border-green-400 transition-colors"
-                    />
-                  </a>
-                )}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {!isQrImage && (
-                    <span className="inline-flex items-center gap-1.5 text-sm text-gray-700">
-                      <FileText className="w-4 h-4" />
-                      {qrName}
-                    </span>
-                  )}
-                  {isQrImage && (
-                    <span className="text-xs text-gray-600">{qrName}</span>
-                  )}
-                  <DownloadFileButton
-                    url={details.essci_qr_code_url}
-                    name={qrName}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-      <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-        Details were shared with the center spoke person
-        {details.spoke_email ? ` (${details.spoke_email})` : ""}.
-      </p>
-    </div>
-  );
-
-  const renderStep2ReadOnly = () => {
+  const renderCertificatesReadOnly = () => {
     const pdf = details.pdf;
     if (!pdf) return null;
-    const files = pdf.certification_files?.length
-      ? pdf.certification_files
-      : [
-          pdf.zip_file_url && { url: pdf.zip_file_url, name: pdf.zip_file_name },
-          pdf.student_list_url && {
-            url: pdf.student_list_url,
-            name: pdf.student_list_name,
-          },
-        ].filter(Boolean);
+    const archived = Array.isArray(pdf.archived_files) ? pdf.archived_files : [];
+    const archivedCerts = archived
+      .filter((f) => f.file_type === "certificate")
+      .map((f) => ({
+        archiveFileId: f.id,
+        name: f.original_name,
+      }));
+    const archivedSheet = archived.find((f) => f.file_type === "result_sheet");
+
+    const certificateDocs = archivedCerts.length
+      ? archivedCerts
+      : pdf.certification_files?.length
+        ? pdf.certification_files
+        : [
+            pdf.zip_file_url && { url: pdf.zip_file_url, name: pdf.zip_file_name },
+          ].filter(Boolean);
+    const studentSheet = archivedSheet
+      ? { archiveFileId: archivedSheet.id, name: archivedSheet.original_name }
+      : pdf.student_list_url
+        ? { url: pdf.student_list_url, name: pdf.student_list_name }
+        : null;
 
     return (
       <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-3">
@@ -517,6 +452,12 @@ export default function ESSCICertificationWorkflowPanel({
           Submitted {formatCertificationDate(pdf.created_at)}
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-gray-500">Assessment Date</p>
+            <p className="font-medium">
+              {formatCertificationDate(details?.assessment_date)}
+            </p>
+          </div>
           <div>
             <p className="text-xs text-gray-500">Registered</p>
             <p className="font-medium">{pdf.trainees_registered ?? "—"}</p>
@@ -534,192 +475,146 @@ export default function ESSCICertificationWorkflowPanel({
             <p className="font-medium">{pdf.trainees_failed ?? "—"}</p>
           </div>
         </div>
-        {files.length > 0 && (
-          <div className="flex flex-wrap gap-3 pt-1">
-            {files.map((f, i) => (
-              <CertificationFileCard key={`${f.url}-${i}`} file={f} index={i} />
-            ))}
+        {certificateDocs.length > 0 && (
+          <div className="space-y-2 pt-1">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Certificates (ZIP / PDF)
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {certificateDocs.map((f, i) => (
+                <CertificationFileCard
+                  key={f.archiveFileId || `${f.url}-${i}`}
+                  file={f}
+                  index={i}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {studentSheet && (
+          <div className="space-y-2 pt-1">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Student Result Sheet
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <CertificationFileCard file={studentSheet} index={0} />
+            </div>
           </div>
         )}
       </div>
     );
   };
 
-  const renderInitialResponseStep = () => (
-    <div className="space-y-3">
-      <SectionHeading
-        title={
-          step1Done
-            ? "ESSCI Initial Response Submitted"
-            : "Awaiting ESSCI Initial Response"
-        }
-        badge={step1Done ? <CompletedBadge /> : canEditStep1 ? <CurrentBadge /> : null}
-      />
-
-      {step1Done ? (
-        renderStep1ReadOnly()
-      ) : canEditStep1 ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">
-                Assessment Link *
-              </label>
-              <input
-                type="url"
-                value={responseLink}
-                onChange={(e) => setResponseLink(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">ID *</label>
-              <input
-                type="text"
-                value={responseId}
-                onChange={(e) => setResponseId(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-            <div>
-              <PasswordInputField
-                label="Password"
-                value={responsePassword}
-                onChange={(e) => setResponsePassword(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <FileDropZone
-            label="QR Code"
-            hint="PNG, JPG, WEBP, or PDF — click to select"
-            accept=".png,.jpg,.jpeg,.webp,.pdf"
-            file={qrCodeFile}
-            onSelect={setQrCodeFile}
-            onClear={() => setQrCodeFile(null)}
-            inputRef={qrRef}
-          />
-          <button
-            type="button"
-            onClick={handleSubmitStep1}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#009530] text-white text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
-          >
-            {submitting ? (
-              <>
-                <ArrowPathIcon className="w-4 h-4 animate-spin" /> Submitting…
-              </>
-            ) : (
-              "Submit & Share with Spoke Person"
-            )}
-          </button>
-        </div>
-      ) : details?.status === "approved" ? (
-        <p className="text-sm text-gray-500">
-          Awaiting ESSCI initial response. Assessment access details will appear
-          here once shared.
-        </p>
-      ) : (
-        <p className="text-sm text-gray-500">
-          This request is not ready for ESSCI processing.
-        </p>
-      )}
-    </div>
-  );
-
   const renderCertificatesStep = () => (
     <div className="space-y-3">
       <SectionHeading
         title={
-          step2Done
+          certificatesDone
             ? "Certificates Ready"
             : details?.pdf && details?.pdf?.status !== "rejected"
               ? "Certificates Under Review"
               : "Awaiting Assessment & Certificates"
         }
-        badge={step2Done ? <CompletedBadge /> : canEditStep2 ? <CurrentBadge /> : null}
+        badge={
+          certificatesDone ? (
+            <CompletedBadge />
+          ) : canEditCertificates ? (
+            <CurrentBadge />
+          ) : null
+        }
       />
 
-      {!step1Done ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Complete the ESSCI initial response before entering assessment results
-          and uploading certificates.
-        </div>
-      ) : step2Done || (details.pdf && details.pdf.status !== "rejected") ? (
-        renderStep2ReadOnly()
-      ) : canEditStep2 ? (
+      {certificatesDone || (details.pdf && details.pdf.status !== "rejected") ? (
+        renderCertificatesReadOnly()
+      ) : canEditCertificates ? (
         <div className="space-y-3">
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">
+              Confirm Assessment Date *
+            </h4>
+            <p className="text-xs text-gray-500 mb-2">
+              Partner submitted{" "}
+              {formatCertificationDate(details?.assessment_date)} — confirm or
+              update before uploading certificates.
+            </p>
+            <RefurbishmentDatePicker
+              value={assessmentDate}
+              onChange={setAssessmentDate}
+              placeholder="Select assessment date"
+              className="max-w-xs"
+            />
+          </div>
+
           <div>
             <h4 className="text-sm font-medium text-gray-700 mb-2">
               Assessment Numbers *
             </h4>
+            <p className="text-xs text-gray-500 mb-2">
+              Loaded automatically from the uploaded result sheet.
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: "Registered", value: registered, setter: setRegistered },
-                { label: "Attended", value: attended, setter: setAttended },
-                { label: "Passed", value: passed, setter: setPassed },
-                { label: "Failed", value: failed, setter: setFailed },
-              ].map(({ label, value, setter }) => (
+                { label: "Registered", value: registered },
+                { label: "Attended", value: attended },
+                { label: "Passed", value: passed },
+                { label: "Failed", value: failed },
+              ].map(({ label, value }) => (
                 <div key={label}>
                   <label className="block text-xs text-gray-500 mb-1">
                     {label}
                   </label>
                   <input
-                    type="number"
-                    min="0"
+                    type="text"
+                    readOnly
                     value={value}
-                    onChange={(e) => setter(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                    placeholder="0"
+                    placeholder="—"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 cursor-default"
                   />
                 </div>
               ))}
             </div>
           </div>
 
-          <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">
-              Final Certification Documents *
-            </h4>
-            <div
-              className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors border-gray-300"
-              onClick={() => certRef.current?.click()}
-            >
-              <input
-                ref={certRef}
-                type="file"
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                Certificates (ZIP / PDF) *
+              </h4>
+              <FileUploadDropzone
+                inputRef={certRef}
+                files={certificateFiles}
+                onFilesChange={setCertificateFiles}
+                accept=".zip,.tar,.gz,.rar,.7z,.pdf"
+                emptyLabel="Upload certificate ZIP archive or PDF — one or more files"
                 multiple
-                accept=".zip,.tar,.gz,.rar,.7z,.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx,.xls"
-                className="hidden"
-                onChange={(e) =>
-                  setCertificateFiles(Array.from(e.target.files || []))
+              />
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                Student Result Sheet (Excel) *
+              </h4>
+              <FileUploadDropzone
+                inputRef={studentSheetRef}
+                files={studentResultFile}
+                onFilesChange={handleStudentResultFileChange}
+                accept=".xlsx,.xls,.xlsm,.csv"
+                emptyLabel={
+                  parsingStudentSheet
+                    ? "Reading assessment numbers from sheet…"
+                    : "Upload result sheet (.xlsx, .xls, .xlsm, .csv)"
                 }
               />
-              <ArrowUpTrayIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
-              {certificateFiles.length > 0 ? (
-                <ul className="text-sm text-gray-700 space-y-1">
-                  {certificateFiles.map((f) => (
-                    <li key={f.name} className="truncate">
-                      {f.name}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  ZIP, PDF, or other supported formats — select one or more
-                </p>
-              )}
             </div>
           </div>
 
           <button
             type="button"
-            onClick={handleSubmitStep2}
-            disabled={submitting}
+            onClick={handleSubmitCertificates}
+            disabled={!canSubmitCertificates}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#009530] text-white text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
           >
-            {submitting ? (
+            {submitting || parsingStudentSheet ? (
               <>
                 <ArrowPathIcon className="w-4 h-4 animate-spin" /> Uploading…
               </>
@@ -735,14 +630,14 @@ export default function ESSCICertificationWorkflowPanel({
   );
 
   const renderStepContent = () => {
-    if (activeViewStep === 0) return renderSubmittedStep();
-    if (activeViewStep === 1) return renderInitialResponseStep();
+    if (activeViewStep === 0) return renderReceivedStep();
     return renderCertificatesStep();
   };
 
   return (
     <div className="px-6 py-2">
       <WorkflowStepper
+        steps={WORKFLOW_STEPS}
         activeViewStep={activeViewStep}
         isStepDone={isStepDone}
         onStepClick={setActiveViewStep}
@@ -759,8 +654,10 @@ export default function ESSCICertificationWorkflowPanel({
         </button>
         <button
           type="button"
-          onClick={() => setActiveViewStep((s) => Math.min(STEPS.length - 1, s + 1))}
-          disabled={activeViewStep === STEPS.length - 1}
+          onClick={() =>
+            setActiveViewStep((s) => Math.min(WORKFLOW_STEPS.length - 1, s + 1))
+          }
+          disabled={activeViewStep === WORKFLOW_STEPS.length - 1}
           className="px-5 py-2 text-sm border border-gray-200 rounded-full hover:bg-gray-50 transition-colors disabled:opacity-40"
         >
           Next

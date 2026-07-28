@@ -396,6 +396,105 @@ This is an automated email. Please do not reply to this message.
   }
 
   /**
+   * Current Indian financial year label (April–March), e.g. "2026-27".
+   */
+  getCurrentFinancialYearLabel(date = new Date()) {
+    const year = date.getFullYear();
+    const month = date.getMonth(); // 0-based
+    const startYear = month >= 3 ? year : year - 1;
+    return `${startYear}-${String(startYear + 1).slice(-2)}`;
+  }
+
+  /**
+   * Email partner organisation when admin marks a center eligible for
+   * Refurbishment & Upgradation (template #1).
+   */
+  async sendRefurbishmentEligiblePartnerEmail({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    financialYear,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const fy = financialYear || this.getCurrentFinancialYearLabel();
+    const safeName = esc(recipientName || partnerName || 'Partner');
+    const center = esc(centerName || 'your center');
+    const subject = `Submission of Refurbishment & Upgradation detail for FY ${fy}`;
+    const openUrl = this.portalUrl;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#009530;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Refurbishment &amp; Upgradation</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">FY ${esc(fy)} — eligible center notification</p>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+              <p>As part of the <strong>Refurbishment &amp; Upgradation</strong> process for the current year, your center/Centers has been identified as eligible.</p>
+              <div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+                <p style="margin:0 0 8px;"><strong>Financial Year:</strong> ${esc(fy)}</p>
+                <p style="margin:0;"><strong>Center:</strong> ${center}</p>
+              </div>
+              <p style="margin:0 0 16px;">Kindly provide the following details in the portal.</p>
+              <p style="margin:0;">
+                <a href="${esc(openUrl)}" style="display:inline-block;background:#009530;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
+                  Open SEIF Portal
+                </a>
+              </p>
+              <p style="margin:16px 0 0;">For any queries or assistance, please feel free to contact us.</p>
+              <p style="margin:16px 0 0;">Regards,<br /><strong>${esc(this.fromName)}</strong></p>
+            </div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Dear ${recipientName || partnerName || 'Partner'},`,
+      '',
+      'As part of the Refurbishment & Upgradation process for the current year, your center/Centers has been identified as eligible.',
+      '',
+      `Financial Year: ${fy}`,
+      `Center: ${centerName || 'your center'}`,
+      '',
+      'Kindly provide the following details in the portal.',
+      '',
+      `Open: ${openUrl}`,
+      '',
+      'For any queries or assistance, please feel free to contact us.',
+      '',
+      'Regards,',
+      this.fromName,
+    ].join('\n');
+
+    const info = await this.transporter.sendMail({
+      from: `"${this.fromName}" <${this.fromEmail}>`,
+      to: toEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
+  /**
    * Send refurbishment eligibility notification email to partner
    * @param {Object} data - Notification data
    * @param {string} data.email - Partner email address
@@ -614,28 +713,33 @@ This is an automated message from SEIF Portal. Please do not reply.
     return { success: true, messageId: info.messageId };
   }
 
+  formatCertificationEmailDate(value) {
+    if (!value) return '—';
+    const raw =
+      value instanceof Date
+        ? value.toISOString().slice(0, 10)
+        : String(value).slice(0, 10);
+    const parsed = new Date(`${raw}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return parsed.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  }
+
   /**
-   * Email center spoke person with ESSCI step 1 assessment access details.
+   * Email active ADMIN users when a partner submits an assessment request.
    */
-  async sendCertificationSpokeStep1Email({
+  async sendCertificationAssessmentRequestAdminEmail({
     toEmail,
     recipientName,
     partnerName,
     centerName,
-    batchNumber,
-    batchStartDate,
-    batchEndDate,
     assessmentDate,
-    responseLink,
-    responseId,
-    responsePassword,
-    qrCodePath,
-    qrCodeName,
+    requestId,
   }) {
     if (!toEmail) return { success: false, skipped: true };
-
-    const path = require('path');
-    const fs = require('fs');
 
     const esc = (value) =>
       String(value ?? '')
@@ -644,134 +748,42 @@ This is an automated message from SEIF Portal. Please do not reply.
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
-    const fmtDate = (value) => {
-      if (!value) return '—';
-      try {
-        return new Date(value).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        });
-      } catch {
-        return '—';
-      }
-    };
-
-    const safeName = esc(recipientName || 'Center Spoke Person');
+    const safeName = esc(recipientName || 'Admin');
     const partner = esc(partnerName || '—');
-    const center = esc(centerName || 'your center');
-    const batch = esc(batchNumber || '—');
-    const subject = `SEIF: Assessment Access Details — ${centerName || 'Center'}`;
-
-    const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
-    const attachments = [];
-    let qrHtml = '';
-
-    if (qrCodePath && fs.existsSync(qrCodePath)) {
-      const ext = path.extname(qrCodePath).toLowerCase();
-      const filename = qrCodeName || path.basename(qrCodePath);
-      const attachment = { filename, path: qrCodePath };
-
-      if (IMAGE_EXTS.includes(ext)) {
-        attachment.cid = 'essci-qrcode';
-        attachments.push(attachment);
-        qrHtml = `
-          <div style="margin-top:20px;text-align:center;">
-            <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#374151;">Assessment QR Code</p>
-            <img src="cid:essci-qrcode" alt="Assessment QR Code" style="max-width:220px;height:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;" />
-          </div>`;
-      } else {
-        attachments.push(attachment);
-        qrHtml = `
-          <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
-            <p style="margin:0;font-size:13px;color:#166534;">
-              <strong>QR Code:</strong> Attached as <strong>${esc(filename)}</strong>
-            </p>
-          </div>`;
-      }
-    }
+    const center = esc(centerName || '—');
+    const assessment = esc(this.formatCertificationEmailDate(assessmentDate));
+    const openUrl = `${this.portalUrl}/admin/certificates?uploadId=${encodeURIComponent(requestId || '')}`;
+    const subject = 'Assessment Request Received';
 
     const html = `
       <!DOCTYPE html>
       <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; margin: 0; background: #f3f4f6; }
-          .container { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
-          .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
-          .header { background: #009530; color: #ffffff; padding: 20px 24px; }
-          .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
-          .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.92; }
-          .body { padding: 24px; }
-          .section { margin-bottom: 20px; }
-          .section-title { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7280; margin: 0 0 10px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
-          .item-label { font-size: 12px; color: #6b7280; margin: 0 0 2px; }
-          .item-value { font-size: 14px; color: #111827; margin: 0; font-weight: 600; word-break: break-word; }
-          .access-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
-          .access-row { margin: 0 0 10px; font-size: 14px; }
-          .access-row:last-child { margin-bottom: 0; }
-          .access-label { display: inline-block; min-width: 88px; font-weight: 700; color: #374151; }
-          .access-value { color: #111827; word-break: break-all; }
-          .link { color: #009530; text-decoration: none; font-weight: 600; }
-          .footer { padding: 0 24px 24px; font-size: 12px; color: #9ca3af; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="card">
-            <div class="header">
-              <h1>Assessment Access Details</h1>
-              <p>ESSCI has shared certification assessment access for your center batch.</p>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#2563eb;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Assessment Request Received</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">A partner has submitted a new assessment request for your review.</p>
             </div>
-            <div class="body">
-              <p style="margin-top:0;">Hello <strong>${safeName}</strong>,</p>
-              <p style="margin-bottom:20px;">
-                Please use the details below for <strong>${center}</strong> (batch <strong>${batch}</strong>).
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+              <p>A request has been received from a partner to conduct an assessment on <strong>${assessment}</strong>.</p>
+              <p>Please find the details below:</p>
+              <div style="margin:20px 0;padding:16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+                <p style="margin:0 0 8px;"><strong>Partner Name:</strong> ${partner}</p>
+                <p style="margin:0 0 8px;"><strong>Center name:</strong> ${center}</p>
+                <p style="margin:0;"><strong>Assessment Date:</strong> ${assessment}</p>
+              </div>
+              <p style="margin:0 0 16px;">Kindly review the request and take the necessary action.</p>
+              <p style="margin:0;">
+                <a href="${esc(openUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
+                  Review request
+                </a>
               </p>
-
-              <div class="section">
-                <p class="section-title">Batch Details</p>
-                <div class="grid">
-                  <div>
-                    <p class="item-label">Partner</p>
-                    <p class="item-value">${partner}</p>
-                  </div>
-                  <div>
-                    <p class="item-label">Center</p>
-                    <p class="item-value">${center}</p>
-                  </div>
-                  <div>
-                    <p class="item-label">Batch</p>
-                    <p class="item-value">${batch}</p>
-                  </div>
-                  <div>
-                    <p class="item-label">Assessment Date</p>
-                    <p class="item-value">${fmtDate(assessmentDate)}</p>
-                  </div>
-                  <div>
-                    <p class="item-label">Batch Start</p>
-                    <p class="item-value">${fmtDate(batchStartDate)}</p>
-                  </div>
-                  <div>
-                    <p class="item-label">Batch End</p>
-                    <p class="item-value">${fmtDate(batchEndDate)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="section">
-                <p class="section-title">Assessment Login</p>
-                <div class="access-box">
-                  ${responseLink ? `<p class="access-row"><span class="access-label">Link</span><span class="access-value"><a class="link" href="${esc(responseLink)}">${esc(responseLink)}</a></span></p>` : ''}
-                  ${responseId ? `<p class="access-row"><span class="access-label">ID</span><span class="access-value">${esc(responseId)}</span></p>` : ''}
-                  ${responsePassword ? `<p class="access-row"><span class="access-label">Password</span><span class="access-value">${esc(responsePassword)}</span></p>` : ''}
-                </div>
-                ${qrHtml}
-              </div>
+              <p style="margin:16px 0 0;">Thank you.</p>
             </div>
-            <div class="footer">This is an automated email from SEIF Portal. Please do not reply.</div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
           </div>
         </div>
       </body>
@@ -779,27 +791,195 @@ This is an automated message from SEIF Portal. Please do not reply.
     `;
 
     const text = [
-      `Hello ${recipientName || 'Center Spoke Person'},`,
+      `Dear ${recipientName || 'Admin'},`,
       '',
-      `ESSCI has shared assessment access details for ${centerName || 'your center'} (batch ${batchNumber || 'N/A'}).`,
+      `A request has been received from a partner to conduct an assessment on ${this.formatCertificationEmailDate(assessmentDate)}.`,
       '',
-      'Batch Details',
-      `Partner: ${partnerName || '—'}`,
-      `Center: ${centerName || '—'}`,
-      `Batch: ${batchNumber || '—'}`,
-      `Assessment Date: ${fmtDate(assessmentDate)}`,
-      `Batch Start: ${fmtDate(batchStartDate)}`,
-      `Batch End: ${fmtDate(batchEndDate)}`,
+      `Partner Name: ${partnerName || '—'}`,
+      `Center name: ${centerName || '—'}`,
+      `Assessment Date: ${this.formatCertificationEmailDate(assessmentDate)}`,
       '',
-      'Assessment Login',
-      responseLink ? `Link: ${responseLink}` : '',
-      responseId ? `ID: ${responseId}` : '',
-      responsePassword ? `Password: ${responsePassword}` : '',
-      qrCodePath ? `QR Code: ${attachments.length ? 'attached to this email' : 'not available'}` : '',
+      'Kindly review the request and take the necessary action.',
       '',
-      'This is an automated email from SEIF Portal.',
+      `Review: ${openUrl}`,
+      '',
+      'Thank you.',
+    ].join('\n');
+
+    const info = await this.transporter.sendMail({
+      from: `"${this.fromName}" <${this.fromEmail}>`,
+      to: toEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
+  /**
+   * Email partner organisation contact when admin approves an assessment request.
+   */
+  async sendCertificationAssessmentApprovedPartnerEmail({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    batchNumber,
+    assessmentDate,
+    requestId,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const safeName = esc(recipientName || partnerName || 'Partner');
+    const assessment = esc(this.formatCertificationEmailDate(assessmentDate));
+    const batch = esc(batchNumber || '—');
+    const location = esc(centerName || '—');
+    const openUrl = `${this.portalUrl}/upload`;
+    const subject = 'Assessment Request Approved';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#009530;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Assessment Request Approved</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">Your assessment request has been approved by the admin.</p>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+              <p>We are happy to inform you that your request to conduct an assessment on <strong>${assessment}</strong> has been approved.</p>
+              <p><strong>Assessment Details:</strong></p>
+              <div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+                <p style="margin:0 0 8px;"><strong>Assessment Date:</strong> ${assessment}</p>
+                <p style="margin:0 0 8px;"><strong>Batch Name/ID:</strong> ${batch}</p>
+                <p style="margin:0;"><strong>Location:</strong> ${location}</p>
+              </div>
+              <p style="margin:0 0 16px;">Please proceed with the necessary preparations. If you have any questions, feel free to contact us.</p>
+              <p style="margin:0;">
+                <a href="${esc(openUrl)}" style="display:inline-block;background:#009530;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
+                  Open SEIF Portal
+                </a>
+              </p>
+              <p style="margin:16px 0 0;">Thank you.</p>
+            </div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Dear ${recipientName || partnerName || 'Partner'},`,
+      '',
+      `We are happy to inform you that your request to conduct an assessment on ${this.formatCertificationEmailDate(assessmentDate)} has been approved.`,
+      '',
+      'Assessment Details:',
+      `Assessment Date: ${this.formatCertificationEmailDate(assessmentDate)}`,
+      `Batch Name/ID: ${batchNumber || '—'}`,
+      `Location: ${centerName || '—'}`,
+      '',
+      'Please proceed with the necessary preparations. If you have any questions, feel free to contact us.',
+      '',
+      `Open: ${openUrl}`,
+      '',
+      'Thank you.',
+    ].join('\n');
+
+    const info = await this.transporter.sendMail({
+      from: `"${this.fromName}" <${this.fromEmail}>`,
+      to: toEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
+  /**
+   * Email partner when admin rejects a certification request.
+   */
+  async sendCertificationRejectionEmail({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    batchNumber,
+    requestId,
+    rejectionReason,
+    remarks,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const subject = `SEIF: Certification Request Rejected — ${centerName || 'Center'}`;
+    const reason = esc(rejectionReason || 'No reason provided.');
+    const note = remarks ? esc(remarks) : '';
+    const safeName = esc(recipientName || 'Partner');
+    const center = esc(centerName || '—');
+    const batch = esc(batchNumber || '—');
+    const ref = esc(requestId || '—');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#dc2626;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Certification Request Rejected</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">Please review the reason and submit a new request with corrected details.</p>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Hello <strong>${safeName}</strong>,</p>
+              <p>Your certification request for <strong>${center}</strong> (batch <strong>${batch}</strong>) was rejected by the admin.</p>
+              <div style="margin:20px 0;padding:16px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;">
+                <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#991b1b;text-transform:uppercase;">Rejection reason</p>
+                <p style="margin:0;color:#7f1d1d;white-space:pre-wrap;">${reason}</p>
+                ${note ? `<p style="margin:12px 0 0;color:#7f1d1d;white-space:pre-wrap;"><strong>Remarks:</strong> ${note}</p>` : ''}
+              </div>
+              <p style="margin:0;">Request reference: <strong>${ref}</strong></p>
+              <p style="margin:16px 0 0;">Log in to SEIF, open the Upload page, and submit a new certification request with the corrected information.</p>
+            </div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Hello ${recipientName || 'Partner'},`,
+      '',
+      `Your certification request for ${centerName || 'your center'} (batch ${batchNumber || 'N/A'}) was rejected.`,
+      '',
+      `Reason: ${rejectionReason || 'No reason provided.'}`,
+      remarks ? `Remarks: ${remarks}` : '',
+      '',
+      `Request reference: ${requestId || '—'}`,
+      '',
+      'Please log in to SEIF and submit a new certification request with corrected details.',
     ]
-      .filter((line) => line !== '')
+      .filter(Boolean)
       .join('\n');
 
     const info = await this.transporter.sendMail({
@@ -808,11 +988,295 @@ This is an automated message from SEIF Portal. Please do not reply.
       subject,
       text,
       html,
-      attachments,
     });
 
     return { success: true, messageId: info.messageId };
   }
+
+  /**
+   * Email ESSCI when admin approves a partner certification request.
+   */
+  async sendCertificationApprovedEssciEmail({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    batchNumber,
+    requestId,
+    assessmentDate,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const safeName = esc(recipientName || 'ESSCI Team');
+    const partner = esc(partnerName || '—');
+    const center = esc(centerName || '—');
+    const batch = esc(batchNumber || '—');
+    const assessment = esc(this.formatCertificationEmailDate(assessmentDate));
+    const openUrl = `${this.portalUrl}/requests?uploadId=${encodeURIComponent(requestId || '')}`;
+
+    const subject = 'Approved Assessment Notification';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#009530;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Approved Assessment Notification</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">An assessment request has been approved and is ready for ESSCI action.</p>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+              <p>This is to inform you that the assessment request submitted by <strong>${partner}</strong> has been approved.</p>
+              <p><strong>Assessment Details:</strong></p>
+              <div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+                <p style="margin:0 0 8px;"><strong>Partner Name:</strong> ${partner}</p>
+                <p style="margin:0 0 8px;"><strong>Center Name:</strong> ${center}</p>
+                <p style="margin:0 0 8px;"><strong>Batch Name/ID:</strong> ${batch}</p>
+                <p style="margin:0;"><strong>Assessment Date:</strong> ${assessment}</p>
+              </div>
+              <p style="margin:0 0 16px;">Kindly note the above assessment and take the necessary action from your end. Please reach out using the provided email ID and contact number to complete the process.</p>
+              <p style="margin:0;">
+                <a href="${esc(openUrl)}" style="display:inline-block;background:#009530;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
+                  Open request
+                </a>
+              </p>
+              <p style="margin:16px 0 0;">Thank you.</p>
+            </div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Dear ${recipientName || 'ESSCI Team'},`,
+      '',
+      `This is to inform you that the assessment request submitted by ${partnerName || 'the partner'} has been approved.`,
+      '',
+      'Assessment Details:',
+      `Partner Name: ${partnerName || '—'}`,
+      `Center Name: ${centerName || '—'}`,
+      `Batch Name/ID: ${batchNumber || '—'}`,
+      `Assessment Date: ${this.formatCertificationEmailDate(assessmentDate)}`,
+      '',
+      'Kindly note the above assessment and take the necessary action from your end.',
+      'Please reach out using the provided email ID and contact number to complete the process.',
+      '',
+      `Open: ${openUrl}`,
+      '',
+      'Thank you.',
+    ].join('\n');
+
+    const info = await this.transporter.sendMail({
+      from: `"${this.fromName}" <${this.fromEmail}>`,
+      to: toEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
+  /**
+   * Email partner / center spoke when ESSCI uploads certificates and result sheet.
+   */
+  async sendCertificationCertificatesReadyPartnerEmail({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    batchNumber,
+    requestId,
+    assessmentDate,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const safeName = esc(recipientName || partnerName || 'Partner');
+    const batch = esc(batchNumber || '—');
+    const assessment = esc(this.formatCertificationEmailDate(assessmentDate));
+    const openUrl = `${this.portalUrl}/certificates?uploadId=${encodeURIComponent(requestId || '')}`;
+    const subject = 'Assessment Completed – Results & Certificates Available';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#009530;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Assessment Completed</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">Results and certificates are now available in SEIF.</p>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+              <p>We are pleased to inform you that the assessment for <strong>${batch}</strong> has been successfully completed by ESSCI.</p>
+              <p>The assessment results and certificates have been uploaded and are available for your reference.</p>
+              <div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+                <p style="margin:0 0 8px;"><strong>Batch Name/ID:</strong> ${batch}</p>
+                <p style="margin:0;"><strong>Assessment Date:</strong> ${assessment}</p>
+              </div>
+              <p style="margin:0 0 16px;">Please review the uploaded documents and let us know if you require any assistance.</p>
+              <p style="margin:0;">
+                <a href="${esc(openUrl)}" style="display:inline-block;background:#009530;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
+                  View certificates
+                </a>
+              </p>
+              <p style="margin:16px 0 0;">Regards,<br /><strong>${esc(this.fromName)}</strong></p>
+            </div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Dear ${recipientName || partnerName || 'Partner'},`,
+      '',
+      `We are pleased to inform you that the assessment for ${batchNumber || 'your batch'} has been successfully completed by ESSCI.`,
+      '',
+      'The assessment results and certificates have been uploaded and are available for your reference.',
+      '',
+      'Details:',
+      `Batch Name/ID: ${batchNumber || '—'}`,
+      `Assessment Date: ${this.formatCertificationEmailDate(assessmentDate)}`,
+      '',
+      'Please review the uploaded documents and let us know if you require any assistance.',
+      '',
+      `Open: ${openUrl}`,
+      '',
+      `Regards,`,
+      this.fromName,
+    ].join('\n');
+
+    const info = await this.transporter.sendMail({
+      from: `"${this.fromName}" <${this.fromEmail}>`,
+      to: toEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
+  /**
+   * Email active ADMIN users when ESSCI uploads certificates.
+   */
+  async sendCertificationCertificatesReadyAdminEmail({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    batchNumber,
+    requestId,
+    assessmentDate,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const safeName = esc(recipientName || 'Admin');
+    const partner = esc(partnerName || '—');
+    const center = esc(centerName || '—');
+    const batch = esc(batchNumber || '—');
+    const assessment = esc(this.formatCertificationEmailDate(assessmentDate));
+    const openUrl = `${this.portalUrl}/admin/certificates?uploadId=${encodeURIComponent(requestId || '')}`;
+    const subject = 'Assessment Completed – Results & Certificates Uploaded';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#009530;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Assessment Completed</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">ESSCI has uploaded results and certificates for review.</p>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+              <p>This is to inform you that the assessment for <strong>${batch}</strong> has been successfully completed by ESSCI.</p>
+              <p>The assessment results and certificates have been uploaded to the designated folder and are now available for review.</p>
+              <div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+                <p style="margin:0 0 8px;"><strong>Partner Name:</strong> ${partner}</p>
+                <p style="margin:0 0 8px;"><strong>Center Name:</strong> ${center}</p>
+                <p style="margin:0 0 8px;"><strong>Batch Name/ID:</strong> ${batch}</p>
+                <p style="margin:0;"><strong>Assessment Date:</strong> ${assessment}</p>
+              </div>
+              <p style="margin:0 0 16px;">Kindly review the uploaded documents and proceed with the necessary actions.</p>
+              <p style="margin:0;">
+                <a href="${esc(openUrl)}" style="display:inline-block;background:#009530;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
+                  Review request
+                </a>
+              </p>
+              <p style="margin:16px 0 0;">Regards,<br /><strong>${esc(this.fromName)}</strong></p>
+            </div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Dear ${recipientName || 'Admin'},`,
+      '',
+      `This is to inform you that the assessment for ${batchNumber || 'the batch'} has been successfully completed by ESSCI.`,
+      '',
+      'The assessment results and certificates have been uploaded to the designated folder and are now available for review.',
+      '',
+      'Details:',
+      `Partner Name: ${partnerName || '—'}`,
+      `Center Name: ${centerName || '—'}`,
+      `Batch Name/ID: ${batchNumber || '—'}`,
+      `Assessment Date: ${this.formatCertificationEmailDate(assessmentDate)}`,
+      '',
+      'Kindly review the uploaded documents and proceed with the necessary actions.',
+      '',
+      `Open: ${openUrl}`,
+      '',
+      'Regards,',
+      this.fromName,
+    ].join('\n');
+
+    const info = await this.transporter.sendMail({
+      from: `"${this.fromName}" <${this.fromEmail}>`,
+      to: toEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
 }
 
 module.exports = new EmailService();

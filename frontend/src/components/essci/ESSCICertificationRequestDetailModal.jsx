@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { X, AlertCircle } from "lucide-react";
 import ESSCICertificationWorkflowPanel from "./ESSCICertificationWorkflowPanel";
+import AdminCertificationReviewPanel from "./AdminCertificationReviewPanel";
 import { essciGetBatchDetail } from "../../services/certification.service";
+import { ROUTES } from "../../constants/routes";
 import {
   formatCertificationDate,
   formatCertificationRequestId,
@@ -20,6 +23,7 @@ export default function ESSCICertificationRequestDetailModal({
   listIndex = 0,
   fetchDetail,
   readOnly = false,
+  allowAdminReview = false,
 }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -91,7 +95,7 @@ export default function ESSCICertificationRequestDetailModal({
                     ? formatCertificationRequestId(details, listIndex)
                     : "—"}
                   {details?.created_at
-                    ? ` · Submitted ${formatCertificationDate(details.created_at)}`
+                    ? ` · Received ${formatCertificationDate(details.created_at)}`
                     : ""}
                 </p>
                 {details && (
@@ -149,11 +153,42 @@ export default function ESSCICertificationRequestDetailModal({
                   </div>
                 )}
 
+                {allowAdminReview && details?.status === "pending" && (
+                  <AdminCertificationReviewPanel
+                    uploadId={details.id}
+                    status={details.status}
+                    onSuccess={handleWorkflowSuccess}
+                  />
+                )}
+
+                {details?.status === "rejected" && !allowAdminReview && (
+                  <div className="mx-6 mt-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+                    <p className="font-semibold">This request was rejected by admin.</p>
+                    <p className="mt-1">
+                      {details.rejection_reason || details.remarks || "Please review the remarks and resubmit corrected details for the same request."}
+                    </p>
+                    <Link
+                      to={`${ROUTES.UPLOAD_DATA}?tab=certification&certResubmit=${encodeURIComponent(details.id)}`}
+                      className="inline-flex mt-3 text-sm font-semibold text-red-700 underline hover:text-red-900"
+                      onClick={onClose}
+                    >
+                      Correct &amp; resubmit this request
+                    </Link>
+                  </div>
+                )}
+
                 {details && (
                   <ESSCICertificationWorkflowPanel
                     details={details}
                     onSuccess={handleWorkflowSuccess}
-                    readOnly={readOnly}
+                    readOnly={
+                      readOnly ||
+                      allowAdminReview ||
+                      details.status !== "approved"
+                    }
+                    initialStep={
+                      allowAdminReview && details.status === "pending" ? 0 : undefined
+                    }
                   />
                 )}
               </div>
