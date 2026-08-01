@@ -918,41 +918,24 @@ const ReviewStudentsPage = () => {
     try {
       setIsSaving(true);
 
-      // Prepare changes for backend
-      const changes = students
-        .filter((student) => {
-          const original = originalStudents.find((s) => s.id === student.id);
-          return (
-            !original || JSON.stringify(student) !== JSON.stringify(original)
-          );
-        })
-        .map((student) => {
-          const original = originalStudents.find((s) => s.id === student.id);
-          const editedFields = {};
+      // Only send students that actually changed (backend compares against DB + logs)
+      const changedStudents = students.filter((student) => {
+        const original = originalStudents.find((s) => s.id === student.id);
+        return (
+          !original || JSON.stringify(student) !== JSON.stringify(original)
+        );
+      });
 
-          Object.keys(student).forEach((key) => {
-            if (
-              key !== "id" &&
-              key !== "edited_fields" &&
-              student[key] !== original?.[key]
-            ) {
-              editedFields[key] = {
-                old: original?.[key],
-                new: student[key],
-              };
-            }
-          });
+      if (changedStudents.length === 0) {
+        setIsEditMode(false);
+        setHasChanges(false);
+        showToast.info("No changes to save");
+        return;
+      }
 
-          return {
-            student_id: student.student_id,
-            changes: editedFields,
-          };
-        });
-
-      // Save to backend
       await reviewService.saveAdminEdits(uploadId, centerId, {
-        students: students,
-        changes: changes,
+        students: changedStudents,
+        changes: [],
       });
 
       showToast.success("Changes saved successfully");

@@ -24,21 +24,132 @@ describe('Partner Service - Unit Tests', () => {
   });
 
   describe('soft delete - resubmission flow', () => {
+    const setupResubmitMocks = ({
+      uploadId,
+      partnerId,
+      version = 1,
+      parentUploadId = null,
+      userId = null,
+    }) => {
+      const centerId = uuidv4();
+      const batchId = uuidv4();
+      const studentId = uuidv4();
+      const uploadedBy = userId || uuidv4();
+
+      mockConnection.query.mockImplementation(async (sql) => {
+        if (sql.includes('FROM data_uploads') && sql.includes('deleted_at IS NULL')) {
+          return [
+            [
+              {
+                id: uploadId,
+                version,
+                partner_id: partnerId,
+                parent_upload_id: parentUploadId,
+                upload_type: 'center_batch_student',
+                file_url: null,
+                file_name: 'test.xlsx',
+                uploaded_by: uploadedBy,
+              },
+            ],
+          ];
+        }
+        if (sql.includes('FROM uploaded_centers') && sql.includes("review_status = 'rejected'")) {
+          return [
+            [
+              {
+                id: centerId,
+                csv_center_id: 'C1',
+                center_name: 'Center 1',
+                center_type: null,
+                region: null,
+                city: 'City',
+                state: 'State',
+                address: null,
+                year_of_establishment: null,
+                status: 'active',
+                center_head: null,
+                mobile_number: null,
+                email: null,
+              },
+            ],
+          ];
+        }
+        if (sql.includes('FROM uploaded_students') && sql.includes('is_edited = 1')) {
+          return [[{ cnt: 1 }]];
+        }
+        if (sql.includes('FROM uploaded_batches')) {
+          return [
+            [
+              {
+                id: batchId,
+                uploaded_center_id: centerId,
+                csv_center_id: 'C1',
+                batch_number: 'B1',
+                batch_number_display: null,
+                batch_start_date: null,
+                batch_complete_date: null,
+                total_students: 1,
+                male_students: 1,
+                female_students: 0,
+              },
+            ],
+          ];
+        }
+        if (sql.includes('FROM uploaded_students') && sql.includes('uploaded_center_id IN')) {
+          return [
+            [
+              {
+                id: studentId,
+                uploaded_center_id: centerId,
+                uploaded_batch_id: batchId,
+                csv_center_id: 'C1',
+                partner_student_id: 'S1',
+                student_name: 'Student',
+                father_name: null,
+                date_of_birth: '2000-01-01',
+                gender: 'Male',
+                mobile_number: '9999999999',
+                email: null,
+                address: null,
+                city: 'City',
+                state: 'State',
+                district: null,
+                country: 'India',
+                qualification: null,
+                enrollment_date: '2024-01-01',
+                course_name: 'Course',
+                course_duration_months: 6,
+                training_status: 'enrolled',
+                is_edited: 1,
+              },
+            ],
+          ];
+        }
+        if (sql.includes('FROM users WHERE role IN')) {
+          return [[{ id: uuidv4() }]];
+        }
+        if (sql.includes('UPDATE data_uploads') && sql.includes('deleted_at')) {
+          return [{ affectedRows: 1 }];
+        }
+        // INSERT / sync / counter updates
+        return [[{}]];
+      });
+    };
+
     it('should mark V1 with deleted_at = NOW() when resubmitting', async () => {
       const mockUploadId = uuidv4();
       const mockPartnerId = uuidv4();
+      const mockUserId = uuidv4();
+      setupResubmitMocks({
+        uploadId: mockUploadId,
+        partnerId: mockPartnerId,
+        userId: mockUserId,
+      });
 
-      // Mock: Get V1 upload details
-      mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockUploadId, version: 1, partner_id: mockPartnerId }]]) // get upload
-        .mockResolvedValueOnce([{ insertId: 1, id: uuidv4() }]) // create V2
-        .mockResolvedValueOnce([{ affectedRows: 1 }]); // update V1
+      await partnerService.resubmitUpload(mockUploadId, mockPartnerId, mockUserId);
 
-      await partnerService.resubmitUpload(mockUploadId, mockPartnerId);
-
-      // Verify V1 updated with deleted_at
       const updateCall = mockConnection.query.mock.calls.find(
-        (call) => call[0].includes('UPDATE data_uploads') && call[0].includes('deleted_at')
+        (call) => call[0].includes('UPDATE data_uploads') && call[0].includes('deleted_at = NOW()')
       );
 
       expect(updateCall).toBeDefined();
@@ -49,15 +160,15 @@ describe('Partner Service - Unit Tests', () => {
     it('should create V2 with parent_upload_id pointing to V1', async () => {
       const mockUploadId = uuidv4();
       const mockPartnerId = uuidv4();
+      const mockUserId = uuidv4();
+      setupResubmitMocks({
+        uploadId: mockUploadId,
+        partnerId: mockPartnerId,
+        userId: mockUserId,
+      });
 
-      mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockUploadId, version: 1, partner_id: mockPartnerId }]])
-        .mockResolvedValueOnce([{ insertId: 1, id: 'upload-v2-uuid' }])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]);
+      await partnerService.resubmitUpload(mockUploadId, mockPartnerId, mockUserId);
 
-      await partnerService.resubmitUpload(mockUploadId, mockPartnerId);
-
-      // Verify V2 insert has parent_upload_id and version=2
       const insertCall = mockConnection.query.mock.calls.find((call) =>
         call[0].includes('INSERT INTO data_uploads')
       );
@@ -70,22 +181,57 @@ describe('Partner Service - Unit Tests', () => {
     });
 
     it('should increment version for multiple resubmissions', async () => {
-      const mockUploadV2 = 'upload-v2-uuid';
-      const mockPartnerId = 'partner-uuid';
+      const mockUploadV2 = uuidv4();
+      const mockPartnerId = uuidv4();
+      const mockUserId = uuidv4();
+      const rootUploadId = uuidv4();
+      setupResubmitMocks({
+        uploadId: mockUploadV2,
+        partnerId: mockPartnerId,
+        version: 2,
+        parentUploadId: rootUploadId,
+        userId: mockUserId,
+      });
 
-      // Resubmitting V2 creates V3
-      mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockUploadV2, version: 2, partner_id: mockPartnerId }]])
-        .mockResolvedValueOnce([{ insertId: 1, id: 'upload-v3-uuid' }])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]);
-
-      await partnerService.resubmitUpload(mockUploadV2, mockPartnerId);
+      await partnerService.resubmitUpload(mockUploadV2, mockPartnerId, mockUserId);
 
       const insertCall = mockConnection.query.mock.calls.find((call) =>
         call[0].includes('INSERT INTO data_uploads')
       );
 
       expect(insertCall[1]).toContain(3); // version 3
+      expect(insertCall[1]).toContain(rootUploadId); // keep root parent
+    });
+
+    it('should copy rejected centers and students into the new version', async () => {
+      const mockUploadId = uuidv4();
+      const mockPartnerId = uuidv4();
+      const mockUserId = uuidv4();
+      setupResubmitMocks({
+        uploadId: mockUploadId,
+        partnerId: mockPartnerId,
+        userId: mockUserId,
+      });
+
+      const result = await partnerService.resubmitUpload(
+        mockUploadId,
+        mockPartnerId,
+        mockUserId
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.version).toBe(2);
+      expect(result.newUploadId).toBeDefined();
+
+      const centerInsert = mockConnection.query.mock.calls.find((call) =>
+        call[0].includes('INSERT INTO uploaded_centers')
+      );
+      const studentInsert = mockConnection.query.mock.calls.find((call) =>
+        call[0].includes('INSERT INTO uploaded_students')
+      );
+
+      expect(centerInsert).toBeDefined();
+      expect(studentInsert).toBeDefined();
     });
   });
 

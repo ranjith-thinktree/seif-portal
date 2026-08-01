@@ -203,20 +203,67 @@ class ReviewService {
 
   /**
    * Save admin edits to students (during initial review)
-   * Saves to uploaded_students table and logs in data_edit_logs
+   * Saves to uploaded_students (real columns only) and logs in data_edit_logs.
+   * Batch number is stored via uploaded_batches / uploaded_batch_id (same as partner flow).
    */
-  async saveAdminEdits(uploadId, centerId, students, changes, adminUserId) {
+  async saveAdminEdits(uploadId, centerId, students, _changes, adminUserId) {
     const connection = await db.getConnection();
+
+    const toMysqlDate = (value) => {
+      if (value == null || value === '') return null;
+      if (value instanceof Date) {
+        if (Number.isNaN(value.getTime())) return null;
+        const y = value.getFullYear();
+        const m = String(value.getMonth() + 1).padStart(2, '0');
+        const d = String(value.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      const str = String(value);
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+      const parsed = new Date(str);
+      if (Number.isNaN(parsed.getTime())) return null;
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
+    const valuesEqual = (field, oldValue, newValue) => {
+      if (field === 'date_of_birth' || field === 'enrollment_date') {
+        return toMysqlDate(oldValue) === toMysqlDate(newValue);
+      }
+      if (field === 'course_duration_months') {
+        const oldNum = oldValue == null || oldValue === '' ? null : Number(oldValue);
+        const newNum = newValue == null || newValue === '' ? null : Number(newValue);
+        return oldNum === newNum;
+      }
+      return String(oldValue ?? '') === String(newValue ?? '');
+    };
+
+    const studentFields = [
+      'student_name',
+      'father_name',
+      'date_of_birth',
+      'gender',
+      'mobile_number',
+      'email',
+      'address',
+      'city',
+      'state',
+      'district',
+      'country',
+      'qualification',
+      'course_name',
+      'course_duration_months',
+      'enrollment_date',
+    ];
 
     try {
       await connection.beginTransaction();
 
-      // Use IDs as-is (no UUID conversion) so invalid/non-UUID IDs simply return
-      // no rows rather than throwing before queries run.
-
       // Verify center exists and belongs to upload
       const [centers] = await connection.query(
-        `SELECT id FROM uploaded_centers 
+        `SELECT id, partner_id FROM uploaded_centers 
          WHERE id = ? AND data_upload_id = ?`,
         [centerId, uploadId]
       );
@@ -225,75 +272,183 @@ class ReviewService {
         throw new Error('Center not found in upload');
       }
 
+      const partnerId = centers[0].partner_id;
       let updatedCount = 0;
       let loggedChanges = 0;
 
-      // Update each edited student in uploaded_students
-      for (const student of students) {
-        const whereField = 'id';
-        const whereValue = student.id;
+      for (const student of students || []) {
+        if (!student?.id) continue;
 
-        // Update the student record
+        const [originalRows] = await connection.query(
+          `SELECT us.*, ub.batch_number AS current_batch_number
+           FROM uploaded_students us
+           LEFT JOIN uploaded_batches ub ON ub.id = us.uploaded_batch_id
+           WHERE us.id = ? AND us.uploaded_center_id = ? AND us.data_upload_id = ?`,
+          [student.id, centerId, uploadId]
+        );
+
+        if (!originalRows.length) continue;
+        const original = originalRows[0];
+
+        // Resolve batch via uploaded_batches (batch_number is not a column on uploaded_students)
+        let newUploadedBatchId = original.uploaded_batch_id;
+        const incomingBatch = student.batch_number != null ? String(student.batch_number).trim() : '';
+        const currentBatch = original.current_batch_number != null
+          ? String(original.current_batch_number).trim()
+          : '';
+
+        if (incomingBatch && incomingBatch !== currentBatch) {
+          const [existingBatch] = await connection.query(
+            `SELECT id FROM uploaded_batches
+             WHERE uploaded_center_id = ? AND batch_number = ?`,
+            [centerId, incomingBatch]
+          );
+
+          if (existingBatch.length > 0) {
+            newUploadedBatchId = existingBatch[0].id;
+          } else {
+            newUploadedBatchId = uuidv4();
+            await connection.query(
+              `INSERT INTO uploaded_batches
+                 (id, data_upload_id, uploaded_center_id, partner_id, batch_number, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+              [newUploadedBatchId, uploadId, centerId, partnerId, incomingBatch]
+            );
+          }
+        }
+
+        const nextValues = {
+          student_name: student.student_name ?? original.student_name,
+          father_name: student.father_name ?? original.father_name,
+          date_of_birth: toMysqlDate(
+            student.date_of_birth !== undefined ? student.date_of_birth : original.date_of_birth
+          ),
+          gender: student.gender ?? original.gender,
+          mobile_number: student.mobile_number ?? original.mobile_number,
+          email: student.email ?? original.email,
+          address: student.address ?? original.address,
+          city: student.city ?? original.city,
+          state: student.state ?? original.state,
+          district: student.district ?? original.district,
+          country: student.country ?? original.country,
+          qualification: student.qualification ?? original.qualification,
+          course_name: student.course_name ?? original.course_name,
+          course_duration_months:
+            student.course_duration_months !== undefined && student.course_duration_months !== ''
+              ? Number(student.course_duration_months)
+              : original.course_duration_months,
+          enrollment_date: toMysqlDate(
+            student.enrollment_date !== undefined ? student.enrollment_date : original.enrollment_date
+          ),
+        };
+
+        const fieldChanged = studentFields.some(
+          (field) => !valuesEqual(field, original[field], nextValues[field])
+        );
+        const batchChanged = newUploadedBatchId !== original.uploaded_batch_id;
+
+        if (!fieldChanged && !batchChanged) {
+          continue;
+        }
+
         const [updateResult] = await connection.query(
           `UPDATE uploaded_students SET
             student_name = ?,
             father_name = ?,
-            mother_name = ?,
-            gender = ?,
-            email = ?,
-            mobile_number = ?,
-            alternate_mobile = ?,
             date_of_birth = ?,
-            age = ?,
+            gender = ?,
+            mobile_number = ?,
+            email = ?,
+            address = ?,
+            city = ?,
+            state = ?,
+            district = ?,
+            country = ?,
+            qualification = ?,
             course_name = ?,
-            batch_number = ?,
+            course_duration_months = ?,
+            enrollment_date = ?,
+            uploaded_batch_id = ?,
             is_edited = 1,
             updated_at = NOW()
-          WHERE ${whereField} = ? AND uploaded_center_id = ?`,
+          WHERE id = ? AND uploaded_center_id = ? AND data_upload_id = ?`,
           [
-            student.student_name,
-            student.father_name,
-            student.mother_name,
-            student.gender,
-            student.email,
-            student.mobile_number,
-            student.alternate_mobile,
-            student.date_of_birth,
-            student.age,
-            student.course_name,
-            student.batch_number,
-            whereValue,
+            nextValues.student_name,
+            nextValues.father_name,
+            nextValues.date_of_birth,
+            nextValues.gender,
+            nextValues.mobile_number,
+            nextValues.email,
+            nextValues.address,
+            nextValues.city,
+            nextValues.state,
+            nextValues.district,
+            nextValues.country,
+            nextValues.qualification,
+            nextValues.course_name,
+            nextValues.course_duration_months,
+            nextValues.enrollment_date,
+            newUploadedBatchId,
+            student.id,
             centerId,
+            uploadId,
           ]
         );
 
-        if (updateResult.affectedRows > 0) {
-          updatedCount++;
+        if (updateResult.affectedRows === 0) continue;
+        updatedCount += 1;
+
+        if (batchChanged) {
+          await connection.query(
+            `INSERT INTO data_edit_logs
+               (id, upload_id, version, table_name, record_id, field_name, old_value, new_value, edited_by, edit_type, created_at)
+             VALUES (?, ?, ?, 'uploaded_students', ?, 'batch_number', ?, ?, ?, 'update', NOW())`,
+            [
+              uuidv4(),
+              uploadId,
+              1,
+              student.id,
+              currentBatch || null,
+              incomingBatch || null,
+              adminUserId,
+            ]
+          );
+          loggedChanges += 1;
         }
-      }
 
-      // Log changes in data_edit_logs with admin user ID
-      for (const change of changes) {
-        await connection.query(
-          `INSERT INTO data_edit_logs 
-          (student_id, field_name, old_value, new_value, edited_by, created_at) 
-          VALUES (?, ?, ?, ?, ?, NOW())`,
-          [
-            change.studentId,
-            change.field,
-            change.oldValue || null,
-            change.newValue || null,
-            adminUserId,
-          ]
-        );
-        loggedChanges++;
+        for (const field of studentFields) {
+          if (valuesEqual(field, original[field], nextValues[field])) continue;
+
+          const oldValue =
+            field === 'date_of_birth' || field === 'enrollment_date'
+              ? toMysqlDate(original[field])
+              : original[field];
+          const newValue = nextValues[field];
+
+          await connection.query(
+            `INSERT INTO data_edit_logs
+               (id, upload_id, version, table_name, record_id, field_name, old_value, new_value, edited_by, edit_type, created_at)
+             VALUES (?, ?, ?, 'uploaded_students', ?, ?, ?, ?, ?, 'update', NOW())`,
+            [
+              uuidv4(),
+              uploadId,
+              1,
+              student.id,
+              field,
+              oldValue == null ? null : String(oldValue),
+              newValue == null ? null : String(newValue),
+              adminUserId,
+            ]
+          );
+          loggedChanges += 1;
+        }
       }
 
       await connection.commit();
 
       return {
         updatedStudents: updatedCount,
-        loggedChanges: loggedChanges,
+        loggedChanges,
         message: 'Admin edits saved successfully',
       };
     } catch (error) {
@@ -314,7 +469,7 @@ class ReviewService {
       const [logs] = await connection.query(
         `SELECT field_name, old_value, new_value, edited_by, created_at
          FROM data_edit_logs
-         WHERE student_id = ?
+         WHERE record_id = ?
          ORDER BY created_at DESC`,
         [studentId]
       );

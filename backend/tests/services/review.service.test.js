@@ -45,45 +45,46 @@ describe('Review Service - Admin Editing Tests', () => {
           batch_number: 'B001',
         },
       ];
-      const mockChanges = [
-        {
-          studentId: 'student-uuid',
-          field: 'student_name',
-          oldValue: 'John Doe',
-          newValue: 'John Doe Updated',
-        },
-        {
-          studentId: 'student-uuid',
-          field: 'email',
-          oldValue: 'john@test.com',
-          newValue: 'john.updated@test.com',
-        },
-      ];
 
-      // Mock: Center exists
       mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockCenterId }]]) // verify center
+        .mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]]) // verify center
+        .mockResolvedValueOnce([
+          [
+            {
+              id: 'student-uuid',
+              student_name: 'John Doe',
+              email: 'john@test.com',
+              mobile_number: '9876543210',
+              gender: 'Male',
+              course_name: 'Web Development',
+              uploaded_batch_id: 'batch-1',
+              current_batch_number: 'B001',
+            },
+          ],
+        ]) // original student
         .mockResolvedValueOnce([{ affectedRows: 1 }]) // update student
-        .mockResolvedValueOnce([{ insertId: 1 }]) // log change 1
-        .mockResolvedValueOnce([{ insertId: 2 }]); // log change 2
+        .mockResolvedValueOnce([{ insertId: 1 }]) // log student_name
+        .mockResolvedValueOnce([{ insertId: 2 }]); // log email
 
       const result = await reviewService.saveAdminEdits(
         mockUploadId,
         mockCenterId,
         mockStudents,
-        mockChanges,
+        [],
         mockAdminId
       );
 
       expect(result.updatedStudents).toBe(1);
       expect(result.loggedChanges).toBe(2);
 
-      // Verify UPDATE query
       const updateCall = mockConnection.query.mock.calls.find((call) =>
         call[0].includes('UPDATE uploaded_students')
       );
       expect(updateCall).toBeDefined();
       expect(updateCall[0]).toContain('is_edited = 1');
+      expect(updateCall[0]).not.toContain('mother_name');
+      expect(updateCall[0]).not.toContain('alternate_mobile');
+      expect(updateCall[0]).toContain('uploaded_batch_id');
     });
 
     it('should log changes in data_edit_logs with admin user ID', async () => {
@@ -91,17 +92,12 @@ describe('Review Service - Admin Editing Tests', () => {
       const mockCenterId = uuidv4();
       const mockAdminId = uuidv4();
       const mockStudents = [{ id: 's1', student_name: 'Test' }];
-      const mockChanges = [
-        {
-          studentId: 's1',
-          field: 'student_name',
-          oldValue: 'Old Name',
-          newValue: 'Test',
-        },
-      ];
 
       mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockCenterId }]])
+        .mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]])
+        .mockResolvedValueOnce([
+          [{ id: 's1', student_name: 'Old Name', uploaded_batch_id: null, current_batch_number: null }],
+        ])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ insertId: 1 }]);
 
@@ -109,17 +105,17 @@ describe('Review Service - Admin Editing Tests', () => {
         mockUploadId,
         mockCenterId,
         mockStudents,
-        mockChanges,
+        [],
         mockAdminId
       );
 
-      // Verify data_edit_logs INSERT has edited_by = admin
       const logCall = mockConnection.query.mock.calls.find((call) =>
         call[0].includes('INSERT INTO data_edit_logs')
       );
 
       expect(logCall).toBeDefined();
       expect(logCall[0]).toContain('edited_by');
+      expect(logCall[0]).toContain('record_id');
       expect(logCall[1]).toContain(mockAdminId);
     });
 
@@ -128,17 +124,20 @@ describe('Review Service - Admin Editing Tests', () => {
       const mockCenterId = uuidv4();
       const mockAdminId = uuidv4();
       const mockStudents = [{ id: 's1', student_name: 'Test', partner_student_id: 'S001' }];
-      const mockChanges = [];
 
       mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockCenterId }]])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]);
+        .mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]])
+        .mockResolvedValueOnce([
+          [{ id: 's1', student_name: 'Old', uploaded_batch_id: null, current_batch_number: null }],
+        ])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ insertId: 1 }]);
 
       await reviewService.saveAdminEdits(
         mockUploadId,
         mockCenterId,
         mockStudents,
-        mockChanges,
+        [],
         mockAdminId
       );
 
@@ -158,26 +157,30 @@ describe('Review Service - Admin Editing Tests', () => {
         { id: 's2', partner_student_id: 'S002', student_name: 'Student 2' },
         { id: 's3', partner_student_id: 'S003', student_name: 'Student 3' },
       ];
-      const mockChanges = [
-        { studentId: 's1', field: 'student_name', oldValue: 'Old 1', newValue: 'Student 1' },
-        { studentId: 's2', field: 'student_name', oldValue: 'Old 2', newValue: 'Student 2' },
-        { studentId: 's3', field: 'student_name', oldValue: 'Old 3', newValue: 'Student 3' },
-      ];
 
       mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockCenterId }]])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]) // update s1
-        .mockResolvedValueOnce([{ affectedRows: 1 }]) // update s2
-        .mockResolvedValueOnce([{ affectedRows: 1 }]) // update s3
-        .mockResolvedValueOnce([{ insertId: 1 }]) // log s1
-        .mockResolvedValueOnce([{ insertId: 2 }]) // log s2
-        .mockResolvedValueOnce([{ insertId: 3 }]); // log s3
+        .mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]])
+        .mockResolvedValueOnce([
+          [{ id: 's1', student_name: 'Old 1', uploaded_batch_id: null, current_batch_number: null }],
+        ])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ insertId: 1 }])
+        .mockResolvedValueOnce([
+          [{ id: 's2', student_name: 'Old 2', uploaded_batch_id: null, current_batch_number: null }],
+        ])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ insertId: 2 }])
+        .mockResolvedValueOnce([
+          [{ id: 's3', student_name: 'Old 3', uploaded_batch_id: null, current_batch_number: null }],
+        ])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ insertId: 3 }]);
 
       const result = await reviewService.saveAdminEdits(
         mockUploadId,
         mockCenterId,
         mockStudents,
-        mockChanges,
+        [],
         mockAdminId
       );
 
@@ -279,7 +282,17 @@ describe('Review Service - Admin Editing Tests', () => {
       ];
 
       mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockCenterId }]])
+        .mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]])
+        .mockResolvedValueOnce([
+          [
+            {
+              id: 'student-uuid',
+              student_name: 'Original Name',
+              uploaded_batch_id: null,
+              current_batch_number: null,
+            },
+          ],
+        ])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ insertId: 1 }]);
 
@@ -363,6 +376,7 @@ describe('Review Service - Admin Editing Tests', () => {
 
       expect(adminEdit).toBeDefined();
       expect(partnerEdit).toBeDefined();
+      expect(mockConnection.query.mock.calls[0][0]).toContain('record_id = ?');
     });
 
     it('should be visible to both admin and partner', async () => {
@@ -393,7 +407,7 @@ describe('Review Service - Admin Editing Tests', () => {
       const mockChanges = [{ studentId: 's1', field: 'name', oldValue: 'Old', newValue: 'Test' }];
 
       mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockCenterId }]])
+        .mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]])
         .mockRejectedValueOnce(new Error('Database error'));
 
       await expect(
@@ -418,7 +432,10 @@ describe('Review Service - Admin Editing Tests', () => {
       const mockChanges = [{ studentId: 's1', field: 'name', oldValue: 'Old', newValue: 'Test' }];
 
       mockConnection.query
-        .mockResolvedValueOnce([[{ id: mockCenterId }]])
+        .mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]])
+        .mockResolvedValueOnce([
+          [{ id: 's1', student_name: 'Old', uploaded_batch_id: null, current_batch_number: null }],
+        ])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ insertId: 1 }]);
 
@@ -464,14 +481,14 @@ describe('Review Service - Admin Editing Tests', () => {
       const mockCenterId = uuidv4();
       const mockAdminId = uuidv4();
 
-      mockConnection.query.mockResolvedValueOnce([[{ id: mockCenterId }]]);
+      mockConnection.query.mockResolvedValueOnce([[{ id: mockCenterId, partner_id: 'partner-uuid' }]]);
 
       // Call saveAdminEdits so the SELECT query is actually executed
       await reviewService.saveAdminEdits(mockUploadId, mockCenterId, [], [], mockAdminId);
 
       // Verify query checks both center ID and upload ID
       const verifyCall = mockConnection.query.mock.calls.find((call) =>
-        call[0].includes('SELECT id FROM uploaded_centers')
+        call[0].includes('FROM uploaded_centers')
       );
 
       expect(verifyCall[0]).toContain('data_upload_id = ?');

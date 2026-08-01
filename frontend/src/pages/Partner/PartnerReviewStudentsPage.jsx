@@ -105,6 +105,8 @@ const PartnerReviewStudentsPage = () => {
 
       setStudents(studentsData);
       setOriginalStudents(JSON.parse(JSON.stringify(studentsData)));
+      // Enable Resubmit if edits were already saved in a previous session
+      setHasSavedChanges(studentsData.some((s) => Number(s.is_edited) === 1));
     } catch (error) {
       console.error("Error fetching students:", error);
       const errorMessage =
@@ -852,17 +854,19 @@ const PartnerReviewStudentsPage = () => {
       const response = await apiClient.post(
         `/partners/uploads/${uploadId}/resubmit`,
       );
-      toast.success(response.data.data.message);
+      toast.success(
+        response.data.data?.message ||
+          response.data.message ||
+          "Upload resubmitted successfully",
+      );
 
       // Reset all states after successful resubmit
       setHasSavedChanges(false);
       setHasChanges(false);
 
       setTimeout(() => {
-        navigate(
-          ROUTES.PARTNER_REJECTED_CENTERS.replace(":uploadId", uploadId),
-        );
-      }, 2000);
+        navigate(ROUTES.PARTNER_REJECTED_UPLOADS);
+      }, 1500);
     } catch (error) {
       console.error("Error resubmitting:", error);
       toast.error(error.response?.data?.message || "Failed to resubmit upload");

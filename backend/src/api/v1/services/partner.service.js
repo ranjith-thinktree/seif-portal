@@ -1,6 +1,7 @@
 const db = require('../../../database/connection');
 const { v4: uuidv4 } = require('uuid');
 const { convertToUUID } = require('../../../utils/uuid.util');
+const { syncUploadLifecycle } = require('../../../utils/uploadStatus.util');
 const bcrypt = require('bcryptjs');
 const emailService = require('../../../utils/email.util');
 
@@ -1604,7 +1605,7 @@ class PartnerService {
   }
 
   /**
-   * Resubmit upload (create Version 2)
+   * Resubmit upload after partner edits (create next version with rejected centers copied)
    * @param {string} uploadId - Original upload ID
    * @param {string} partnerId - Partner ID
    * @param {string} userId - User ID who is resubmitting
@@ -1615,10 +1616,15 @@ class PartnerService {
     try {
       await connection.beginTransaction();
 
-      // Get original upload
+      const uploadUuid = convertToUUID(uploadId);
+      const partnerUuid = convertToUUID(partnerId);
+      const userUuid = userId ? convertToUUID(userId) : null;
+
+      // Get original upload (active only)
       const [uploads] = await connection.query(
-        'SELECT * FROM data_uploads WHERE id = ? AND partner_id = ?',
-        [uploadId, partnerId]
+        `SELECT * FROM data_uploads
+         WHERE id = ? AND partner_id = ? AND deleted_at IS NULL`,
+        [uploadUuid, partnerUuid]
       );
 
       if (!uploads || uploads.length === 0) {
@@ -1626,30 +1632,236 @@ class PartnerService {
       }
 
       const original = uploads[0];
+
+      // Only rejected centers are resubmitted for admin re-review
+      const [rejectedCenters] = await connection.query(
+        `SELECT * FROM uploaded_centers
+         WHERE data_upload_id = ? AND review_status = 'rejected'`,
+        [uploadUuid]
+      );
+
+      if (!rejectedCenters.length) {
+        throw new Error('No rejected centers found to resubmit');
+      }
+
+      const rejectedCenterIds = rejectedCenters.map((c) => c.id);
+      const centerPlaceholders = rejectedCenterIds.map(() => '?').join(',');
+
+      // Require at least one saved partner edit on rejected students
+      const [editedCheck] = await connection.query(
+        `SELECT COUNT(*) as cnt FROM uploaded_students
+         WHERE data_upload_id = ?
+           AND uploaded_center_id IN (${centerPlaceholders})
+           AND is_edited = 1`,
+        [uploadUuid, ...rejectedCenterIds]
+      );
+
+      if (!editedCheck[0] || Number(editedCheck[0].cnt) === 0) {
+        throw new Error('No changes detected. Please save edits before resubmitting.');
+      }
+
       const version = (original.version || 1) + 1;
       const newUploadId = uuidv4();
+      const parentUploadId = original.parent_upload_id || uploadUuid;
+      const uploadedBy = userUuid || original.uploaded_by;
 
-      // Create new version
+      if (!uploadedBy) {
+        throw new Error('Unable to determine uploaded_by for resubmission');
+      }
+
+      // Create next version upload shell
       await connection.query(
         `INSERT INTO data_uploads
-         (id, partner_id, upload_type, file_name, total_records, status, version, parent_upload_id, created_at)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, NOW())`,
+         (id, partner_id, upload_type, file_url, file_name, total_records,
+          total_centers, total_batches, total_students, centers_total,
+          centers_reviewed, centers_approved, centers_rejected, review_progress,
+          status, uploaded_by, version, parent_upload_id, created_at)
+         VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 'not_started', 'pending', ?, ?, ?, NOW())`,
         [
           newUploadId,
-          partnerId,
-          original.upload_type || null,
+          partnerUuid,
+          original.upload_type || 'center_batch_student',
+          original.file_url || null,
           original.file_name || null,
-          original.total_records || 0,
+          uploadedBy,
           version,
-          uploadId,
+          parentUploadId,
         ]
       );
 
-      // Mark original as superseded (soft delete)
-      await connection.query('UPDATE data_uploads SET deleted_at = NOW() WHERE id = ?', [uploadId]);
+      // Copy rejected centers as pending
+      const centerIdMap = {};
+      for (const center of rejectedCenters) {
+        const newCenterId = uuidv4();
+        centerIdMap[center.id] = newCenterId;
+
+        await connection.query(
+          `INSERT INTO uploaded_centers (
+            id, data_upload_id, data_upload_version, partner_id, csv_center_id,
+            center_name, center_type, region, city, state, address,
+            year_of_establishment, status, center_head, mobile_number, email,
+            approval_status, review_status, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', NOW())`,
+          [
+            newCenterId,
+            newUploadId,
+            version,
+            partnerUuid,
+            center.csv_center_id,
+            center.center_name,
+            center.center_type,
+            center.region,
+            center.city,
+            center.state,
+            center.address,
+            center.year_of_establishment,
+            center.status,
+            center.center_head,
+            center.mobile_number,
+            center.email,
+          ]
+        );
+      }
+
+      // Copy batches for those centers
+      const [batches] = await connection.query(
+        `SELECT * FROM uploaded_batches
+         WHERE data_upload_id = ?
+           AND uploaded_center_id IN (${centerPlaceholders})`,
+        [uploadUuid, ...rejectedCenterIds]
+      );
+
+      const batchIdMap = {};
+      for (const batch of batches) {
+        const newCenterId = centerIdMap[batch.uploaded_center_id];
+        if (!newCenterId) continue;
+
+        const newBatchId = uuidv4();
+        batchIdMap[batch.id] = newBatchId;
+
+        await connection.query(
+          `INSERT INTO uploaded_batches (
+            id, data_upload_id, csv_center_id, uploaded_center_id, partner_id,
+            batch_number, batch_number_display, batch_start_date, batch_complete_date,
+            total_students, male_students, female_students,
+            approval_status, review_status, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', NOW())`,
+          [
+            newBatchId,
+            newUploadId,
+            batch.csv_center_id,
+            newCenterId,
+            partnerUuid,
+            batch.batch_number,
+            batch.batch_number_display,
+            batch.batch_start_date,
+            batch.batch_complete_date,
+            batch.total_students,
+            batch.male_students,
+            batch.female_students,
+          ]
+        );
+      }
+
+      // Copy students (including partner edits / is_edited flag)
+      const [students] = await connection.query(
+        `SELECT * FROM uploaded_students
+         WHERE data_upload_id = ?
+           AND uploaded_center_id IN (${centerPlaceholders})`,
+        [uploadUuid, ...rejectedCenterIds]
+      );
+
+      for (const student of students) {
+        const newCenterId = centerIdMap[student.uploaded_center_id];
+        if (!newCenterId) continue;
+
+        const newBatchId = student.uploaded_batch_id
+          ? batchIdMap[student.uploaded_batch_id] || null
+          : null;
+
+        await connection.query(
+          `INSERT INTO uploaded_students (
+            id, data_upload_id, csv_center_id, uploaded_batch_id, uploaded_center_id,
+            partner_id, partner_student_id, student_name, father_name, date_of_birth,
+            gender, mobile_number, email, address, city, state, district, country,
+            qualification, enrollment_date, course_name, course_duration_months,
+            training_status, approval_status, review_status, is_edited, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?, NOW())`,
+          [
+            uuidv4(),
+            newUploadId,
+            student.csv_center_id,
+            newBatchId,
+            newCenterId,
+            partnerUuid,
+            student.partner_student_id,
+            student.student_name,
+            student.father_name,
+            student.date_of_birth,
+            student.gender,
+            student.mobile_number,
+            student.email,
+            student.address,
+            student.city,
+            student.state,
+            student.district,
+            student.country || 'India',
+            student.qualification,
+            student.enrollment_date,
+            student.course_name,
+            student.course_duration_months,
+            student.training_status || 'enrolled',
+            student.is_edited ? 1 : 0,
+          ]
+        );
+      }
+
+      // Refresh counters / status on the new upload
+      await syncUploadLifecycle(connection, newUploadId, null, 'pending');
+      await connection.query(
+        `UPDATE data_uploads
+         SET total_centers = (SELECT COUNT(*) FROM uploaded_centers WHERE data_upload_id = ?),
+             total_batches = (SELECT COUNT(*) FROM uploaded_batches WHERE data_upload_id = ?),
+             total_students = (SELECT COUNT(*) FROM uploaded_students WHERE data_upload_id = ?),
+             total_records = (SELECT COUNT(*) FROM uploaded_students WHERE data_upload_id = ?)
+         WHERE id = ?`,
+        [newUploadId, newUploadId, newUploadId, newUploadId, newUploadId]
+      );
+
+      // Soft-delete superseded upload
+      await connection.query('UPDATE data_uploads SET deleted_at = NOW() WHERE id = ?', [
+        uploadUuid,
+      ]);
+
+      // Notify admins about resubmission
+      const [admins] = await connection.query(
+        `SELECT id FROM users WHERE role IN ('ADMIN', 'SUPER_ADMIN') AND status = 'active'`
+      );
+      for (const admin of admins) {
+        await connection.query(
+          `INSERT INTO notifications (
+            id, recipient_id, recipient_role, type, alert_type, title, message,
+            related_entity_type, related_entity_id, is_read, sent_via, created_at
+          ) VALUES (?, ?, 'admin', 'upload', 'info', ?, ?, 'data_upload', ?, 0, 'in_app', NOW())`,
+          [
+            uuidv4(),
+            admin.id,
+            `Data Resubmitted - Version ${version}`,
+            `Partner has resubmitted corrected data for review (version ${version}).`,
+            newUploadId,
+          ]
+        );
+      }
 
       await connection.commit();
-      return { success: true, newUploadId, version };
+      return {
+        success: true,
+        newUploadId,
+        version,
+        centersResubmitted: rejectedCenters.length,
+        studentsResubmitted: students.length,
+        message: `Successfully resubmitted as version ${version}. Admin will review your corrections.`,
+      };
     } catch (error) {
       await connection.rollback();
       console.error('Error in resubmitUpload:', error);

@@ -416,7 +416,10 @@ class PartnerController {
       if (error.message.includes('not found') || error.message.includes('unauthorized')) {
         return errorResponse(res, error.message, 404);
       }
-      if (error.message.includes('No changes detected')) {
+      if (
+        error.message.includes('No changes detected') ||
+        error.message.includes('No rejected centers')
+      ) {
         return errorResponse(res, error.message, 400);
       }
       return errorResponse(res, 'Failed to resubmit upload', 500);
