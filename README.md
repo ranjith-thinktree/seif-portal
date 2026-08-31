@@ -198,7 +198,7 @@ Proprietary - ThinkTree Media
 ## Contact
 
 Developed by **ThinkTree Media**  
-[ranjith@thinktreemedia.in](mailto:ranjith@thinktreemedia.in)
+[rsonalikeshri@gmail.com](mailto:rsonalikeshri@gmail.com)
 
 ---
 

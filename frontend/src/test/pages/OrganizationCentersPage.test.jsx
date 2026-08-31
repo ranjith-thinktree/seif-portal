@@ -9,6 +9,13 @@ import {
 } from "@testing-library/react";
 
 // --- Mocks ---
+vi.mock("../../hooks/useAuth", () => ({
+  useAuth: () => ({
+    user: { role: "ADMIN" },
+    role: "ADMIN",
+    partnerId: null,
+  }),
+}));
 vi.mock("react-toastify", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));

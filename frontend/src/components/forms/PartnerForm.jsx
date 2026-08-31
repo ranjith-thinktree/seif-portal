@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { toast } from "react-toastify";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
@@ -51,6 +52,7 @@ const PartnerForm = ({
     country_id: "",
     state_id: "",
     city_id: "",
+    city_name: "",
     region: "",
     address_line1: "",
     address_line2: "",
@@ -107,6 +109,7 @@ const PartnerForm = ({
         country_id: partner.country_id ? String(partner.country_id) : "",
         state_id: partner.state_id ? String(partner.state_id) : "",
         city_id: partner.city_id ? String(partner.city_id) : "",
+        city_name: partner.city || "",
         region: partner.region || "",
         address_line1: partner.address_line1 || "",
         address_line2: partner.address_line2 || "",
@@ -154,6 +157,7 @@ const PartnerForm = ({
         ...prev,
         state_id: "",
         city_id: "",
+        city_name: "",
       }));
       setCitySearch("");
       setIsCityDropdownOpen(false);
@@ -180,11 +184,6 @@ const PartnerForm = ({
       }
     } else {
       setCities([]);
-    }
-
-    // Reset city when state changes (if not already reset)
-    if (formData.city_id && formData.state_id === "") {
-      setFormData((prev) => ({ ...prev, city_id: "" }));
     }
   }, [formData.state_id, formData.country_id, states.length]);
 
@@ -343,9 +342,37 @@ const PartnerForm = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (validateForm()) {
-      onSubmit(formData);
+    if (!validateForm()) {
+      toast.error("Please complete the required fields highlighted in red.");
+      return;
     }
+
+    const payload = {
+      ...formData,
+      country_id: formData.country_id
+        ? parseInt(formData.country_id, 10)
+        : null,
+      state_id: formData.state_id ? parseInt(formData.state_id, 10) : null,
+      city_id: formData.city_id ? parseInt(formData.city_id, 10) : null,
+      state_presence: (formData.state_presence || []).map((id) =>
+        String(id),
+      ),
+      postal_code: formData.postal_code || undefined,
+      address_line2: formData.address_line2 || undefined,
+      contact_person_2_name: formData.contact_person_2_name || undefined,
+      contact_person_2_mobile: formData.contact_person_2_mobile || undefined,
+      date_of_incorporation: formData.date_of_incorporation || undefined,
+      legal_status: formData.legal_status || undefined,
+      registered_as: formData.registered_as || undefined,
+      fcra_registration_number: formData.fcra_registration_number || undefined,
+      years_of_experience:
+        formData.years_of_experience === "" ||
+        formData.years_of_experience === null
+          ? undefined
+          : formData.years_of_experience,
+    };
+    delete payload.city_name;
+    onSubmit(payload);
   };
 
   return (
@@ -416,6 +443,14 @@ const PartnerForm = ({
                     {type.label}
                   </option>
                 ))}
+                {formData.organization_type &&
+                  !organizationTypes.some(
+                    (type) => type.value === formData.organization_type,
+                  ) && (
+                    <option value={formData.organization_type}>
+                      {formData.organization_type}
+                    </option>
+                  )}
               </select>
               {errors.organization_type && (
                 <p className="text-red-500 text-xs mt-1">
@@ -529,10 +564,13 @@ const PartnerForm = ({
                       : "bg-white cursor-pointer"
                   }`}
                 >
-                  {cities.find((c) => c.id === parseInt(formData.city_id))
-                    ?.name || "Select City"}
+                  {cities.find(
+                    (c) => String(c.id) === String(formData.city_id),
+                  )?.name ||
+                    formData.city_name ||
+                    "Select City"}
                 </button>
-                {isCityDropdownOpen && cities.length > 0 && (
+                {isCityDropdownOpen && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
                     <div className="p-2 border-b">
                       <Input
@@ -559,6 +597,7 @@ const PartnerForm = ({
                               setFormData((prev) => ({
                                 ...prev,
                                 city_id: city.id.toString(),
+                                city_name: city.name,
                               }));
                               setIsCityDropdownOpen(false);
                               setCitySearch("");
@@ -842,10 +881,10 @@ const PartnerForm = ({
               </label>
               <MultiSelect
                 options={allStates.map((state) => ({
-                  value: state.id,
+                  value: String(state.id),
                   label: state.name,
                 }))}
-                selected={formData.state_presence}
+                selected={(formData.state_presence || []).map(String)}
                 onChange={handleStatePresenceChange}
                 placeholder="Select states where partner operates..."
                 searchPlaceholder="Search states..."
@@ -872,12 +911,18 @@ const PartnerForm = ({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="bg-[#009530] text-white hover:bg-[#007a28]"
+          >
             {isLoading
-              ? "Creating..."
+              ? partner
+                ? "Updating..."
+                : "Creating..."
               : partner
-              ? "Update Partner"
-              : "Create Partner"}
+                ? "Update Partner"
+                : "Create Partner"}
           </Button>
         </div>
       </form>

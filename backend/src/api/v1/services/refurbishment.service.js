@@ -826,6 +826,30 @@ class RefurbishmentService {
       // 8. Commit transaction
       await connection.commit();
 
+      try {
+        const [meta] = await db.query(
+          `SELECT p.name AS partner_name, c.center_name
+           FROM refurbishment_requests rr
+           JOIN centers c ON c.id = rr.center_id
+           JOIN partners p ON p.id = c.partner_id
+           WHERE rr.id = ?
+           LIMIT 1`,
+          [refurbishmentRequestId]
+        );
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'refurbishment.submitted_admin',
+          {
+            partnerName: meta?.[0]?.partner_name,
+            centerName: meta?.[0]?.center_name,
+            date: new Date().toLocaleDateString('en-IN'),
+          },
+          { audience: 'admin' }
+        );
+      } catch (emailErr) {
+        console.warn('[email] refurbishment submitted email skipped:', emailErr.message);
+      }
+
       // 9. Emit real-time WebSocket notification to all ADMIN users
       try {
         const socketPayload = {
@@ -1450,20 +1474,23 @@ class RefurbishmentService {
 
       // Send eligibility email to partner primary contact (template #1)
       if (partnerEmail) {
-        emailService
-          .sendRefurbishmentEligiblePartnerEmail({
-            toEmail: partnerEmail,
-            recipientName: partnerContactName,
+        const due = new Date();
+        due.setDate(due.getDate() + 14);
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'refurbishment.eligible_partner',
+          {
             partnerName,
             centerName,
-            financialYear: emailService.getCurrentFinancialYearLabel(),
-          })
-          .catch((emailErr) => {
-            console.error(
-              '[RefurbishmentService] Failed to send refurbishment eligibility email:',
-              emailErr.message
-            );
-          });
+            year: emailService.getCurrentFinancialYearLabel(),
+            dueDate: due.toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            }),
+          },
+          { audience: 'partner', partnerId, extraEmails: [partnerEmail] }
+        );
       }
 
       console.log(
@@ -3263,22 +3290,21 @@ class RefurbishmentService {
           created_at: new Date().toISOString(),
         });
 
-        if (partnerUsers[0].email) {
-          emailService
-            .sendRefurbishmentNotificationEmail({
-              email: partnerUsers[0].email,
-              partnerName: requestData.partner_name,
-              centerName: requestData.center_name,
-              message: approvalMessage,
-              packageModifications: notificationPayload.package_modifications,
-            })
-            .catch((emailErr) => {
-              console.error(
-                '[RefurbishmentService] Failed to send approval email:',
-                emailErr.message
-              );
-            });
-        }
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        const approvedPackage =
+          notificationPayload.package_modifications?.added?.[0]?.package_name ||
+          'Package 1';
+        fireEmail(
+          'refurbishment.approved_partner',
+          {
+            partnerName: requestData.partner_name,
+            centerName: requestData.center_name,
+            packageName: approvedPackage,
+            date: new Date().toLocaleDateString('en-IN'),
+            adminName: 'SEIF Portal',
+          },
+          { audience: 'partner', partnerId: requestData.partner_id }
+        );
       }
 
       return {
@@ -3394,6 +3420,21 @@ class RefurbishmentService {
       }
 
       await connection.commit();
+
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'refurbishment.rejected_partner',
+          {
+            partnerName: requestData.partner_name,
+            centerName: requestData.center_name,
+            adminName: 'SEIF Portal',
+          },
+          { audience: 'partner', partnerId: requestData.partner_id }
+        );
+      } catch (e) {
+        /* non-blocking */
+      }
 
       // Auto-mark the original partner-response notification as read now that it has been rejected
       await db.query(
@@ -3560,6 +3601,21 @@ class RefurbishmentService {
       }
 
       await connection.commit();
+
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'refurbishment.resend_partner',
+          {
+            partnerName: requestData.partner_name,
+            centerName: requestData.center_name,
+            adminName: 'SEIF Portal',
+          },
+          { audience: 'partner', partnerId: requestData.partner_id }
+        );
+      } catch (e) {
+        /* non-blocking */
+      }
 
       if (notificationId && partnerUsers && partnerUsers.length > 0) {
         emitToUser(partnerUsers[0].id, 'notification:new', {
@@ -4294,6 +4350,31 @@ class RefurbishmentService {
 
       await connection.commit();
       console.log(`[RefurbishmentService] Partner acknowledgment submitted for ${requestId}`);
+
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'refurbishment.status_admin',
+          {
+            partnerName: requestData.partner_name,
+            centerName: requestData.center_name,
+            adminName: 'Admin',
+            workStatus: 'Completed',
+            supportRequired: 'Nil',
+          },
+          { audience: 'admin' }
+        );
+        fireEmail(
+          'refurbishment.ack_partner',
+          {
+            partnerName: requestData.partner_name,
+            centerName: requestData.center_name,
+          },
+          { audience: 'partner', partnerId: requestData.partner_id }
+        );
+      } catch (e) {
+        /* non-blocking */
+      }
 
       try {
         emitToRole('ADMIN', 'notification:new', {

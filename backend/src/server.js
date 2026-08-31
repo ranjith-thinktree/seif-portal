@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('./config/loadEnv');
 
 // Initialize Sentry for error tracking (must be first)
 const Sentry = require('@sentry/node');

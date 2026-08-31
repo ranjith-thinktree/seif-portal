@@ -122,7 +122,7 @@ const IndiaMapComponent = ({
   };
 
   return (
-    <div className="w-full h-full flex items-center justify-center">
+    <div className="w-full h-full min-h-[700px] flex items-center justify-center">
       <IndiaMap
         stateColors={stateColors}
         onStateHover={handleStateHover}
@@ -530,10 +530,10 @@ const IndiaTrainingCard = ({
   return (
     <div className="relative bg-white rounded-xl shadow-sm p-6 border-[#A5A5A5] border h-full">
       {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 items-end ">
+      <div className="grid grid-cols-1 lg:grid-cols-3 items-start ">
         {/* Map Area (Left - 2/3) */}
         <div className="lg:col-span-2">
-          <div className="rounded-lg h-full min-h-[450px] flex items-center justify-center">
+          <div className="rounded-lg h-full min-h-[700px] flex items-center justify-center">
             <IndiaMapComponent
               stateStats={stateStats}
               selectedStateCode={hoveredStateCode}

@@ -1282,17 +1282,23 @@ exports.resubmitEmploymentUpload = async (req, res) => {
 
     // Notify admins of new pending review
     try {
-      const notifId = uuidv4();
-      await notificationService.createNotification({
-        id: notifId,
+      await notificationService.sendNotificationToAdmins({
+        type: 'employment_upload',
+        alertType: 'info',
         title: 'Employment Upload Resubmitted',
         message: `${result.upload?.partner_name || 'A partner'} has resubmitted an employment upload (v${result.version}) for review.`,
-        type: 'employment_upload',
-        related_entity_type: 'employment_upload',
-        related_entity_id: result.newUploadId,
-        target_role: 'ADMIN',
+        relatedEntityType: 'employment_upload',
+        relatedEntityId: result.newUploadId,
       });
-      emitToRole('ADMIN', 'notification', { message: 'New employment upload pending review' });
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail('employment.resubmitted_admin', { partnerName: result.upload?.partner_name }, { audience: 'admin' });
+      } catch (e) {
+        /* non-blocking */
+      }
+      emitToRole('ADMIN', 'notification:new', {
+        message: 'New employment upload pending review',
+      });
     } catch (notifErr) {
       console.warn('Notification failed (non-fatal):', notifErr.message);
     }

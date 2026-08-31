@@ -63,6 +63,33 @@ async function run() {
     `);
     console.log('kpi_settings seeded OK');
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS performance_rating_settings (
+        id CHAR(36) NOT NULL,
+        min_score INT NOT NULL,
+        max_score INT DEFAULT NULL,
+        stars TINYINT NOT NULL,
+        rating TINYINT NOT NULL,
+        created_by CHAR(36) DEFAULT NULL,
+        updated_by CHAR(36) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_performance_rating_min_score (min_score)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await db.query(`
+      INSERT IGNORE INTO performance_rating_settings
+        (id, min_score, max_score, stars, rating)
+      VALUES
+        ('${uuidv4()}', 0, 50, 1, 1),
+        ('${uuidv4()}', 51, 75, 2, 2),
+        ('${uuidv4()}', 76, 100, 3, 3),
+        ('${uuidv4()}', 101, 150, 4, 4),
+        ('${uuidv4()}', 151, NULL, 5, 5)
+    `);
+    console.log('performance_rating_settings table and defaults seeded OK');
+
     console.log('\nAll tables created successfully!');
     process.exit(0);
   } catch (err) {

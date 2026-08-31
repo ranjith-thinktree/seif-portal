@@ -1168,7 +1168,7 @@ export function CenterPerformanceCard({ loading, centersPerformance }) {
             Center Performance
           </CardTitle>
           <CardDescription>
-            Top 15 centers ranked by students trained
+            Centres ranked by yearly students trained and configured rating
           </CardDescription>
         </div>
         <DownloadBtn
@@ -1177,6 +1177,8 @@ export function CenterPerformanceCard({ loading, centersPerformance }) {
             Partner: r.partner_name,
             State: r.state,
             "Students Trained": r.students_trained,
+            "Rating Stars": r.rating_stars,
+            Rating: r.performance_rating,
             Placed: r.placed,
             "Placement %": r.placement_pct,
           }))}
@@ -1213,6 +1215,9 @@ export function CenterPerformanceCard({ loading, centersPerformance }) {
                     Students
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Rating
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Placed
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -1246,6 +1251,21 @@ export function CenterPerformanceCard({ loading, centersPerformance }) {
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900 tabular-nums">
                       {fmt(c.students_trained)}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {c.rating_stars ? (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"
+                          title={`Rating ${c.performance_rating}`}
+                        >
+                          {"★".repeat(Number(c.rating_stars))}
+                          <span className="text-amber-800">
+                            ({c.performance_rating})
+                          </span>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right text-blue-600 tabular-nums">
                       {fmt(c.placed)}

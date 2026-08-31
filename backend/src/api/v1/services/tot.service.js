@@ -801,6 +801,12 @@ class TotService {
       );
 
       await connection.commit();
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail('tot.approved_partner', {}, { audience: 'partner', partnerId: upload.partner_id });
+      } catch (e) {
+        /* non-blocking */
+      }
       return { approved: rows.length };
     } catch (error) {
       await connection.rollback();
@@ -824,6 +830,12 @@ class TotService {
       `UPDATE tot_uploads SET status = 'rejected', reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE id = ?`,
       [reviewedBy, remarks || null, uploadId]
     );
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      fireEmail('tot.rejected_partner', {}, { audience: 'partner', partnerId: upload.partner_id });
+    } catch (e) {
+      /* non-blocking */
+    }
   }
 
   /**

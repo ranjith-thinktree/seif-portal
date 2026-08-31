@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('./loadEnv');
 
 module.exports = {
   database: {

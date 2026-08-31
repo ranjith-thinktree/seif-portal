@@ -106,6 +106,50 @@ exports.updateTemplate = async (req, res) => {
   }
 };
 
+exports.getPerformanceRatingSettings = async (req, res) => {
+  try {
+    const settings = await settingsService.getPerformanceRatingSettings();
+    return ApiResponse.success(res, settings, 'Performance rating settings retrieved');
+  } catch (error) {
+    console.error('[settingsController] getPerformanceRatingSettings error:', error);
+    return ApiResponse.error(res, error.message, 500);
+  }
+};
+
+exports.createPerformanceRatingSetting = async (req, res) => {
+  try {
+    const setting = await settingsService.createPerformanceRatingSetting(req.body, req.user.id);
+    return ApiResponse.success(res, setting, 'Performance rating setting created', 201);
+  } catch (error) {
+    console.error('[settingsController] createPerformanceRatingSetting error:', error);
+    return ApiResponse.error(res, error.message, 400);
+  }
+};
+
+exports.updatePerformanceRatingSetting = async (req, res) => {
+  try {
+    const setting = await settingsService.updatePerformanceRatingSetting(
+      req.params.id,
+      req.body,
+      req.user.id
+    );
+    return ApiResponse.success(res, setting, 'Performance rating setting updated');
+  } catch (error) {
+    console.error('[settingsController] updatePerformanceRatingSetting error:', error);
+    return ApiResponse.error(res, error.message, 400);
+  }
+};
+
+exports.deletePerformanceRatingSetting = async (req, res) => {
+  try {
+    await settingsService.deletePerformanceRatingSetting(req.params.id);
+    return ApiResponse.success(res, null, 'Performance rating setting deleted');
+  } catch (error) {
+    console.error('[settingsController] deletePerformanceRatingSetting error:', error);
+    return ApiResponse.error(res, error.message, 400);
+  }
+};
+
 /**
  * GET /settings/dashboard-data
  * Returns the full dashboardData.json content
@@ -200,5 +244,87 @@ exports.updateDashboardData = async (req, res) => {
   } catch (error) {
     console.error('[settingsController] updateDashboardData error:', error);
     return ApiResponse.error(res, 'Failed to save dashboard data', 500);
+  }
+};
+
+exports.listEmailTemplates = async (req, res) => {
+  try {
+    const emailTemplateService = require('../../../services/emailTemplate.service');
+    const data = await emailTemplateService.listTemplates();
+    return ApiResponse.success(res, data, 'Email templates fetched');
+  } catch (error) {
+    console.error('[settingsController] listEmailTemplates error:', error);
+    return ApiResponse.error(res, 'Failed to load email templates', 500);
+  }
+};
+
+exports.updateEmailTemplate = async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { subject, body } = req.body || {};
+    if (!subject || !body) {
+      return ApiResponse.error(res, 'Subject and body are required', 400);
+    }
+    const emailTemplateService = require('../../../services/emailTemplate.service');
+    const data = await emailTemplateService.saveTemplate(key, { subject, body });
+    return ApiResponse.success(res, data, 'Email template saved');
+  } catch (error) {
+    console.error('[settingsController] updateEmailTemplate error:', error);
+    return ApiResponse.error(res, error.message || 'Failed to save email template', 400);
+  }
+};
+
+exports.resetEmailTemplate = async (req, res) => {
+  try {
+    const emailTemplateService = require('../../../services/emailTemplate.service');
+    const data = await emailTemplateService.resetTemplate(req.params.key);
+    return ApiResponse.success(res, data, 'Email template restored to default draft');
+  } catch (error) {
+    console.error('[settingsController] resetEmailTemplate error:', error);
+    return ApiResponse.error(res, error.message || 'Failed to reset email template', 400);
+  }
+};
+
+exports.testEmailTemplate = async (req, res) => {
+  try {
+    const { key } = req.params;
+    const toEmail = req.body?.toEmail || req.user?.email;
+    if (!toEmail) {
+      return ApiResponse.error(res, 'A destination email is required', 400);
+    }
+    const emailDispatch = require('../../../services/emailDispatch.service');
+    const emailTemplateService = require('../../../services/emailTemplate.service');
+    const template = await emailTemplateService.getTemplate(key);
+    const sampleVars = {
+      partnerName: 'Think Tree',
+      centerName: 'Sample Center',
+      year: '2026-27',
+      dueDate: '15 September 2026',
+      date: new Date().toLocaleDateString('en-IN'),
+      adminName: req.user?.full_name || 'Admin',
+      packageName: 'Package 1',
+      batchNumber: 'BATCH-SAMPLE',
+      assessmentDate: '15 September 2026',
+      location: 'Bengaluru',
+      workStatus: 'Completed',
+      supportRequired: 'Nil',
+      yourName: process.env.SMTP_FROM_NAME || 'SEIF Portal',
+    };
+    let result;
+    if (template?.audience === 'admin') {
+      result = await emailDispatch.sendByAudience(key, sampleVars, {
+        audience: 'admin',
+        extraEmails: [toEmail],
+      });
+    } else {
+      result = await emailDispatch.sendToRecipients(key, sampleVars, [
+        { email: toEmail, name: req.user?.full_name || 'Tester' },
+      ]);
+    }
+    const sentTo = result.recipients?.join(', ') || toEmail;
+    return ApiResponse.success(res, result, `Test email sent to ${sentTo}`);
+  } catch (error) {
+    console.error('[settingsController] testEmailTemplate error:', error);
+    return ApiResponse.error(res, error.message || 'Failed to send test email', 500);
   }
 };

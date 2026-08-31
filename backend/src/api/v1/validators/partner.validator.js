@@ -29,14 +29,21 @@ exports.createPartnerValidator = [
     .withMessage('Contact person name must not exceed 255 characters'),
 
   body('contact_email')
-    .optional()
+    .optional({ checkFalsy: true })
+    .trim()
+    .isEmail()
+    .withMessage('Invalid email format')
+    .normalizeEmail(),
+
+  body('partner_email')
+    .optional({ checkFalsy: true })
     .trim()
     .isEmail()
     .withMessage('Invalid email format')
     .normalizeEmail(),
 
   body('contact_phone')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^[0-9]{10}$/)
     .withMessage('Contact phone must be exactly 10 digits'),
@@ -72,7 +79,7 @@ exports.createPartnerValidator = [
     .withMessage('Country must not exceed 100 characters'),
 
   body('postal_code')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^[0-9]{6}$/)
     .withMessage('Postal code must be exactly 6 digits'),
@@ -83,7 +90,7 @@ exports.createPartnerValidator = [
     .withMessage('Status must be one of: active, inactive, suspended'),
 
   body('registration_date')
-    .optional()
+    .optional({ checkFalsy: true })
     .isDate()
     .withMessage('Invalid registration date format (YYYY-MM-DD)'),
 ];
@@ -119,14 +126,21 @@ exports.updatePartnerValidator = [
     .withMessage('Contact person name must not exceed 255 characters'),
 
   body('contact_email')
-    .optional()
+    .optional({ checkFalsy: true })
+    .trim()
+    .isEmail()
+    .withMessage('Invalid email format')
+    .normalizeEmail(),
+
+  body('partner_email')
+    .optional({ checkFalsy: true })
     .trim()
     .isEmail()
     .withMessage('Invalid email format')
     .normalizeEmail(),
 
   body('contact_phone')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^[0-9]{10}$/)
     .withMessage('Contact phone must be exactly 10 digits'),
@@ -162,7 +176,7 @@ exports.updatePartnerValidator = [
     .withMessage('Country must not exceed 100 characters'),
 
   body('postal_code')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^[0-9]{6}$/)
     .withMessage('Postal code must be exactly 6 digits'),
@@ -173,7 +187,7 @@ exports.updatePartnerValidator = [
     .withMessage('Status must be one of: active, inactive, suspended'),
 
   body('registration_date')
-    .optional()
+    .optional({ checkFalsy: true })
     .isDate()
     .withMessage('Invalid registration date format (YYYY-MM-DD)'),
 ];

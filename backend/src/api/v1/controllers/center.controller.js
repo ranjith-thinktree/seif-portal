@@ -213,18 +213,36 @@ class CenterController {
       const { id } = req.params;
       const { role, partner_id: user_partner_id } = req.user;
 
-      // Check ownership for partners
+      let wasRejected = false;
+      let existingForEmail = null;
       if (role === 'PARTNER') {
-        const existingCenter = await centerService.getCenterById(id);
-        if (!existingCenter) {
+        existingForEmail = await centerService.getCenterById(id);
+        if (!existingForEmail) {
           return errorResponse(res, 'Center not found', 404);
         }
-        if (existingCenter.partner_id !== user_partner_id) {
+        if (existingForEmail.partner_id !== user_partner_id) {
           return errorResponse(res, 'You do not have permission to update this center', 403);
         }
+        wasRejected = existingForEmail.approval_status === 'rejected';
       }
 
       const center = await centerService.updateCenter(id, req.body);
+
+      if (wasRejected && existingForEmail) {
+        try {
+          const { fireEmail } = require('../../../services/emailDispatch.service');
+          fireEmail(
+            'center.resubmitted_admin',
+            {
+              partnerName: existingForEmail.partner_name,
+              centerName: existingForEmail.center_name,
+            },
+            { audience: 'admin' }
+          );
+        } catch (emailErr) {
+          console.warn('[email] center resubmitted email skipped:', emailErr.message);
+        }
+      }
 
       return successResponse(res, 'Center updated successfully', center);
     } catch (error) {
@@ -322,6 +340,17 @@ class CenterController {
       const { id: userId } = req.user;
 
       const center = await centerService.rejectCenter(id, userId, rejection_reason);
+
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'center.rejected_partner',
+          { partnerName: center.partner_name, centerName: center.center_name },
+          { audience: 'partner', partnerId: center.partner_id }
+        );
+      } catch (emailErr) {
+        console.warn('[email] center rejected email skipped:', emailErr.message);
+      }
 
       return successResponse(res, 'Center rejected successfully', center);
     } catch (error) {

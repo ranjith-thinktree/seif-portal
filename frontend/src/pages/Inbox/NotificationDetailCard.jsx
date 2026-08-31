@@ -67,6 +67,8 @@ const NotificationDetailCard = ({
       case "approved":
       case "success":
         return "bg-green-100 text-green-700 border-green-200";
+      case "sent":
+        return "bg-teal-100 text-teal-800 border-teal-200";
       case "rejected":
       case "error":
         return "bg-red-100 text-red-700 border-red-200";
@@ -99,6 +101,8 @@ const NotificationDetailCard = ({
         return "APPROVED";
       case "success":
         return "SUCCESS";
+      case "sent":
+        return "SENT";
       case "rejected":
         return "REJECTED";
       case "error":

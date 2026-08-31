@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { toast } from "react-toastify";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
 import { MultiSelect } from "../ui/multi-select";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { useAuth } from "../../hooks/useAuth";
+import { STORAGE_KEYS } from "../../constants";
 import {
   getPartners,
   getCourses,
@@ -23,12 +26,22 @@ const CenterForm = ({
   isLoading = false,
   preselectedPartnerId = null,
 }) => {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const isPartner = user.role === "PARTNER";
-  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(user.role);
+  const { user: authUser, role, partnerId } = useAuth();
+  let storedUser = {};
+  try {
+    storedUser = JSON.parse(localStorage.getItem(STORAGE_KEYS.USER) || "{}");
+  } catch {
+    storedUser = {};
+  }
+  const user = authUser || storedUser;
+  const userRole = user?.role || role;
+  const isPartner = userRole === "PARTNER";
+  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(userRole);
+  const resolvedPartnerId =
+    preselectedPartnerId || partnerId || user?.partner_id || "";
 
   const [formData, setFormData] = useState({
-    partner_id: preselectedPartnerId || (isPartner ? user.partner_id : ""),
+    partner_id: resolvedPartnerId,
     center_name: "",
     center_type: "Short term",
     course_ids: [],
@@ -142,6 +155,15 @@ const CenterForm = ({
   }, [isAdmin, fetchPartners, fetchCourses, fetchCountries]);
 
   useEffect(() => {
+    if (!isPartner || !resolvedPartnerId) return;
+    setFormData((prev) =>
+      prev.partner_id === resolvedPartnerId
+        ? prev
+        : { ...prev, partner_id: resolvedPartnerId },
+    );
+  }, [isPartner, resolvedPartnerId]);
+
+  useEffect(() => {
     if (formData.country_id) {
       fetchStates(formData.country_id);
       const selectedCountry = countries.find(
@@ -217,7 +239,9 @@ const CenterForm = ({
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.partner_id) newErrors.partner_id = "Partner is required";
+    const partnerIdValue = formData.partner_id || resolvedPartnerId;
+    if (!isPartner && !partnerIdValue)
+      newErrors.partner_id = "Partner is required";
     if (!formData.center_name.trim())
       newErrors.center_name = "Center name is required";
     if (!formData.country_id) newErrors.country_id = "Country is required";
@@ -273,18 +297,21 @@ const CenterForm = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (validateForm()) {
-      const submissionData = {
-        ...formData,
-        country_id: formData.country_id ? parseInt(formData.country_id) : null,
-        state_id: formData.state_id ? parseInt(formData.state_id) : null,
-        city_id: formData.city_id ? parseInt(formData.city_id) : null,
-        year_of_establishment: formData.year_of_establishment
-          ? parseInt(formData.year_of_establishment)
-          : null,
-      };
-      onSubmit(submissionData);
+    if (!validateForm()) {
+      toast.error("Please complete the required fields highlighted in red.");
+      return;
     }
+    const submissionData = {
+      ...formData,
+      partner_id: formData.partner_id || resolvedPartnerId,
+      country_id: formData.country_id ? parseInt(formData.country_id, 10) : null,
+      state_id: formData.state_id ? parseInt(formData.state_id, 10) : null,
+      city_id: formData.city_id ? parseInt(formData.city_id, 10) : null,
+      year_of_establishment: formData.year_of_establishment
+        ? parseInt(formData.year_of_establishment, 10)
+        : null,
+    };
+    onSubmit(submissionData);
   };
 
   return (
@@ -310,6 +337,13 @@ const CenterForm = ({
         }}
         className="space-y-6"
       >
+        {isPartner && !resolvedPartnerId && (
+          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Your login is not linked to a partner organisation, so a center
+            cannot be created. Please contact an admin to attach your user to
+            Think Tree (or your organisation) and then try again.
+          </div>
+        )}
         {/* Basic Information */}
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="text-lg font-semibold text-gray-700 mb-4">
@@ -507,7 +541,7 @@ const CenterForm = ({
                 >
                   {formData.city || "Select City"}
                 </button>
-                {isCityDropdownOpen && cities.length > 0 && (
+                {isCityDropdownOpen && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
                     <div className="p-2 border-b">
                       <Input
@@ -676,7 +710,11 @@ const CenterForm = ({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="bg-[#009530] text-white hover:bg-[#007a28]"
+          >
             {isLoading ? (
               <span className="flex items-center gap-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>

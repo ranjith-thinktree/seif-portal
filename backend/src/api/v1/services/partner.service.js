@@ -1834,15 +1834,14 @@ class PartnerService {
       ]);
 
       // Notify admins about resubmission
-      const [admins] = await connection.query(
-        `SELECT id FROM users WHERE role IN ('ADMIN', 'SUPER_ADMIN') AND status = 'active'`
-      );
+      const { ACTIVE_ADMIN_SQL } = require('../../../services/emailDispatch.service');
+      const [admins] = await connection.query(`SELECT id FROM users WHERE ${ACTIVE_ADMIN_SQL}`);
       for (const admin of admins) {
         await connection.query(
           `INSERT INTO notifications (
             id, recipient_id, recipient_role, type, alert_type, title, message,
             related_entity_type, related_entity_id, is_read, sent_via, created_at
-          ) VALUES (?, ?, 'admin', 'upload', 'info', ?, ?, 'data_upload', ?, 0, 'in_app', NOW())`,
+          ) VALUES (?, ?, 'ADMIN', 'upload', 'info', ?, ?, 'data_upload', ?, 0, 'in_app', NOW())`,
           [
             uuidv4(),
             admin.id,
@@ -1854,6 +1853,12 @@ class PartnerService {
       }
 
       await connection.commit();
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail('trainee.resubmitted_admin', {}, { audience: 'admin' });
+      } catch (e) {
+        /* non-blocking */
+      }
       return {
         success: true,
         newUploadId,

@@ -6,20 +6,131 @@ const crypto = require('crypto');
  */
 class EmailService {
   constructor() {
-    // Initialize transporter (configure with your SMTP settings)
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: process.env.SMTP_PORT || 587,
-      secure: false, // true for 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
-
-    this.fromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@seif.org';
+    this._transporter = null;
+    this._verified = false;
     this.fromName = process.env.SMTP_FROM_NAME || 'SEIF Portal';
-    this.portalUrl = process.env.PORTAL_URL || 'http://localhost:5173';
+    this.portalUrl =
+      process.env.FRONTEND_URL || process.env.PORTAL_URL || 'http://localhost:5173';
+  }
+
+  get smtpUser() {
+    return (process.env.SMTP_USER || '').trim();
+  }
+
+  get smtpPassword() {
+    return String(process.env.SMTP_PASSWORD || '').replace(/\s+/g, '');
+  }
+
+  get fromEmail() {
+    return (process.env.SMTP_FROM_EMAIL || '').trim() || 'noreply@seif.org';
+  }
+
+  get fromHeader() {
+    return { name: this.fromName, address: this.fromEmail };
+  }
+
+  usesGmailSmtp() {
+    const host = String(process.env.SMTP_HOST || '').toLowerCase();
+    return host.includes('gmail.com') || host.includes('google.com');
+  }
+
+  get transporter() {
+    if (!this._transporter) {
+      const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+      const secure =
+        String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
+      this._transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port,
+        secure,
+        auth: this.smtpUser
+          ? {
+              user: this.smtpUser,
+              pass: this.smtpPassword,
+            }
+          : undefined,
+      });
+    }
+    return this._transporter;
+  }
+
+  isConfigured() {
+    return Boolean(this.smtpUser && this.smtpPassword);
+  }
+
+  async ensureReady() {
+    if (!this.isConfigured()) {
+      throw new Error(
+        'SMTP is not configured. Add SMTP_USER and SMTP_PASSWORD to backend/.env or backend/env, then restart the server.'
+      );
+    }
+    if (this._verified) return;
+    await this.transporter.verify();
+    this._verified = true;
+    console.log(`[email] SMTP verified. Visible From: "${this.fromName}" <${this.fromEmail}>`);
+    if (this.usesGmailSmtp() && this.fromEmail.toLowerCase() !== this.smtpUser.toLowerCase()) {
+      console.warn(
+        `[email] Gmail will still show ${this.smtpUser} in From unless "${this.fromEmail}" is added as a Send mail as alias in that Gmail account (Settings → Accounts → Send mail as).`
+      );
+    }
+  }
+
+  async sendConfiguredMail(options) {
+    await this.ensureReady();
+    const mail = {
+      ...options,
+      from: this.fromHeader,
+      replyTo: this.fromEmail,
+    };
+    // Gmail SMTP rejects envelope-from that is not the login mailbox.
+    // Other providers should send as SMTP_FROM_EMAIL, not the SMTP login.
+    if (!this.usesGmailSmtp()) {
+      mail.sender = this.fromEmail;
+      mail.envelope = { from: this.fromEmail, to: options.to };
+    }
+    return this.transporter.sendMail(mail);
+  }
+
+  /**
+   * Send an editable draft (plain text) wrapped in a simple HTML layout.
+   */
+  async sendDraftEmail({ toEmail, subject, textBody }) {
+    if (!toEmail) return { success: false, skipped: true };
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const htmlBody = esc(textBody)
+      .split('\n')
+      .map((line) => (line.trim() === '' ? '<br />' : `<p style="margin:0 0 10px;">${line}</p>`))
+      .join('');
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#009530;color:#fff;padding:16px 24px;">
+              <p style="margin:0;font-size:13px;opacity:.92;">SEIF Portal</p>
+              <h1 style="margin:4px 0 0;font-size:18px;">${esc(subject)}</h1>
+            </div>
+            <div style="padding:24px;">${htmlBody}</div>
+            <div style="padding:0 24px 20px;font-size:12px;color:#9ca3af;">This is an automated email from ${esc(this.fromName)}. Please do not reply.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    const info = await this.sendConfiguredMail({
+      to: toEmail,
+      subject,
+      text: textBody,
+      html,
+    });
+    return { success: true, messageId: info.messageId };
   }
 
   /**
@@ -196,8 +307,7 @@ This is an automated email. Please do not reply to this message.
     `;
 
     try {
-      const info = await this.transporter.sendMail({
-        from: `"${this.fromName}" <${this.fromEmail}>`,
+      const info = await this.sendConfiguredMail({
         to: email,
         subject: subject,
         text: text,
@@ -261,8 +371,7 @@ This is an automated email. Please do not reply to this message.
     `;
 
     try {
-      const info = await this.transporter.sendMail({
-        from: `"${this.fromName}" <${this.fromEmail}>`,
+      const info = await this.sendConfiguredMail({
         to: email,
         subject: subject,
         html: html,
@@ -381,8 +490,7 @@ This is an automated email. Please do not reply to this message.
     `;
 
     try {
-      const info = await this.transporter.sendMail({
-        from: `"${this.fromName}" <${this.fromEmail}>`,
+      const info = await this.sendConfiguredMail({
         to: email,
         subject: subject,
         html: html,
@@ -483,8 +591,7 @@ This is an automated email. Please do not reply to this message.
       this.fromName,
     ].join('\n');
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,
@@ -626,8 +733,7 @@ This is an automated message from SEIF Portal. Please do not reply.
     `;
 
     try {
-      const info = await this.transporter.sendMail({
-        from: `"${this.fromName}" <${this.fromEmail}>`,
+      const info = await this.sendConfiguredMail({
         to: email,
         subject,
         text,
@@ -695,8 +801,7 @@ This is an automated message from SEIF Portal. Please do not reply.
 
     const text = `Hello ${safeRecipientName},\n\nYour report export is attached.\n\nReport: ${safeReportName}\nGenerated At: ${new Date().toLocaleString()}\n\nThis is an automated email from SEIF Portal.`;
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,
@@ -806,8 +911,99 @@ This is an automated message from SEIF Portal. Please do not reply.
       'Thank you.',
     ].join('\n');
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
+      to: toEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return { success: true, messageId: info.messageId };
+  }
+
+  /**
+   * Confirmation email to the partner after they submit an assessment request.
+   */
+  async sendCertificationAssessmentSubmittedPartnerEmail({
+    toEmail,
+    recipientName,
+    partnerName,
+    centerName,
+    batchNumber,
+    assessmentDate,
+    requestId,
+  }) {
+    if (!toEmail) return { success: false, skipped: true };
+
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const safeName = esc(recipientName || partnerName || 'Partner');
+    const partner = esc(partnerName || '—');
+    const center = esc(centerName || '—');
+    const batch = esc(batchNumber || '—');
+    const assessment = esc(this.formatCertificationEmailDate(assessmentDate));
+    const openUrl = `${this.portalUrl}/certificates?uploadId=${encodeURIComponent(requestId || '')}`;
+    const subject = 'Assessment Request Submitted';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.6;margin:0;background:#f3f4f6;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#009530;color:#fff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;">Assessment Request Submitted</h1>
+              <p style="margin:6px 0 0;font-size:13px;opacity:.92;">Your request has been received and is pending admin review.</p>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+              <p>Thank you for submitting your request to conduct an assessment. This is a confirmation that we have received the following details:</p>
+              <div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+                <p style="margin:0 0 8px;"><strong>Partner Name:</strong> ${partner}</p>
+                <p style="margin:0 0 8px;"><strong>Center Name:</strong> ${center}</p>
+                <p style="margin:0 0 8px;"><strong>Batch Name/ID:</strong> ${batch}</p>
+                <p style="margin:0;"><strong>Assessment Date:</strong> ${assessment}</p>
+              </div>
+              <p style="margin:0 0 16px;">You will receive another email once the admin reviews this request.</p>
+              <p style="margin:0;">
+                <a href="${esc(openUrl)}" style="display:inline-block;background:#009530;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
+                  View in SEIF Portal
+                </a>
+              </p>
+              <p style="margin:16px 0 0;">Regards,<br /><strong>${esc(this.fromName)}</strong></p>
+            </div>
+            <div style="padding:0 24px 24px;font-size:12px;color:#9ca3af;">This is an automated email from SEIF Portal.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = [
+      `Dear ${recipientName || partnerName || 'Partner'},`,
+      '',
+      'Thank you for submitting your request to conduct an assessment. This is a confirmation that we have received the following details:',
+      '',
+      `Partner Name: ${partnerName || '—'}`,
+      `Center Name: ${centerName || '—'}`,
+      `Batch Name/ID: ${batchNumber || '—'}`,
+      `Assessment Date: ${this.formatCertificationEmailDate(assessmentDate)}`,
+      '',
+      'You will receive another email once the admin reviews this request.',
+      '',
+      `View: ${openUrl}`,
+      '',
+      `Regards,`,
+      this.fromName,
+    ].join('\n');
+
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,
@@ -897,8 +1093,7 @@ This is an automated message from SEIF Portal. Please do not reply.
       'Thank you.',
     ].join('\n');
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,
@@ -982,8 +1177,7 @@ This is an automated message from SEIF Portal. Please do not reply.
       .filter(Boolean)
       .join('\n');
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,
@@ -1078,8 +1272,7 @@ This is an automated message from SEIF Portal. Please do not reply.
       'Thank you.',
     ].join('\n');
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,
@@ -1169,8 +1362,7 @@ This is an automated message from SEIF Portal. Please do not reply.
       this.fromName,
     ].join('\n');
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,
@@ -1266,8 +1458,7 @@ This is an automated message from SEIF Portal. Please do not reply.
       this.fromName,
     ].join('\n');
 
-    const info = await this.transporter.sendMail({
-      from: `"${this.fromName}" <${this.fromEmail}>`,
+    const info = await this.sendConfiguredMail({
       to: toEmail,
       subject,
       text,

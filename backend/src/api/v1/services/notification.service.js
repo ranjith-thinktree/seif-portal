@@ -27,16 +27,142 @@ const ALERT_TYPES = {
   ERROR: 'error',
 };
 
-const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'admin'];
+const ADMIN_FAMILY = ['ADMIN', 'SUPER_ADMIN'];
+
+const normalizeRole = (role) => String(role || '').trim().toUpperCase();
+
+/**
+ * Roles that may see notifications stored for a given user role.
+ * ADMIN and SUPER_ADMIN share admin-targeted inbox items.
+ */
+const getVisibleRoleAliases = (role) => {
+  const normalized = normalizeRole(role);
+  if (ADMIN_FAMILY.includes(normalized)) {
+    return [...ADMIN_FAMILY];
+  }
+  if (normalized === 'SEIF_READONLY' || normalized === 'SEIF_READONLY_DOWNLOAD') {
+    return ['SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD'];
+  }
+  return normalized ? [normalized] : [];
+};
+
+/**
+ * Inbox rows this user is allowed to see:
+ * - personal: recipient_id = user, and role is unset or in their role family
+ * - broadcast: recipient_id is null and recipient_role is in their role family
+ */
+const buildRecipientVisibility = (userId, role, alias = '') => {
+  const prefix = alias ? `${alias}.` : '';
+  const aliases = getVisibleRoleAliases(role);
+  const normalized = normalizeRole(role);
+  const seesAllCertificateReady =
+    ADMIN_FAMILY.includes(normalized) ||
+    normalized === 'ESSCI' ||
+    normalized === 'SEIF_READONLY' ||
+    normalized === 'SEIF_READONLY_DOWNLOAD';
+
+  const certificateReadyClause = seesAllCertificateReady
+    ? ` OR ${prefix}type = 'certificate_ready'`
+    : '';
+
+  if (aliases.length === 0) {
+    return {
+      clause: `(${prefix}recipient_id = ?${certificateReadyClause})`,
+      params: [userId],
+    };
+  }
+
+  const placeholders = aliases.map(() => '?').join(', ');
+  return {
+    clause: `(
+      (${prefix}recipient_id = ?
+        AND (${prefix}recipient_role IS NULL OR UPPER(${prefix}recipient_role) IN (${placeholders})))
+      OR
+      (${prefix}recipient_id IS NULL AND UPPER(${prefix}recipient_role) IN (${placeholders}))
+      ${certificateReadyClause}
+    )`,
+    params: [userId, ...aliases, ...aliases],
+  };
+};
 
 const buildInboxVisibilityClause = (role, alias = '') => {
   const prefix = alias ? `${alias}.` : '';
+  const normalized = normalizeRole(role);
 
-  if (ADMIN_ROLES.includes(role)) {
+  if (ADMIN_FAMILY.includes(normalized)) {
     return ` AND (${prefix}alert_type NOT LIKE 'refurbishment%' OR ${prefix}alert_type IS NULL)`;
   }
 
   return '';
+};
+
+const buildPartnerFacingCertHideClause = (role, alias = '') => {
+  const prefix = alias ? `${alias}.` : '';
+  const normalized = normalizeRole(role);
+  // Partner-copy certification alerts must never appear on admin/ESSCI/readonly inboxes
+  if (
+    ADMIN_FAMILY.includes(normalized) ||
+    normalized === 'ESSCI' ||
+    normalized === 'SEIF_READONLY' ||
+    normalized === 'SEIF_READONLY_DOWNLOAD'
+  ) {
+    return ` AND NOT (
+      ${prefix}type IN (
+        'certification_submitted',
+        'certification_approved',
+        'certification_rejected',
+        'certification_essci_step1'
+      )
+      AND LOWER(COALESCE(${prefix}alert_type, '')) IN ('success', 'sent', 'error')
+    )`;
+  }
+  return '';
+};
+
+const inboxDedupeKey = (item) => {
+  const entityType = item.related_entity_type || item.notification_type || '';
+  const entityId = item.related_entity_id || item.upload_id || item.center_id || '';
+  const kind = item.type || item.notification_type || '';
+  if (entityType && entityId) {
+    return `${entityType}|${entityId}|${kind}`;
+  }
+  return item.id;
+};
+
+const preferInboxNotification = (current, candidate, role) => {
+  const normalized = normalizeRole(role);
+  const score = (item) => {
+    const tag = String(item.alert_type || '').toLowerCase();
+    if (normalized === 'PARTNER' || normalized === 'ESSCI') {
+      return tag === 'info' ? 0 : 1;
+    }
+    if (ADMIN_FAMILY.includes(normalized)) {
+      return tag === 'info' ? 1 : 0;
+    }
+    return 0;
+  };
+
+  const currentScore = score(current);
+  const candidateScore = score(candidate);
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current;
+  }
+
+  return new Date(candidate.created_at) > new Date(current.created_at) ? candidate : current;
+};
+
+const dedupeInboxNotifications = (items, role) => {
+  const seen = new Map();
+  items.forEach((item) => {
+    const key = inboxDedupeKey(item);
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, item);
+      return;
+    }
+    seen.set(key, preferInboxNotification(existing, item, role));
+  });
+  return Array.from(seen.values());
 };
 
 /**
@@ -56,7 +182,14 @@ const createNotification = async (notificationData) => {
       relatedEntityType = null,
       relatedEntityId = null,
       sentVia = 'platform',
+      related_entity_type: relatedEntityTypeSnake = null,
+      related_entity_id: relatedEntityIdSnake = null,
+      target_role: targetRole = null,
     } = notificationData;
+
+    const resolvedRecipientRole = normalizeRole(recipientRole || targetRole) || null;
+    const resolvedRelatedEntityType = relatedEntityType || relatedEntityTypeSnake || null;
+    const resolvedRelatedEntityId = relatedEntityId || relatedEntityIdSnake || null;
 
     // Generate UUID for notification
     const notificationId = (await pool.query('SELECT UUID() as id'))[0][0].id;
@@ -68,16 +201,16 @@ const createNotification = async (notificationData) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NOW())`,
       [
         notificationId,
-        recipientId,
-        recipientRole,
+        recipientId || null,
+        resolvedRecipientRole,
         type,
         alertType,
         title,
         message,
         remark,
         payload ? JSON.stringify(payload) : null,
-        relatedEntityType,
-        relatedEntityId,
+        resolvedRelatedEntityType,
+        resolvedRelatedEntityId,
         sentVia,
       ]
     );
@@ -116,7 +249,7 @@ const createBulkNotifications = async (recipientIds, notificationData) => {
         [
           notificationId,
           recipientId,
-          notificationData.recipientRole,
+          normalizeRole(notificationData.recipientRole) || null,
           notificationData.type,
           notificationData.alertType || ALERT_TYPES.INFO,
           notificationData.title,
@@ -160,10 +293,9 @@ const getUserNotifications = async (userId, role, filters = {}) => {
     } = filters;
     const offset = (page - 1) * limit;
 
-    // Filter by recipient_id and optionally by recipient_role
-    // This handles cases where recipient_role might be NULL
-    let whereClause = 'WHERE (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL))';
-    const params = [userId, role];
+    const visibility = buildRecipientVisibility(userId, role);
+    let whereClause = `WHERE ${visibility.clause}`;
+    const params = [...visibility.params];
 
     // Filter by date (last 180 days)
     whereClause += ' AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
@@ -202,6 +334,10 @@ const getUserNotifications = async (userId, role, filters = {}) => {
       const searchPattern = `%${search.trim()}%`;
       params.push(searchPattern, searchPattern);
     }
+
+    // Hide admin-only refurbishment alerts from the generic inbox list
+    whereClause += buildInboxVisibilityClause(role);
+    whereClause += buildPartnerFacingCertHideClause(role);
 
     // Determine sort order
     let orderByClause = 'ORDER BY created_at DESC';
@@ -256,14 +392,16 @@ const getUserNotifications = async (userId, role, filters = {}) => {
  */
 const getUnreadCount = async (userId, role) => {
   try {
-    const inboxVisibilityClause = buildInboxVisibilityClause(role);
+    const visibility = buildRecipientVisibility(userId, role);
+    const inboxVisibilityClause =
+      buildInboxVisibilityClause(role) + buildPartnerFacingCertHideClause(role);
     const [result] = await pool.query(
       `SELECT COUNT(*) as count 
       FROM notifications 
-      WHERE (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL)) AND is_read = 0 
+      WHERE ${visibility.clause} AND is_read = 0 
         AND created_at >= DATE_SUB(NOW(), INTERVAL 180 DAY)
         ${inboxVisibilityClause}`,
-      [userId, role]
+      visibility.params
     );
 
     return result[0].count;
@@ -277,11 +415,12 @@ const getUnreadCount = async (userId, role) => {
  */
 const markAsRead = async (notificationId, userId, role) => {
   try {
+    const visibility = buildRecipientVisibility(userId, role);
     const [result] = await pool.query(
       `UPDATE notifications 
       SET is_read = 1, read_at = NOW() 
-      WHERE id = ? AND (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL))`,
-      [notificationId, userId, role]
+      WHERE id = ? AND ${visibility.clause}`,
+      [notificationId, ...visibility.params]
     );
 
     return result.affectedRows > 0;
@@ -295,11 +434,12 @@ const markAsRead = async (notificationId, userId, role) => {
  */
 const markAsUnread = async (notificationId, userId, role) => {
   try {
+    const visibility = buildRecipientVisibility(userId, role);
     const [result] = await pool.query(
       `UPDATE notifications
       SET is_read = 0, read_at = NULL
-      WHERE id = ? AND (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL))`,
-      [notificationId, userId, role]
+      WHERE id = ? AND ${visibility.clause}`,
+      [notificationId, ...visibility.params]
     );
 
     return result.affectedRows > 0;
@@ -313,11 +453,12 @@ const markAsUnread = async (notificationId, userId, role) => {
  */
 const markAllAsRead = async (userId, role) => {
   try {
+    const visibility = buildRecipientVisibility(userId, role);
     const [result] = await pool.query(
       `UPDATE notifications 
       SET is_read = 1, read_at = NOW() 
-      WHERE (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL)) AND is_read = 0`,
-      [userId, role]
+      WHERE ${visibility.clause} AND is_read = 0`,
+      visibility.params
     );
 
     return result.affectedRows;
@@ -331,10 +472,11 @@ const markAllAsRead = async (userId, role) => {
  */
 const deleteNotification = async (notificationId, userId, role) => {
   try {
+    const visibility = buildRecipientVisibility(userId, role);
     const [result] = await pool.query(
       `DELETE FROM notifications 
-      WHERE id = ? AND (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL))`,
-      [notificationId, userId, role]
+      WHERE id = ? AND ${visibility.clause}`,
+      [notificationId, ...visibility.params]
     );
 
     return result.affectedRows > 0;
@@ -348,14 +490,15 @@ const deleteNotification = async (notificationId, userId, role) => {
  */
 const getNotificationById = async (notificationId, userId, role) => {
   try {
+    const visibility = buildRecipientVisibility(userId, role);
     const [notifications] = await pool.query(
       `SELECT 
         id, recipient_id, recipient_role, type, alert_type, title, message, 
         remark, payload, related_entity_type, related_entity_id, is_read, 
         read_at, sent_via, email_sent_at, created_at
       FROM notifications
-      WHERE id = ? AND (recipient_id = ? OR (recipient_role = ? AND recipient_id IS NULL))`,
-      [notificationId, userId, role]
+      WHERE id = ? AND ${visibility.clause}`,
+      [notificationId, ...visibility.params]
     );
 
     if (notifications.length === 0) {
@@ -380,16 +523,12 @@ const createUploadNotification = async (uploadData) => {
   try {
     const { uploadId, partnerId, partnerName, fileName, totalRecords, entityType } = uploadData;
 
-    // Get all admin users
-    const [admins] = await pool.query(
-      "SELECT id FROM users WHERE role IN ('ADMIN', 'SUPER_ADMIN') AND status = 'active'"
-    );
+    const { getActiveAdminIds } = require('../../../services/emailDispatch.service');
+    const adminIds = await getActiveAdminIds();
 
-    if (admins.length === 0) {
+    if (adminIds.length === 0) {
       return [];
     }
-
-    const adminIds = admins.map((admin) => admin.id);
 
     const resolvedEntityType = entityType || 'data_upload';
     const titlePrefixMap = {
@@ -399,7 +538,7 @@ const createUploadNotification = async (uploadData) => {
     const titlePrefix = titlePrefixMap[resolvedEntityType] || '';
 
     const notificationData = {
-      recipientRole: 'admin',
+      recipientRole: 'ADMIN',
       type: NOTIFICATION_TYPES.UPLOAD,
       alertType: ALERT_TYPES.INFO,
       title: `New ${titlePrefix}Data Upload`,
@@ -418,6 +557,19 @@ const createUploadNotification = async (uploadData) => {
     };
 
     const notifications = await createBulkNotifications(adminIds, notificationData);
+
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      const emailKey =
+        resolvedEntityType === 'employment_upload'
+          ? 'employment.new_admin'
+          : resolvedEntityType === 'tot_upload'
+            ? 'tot.new_admin'
+            : 'trainee.new_admin';
+      fireEmail(emailKey, { partnerName }, { audience: 'admin' });
+    } catch (emailErr) {
+      console.warn('[email] upload notification email skipped:', emailErr.message);
+    }
 
     return notifications;
   } catch (error) {
@@ -459,7 +611,7 @@ const createReviewNotification = async (reviewData) => {
 
     const notificationData = {
       recipientId: partners[0].id,
-      recipientRole: 'partner',
+      recipientRole: 'PARTNER',
       type: NOTIFICATION_TYPES.REVIEW,
       alertType,
       title: `${titlePrefix}Upload ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`,
@@ -478,6 +630,20 @@ const createReviewNotification = async (reviewData) => {
 
     const notification = await createNotification(notificationData);
 
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      const approved = status === 'approved';
+      let emailKey = approved ? 'trainee.approved_partner' : 'trainee.rejected_partner';
+      if (resolvedEntityType === 'employment_upload') {
+        emailKey = approved ? 'employment.approved_partner' : 'employment.rejected_partner';
+      } else if (resolvedEntityType === 'tot_upload') {
+        emailKey = approved ? 'tot.approved_partner' : 'tot.rejected_partner';
+      }
+      fireEmail(emailKey, { partnerName }, { audience: 'partner', partnerId });
+    } catch (emailErr) {
+      console.warn('[email] review notification email skipped:', emailErr.message);
+    }
+
     return notification;
   } catch (error) {
     console.error('Failed to create review notification:', error.message);
@@ -493,13 +659,14 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
   try {
     const { page = 1, limit = 20, search, days = 180, status, sortBy = 'newest' } = filters;
     const offset = (page - 1) * limit;
-    const normalizedRole = String(role || '').toUpperCase();
-    const inboxVisibilityClause = buildInboxVisibilityClause(normalizedRole, 'n');
+    const normalizedRole = normalizeRole(role);
+    const inboxVisibilityClause =
+      buildInboxVisibilityClause(normalizedRole, 'n') +
+      buildPartnerFacingCertHideClause(normalizedRole, 'n');
+    const visibility = buildRecipientVisibility(userId, role, 'n');
 
-    // Build where clause
-    let whereClause =
-      'WHERE (n.recipient_id = ? OR (n.recipient_role = ? AND n.recipient_id IS NULL))';
-    const params = [userId, role];
+    let whereClause = `WHERE ${visibility.clause}`;
+    const params = [...visibility.params];
 
     whereClause += ' AND n.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
     params.push(days);
@@ -555,7 +722,7 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       ${whereClause}
         ${inboxVisibilityClause}
         AND n.related_entity_type = 'data_upload'
-        AND n.type IN ('upload', 'review')
+        AND n.type IN ('upload', 'review', 'approval', 'rejection')
       GROUP BY n.related_entity_id, du.version, du.parent_upload_id
       ORDER BY latest_created_at ${sortBy === 'oldest' ? 'ASC' : 'DESC'}
     `;
@@ -908,15 +1075,18 @@ const getGroupedNotifications = async (userId, role, filters = {}) => {
       };
     });
 
-    // Merge center, refurbishment, upload and employment notifications, sort by created_at
-    const allNotifications = [
-      ...processedfCenterNotifications,
-      ...processedRefurbishmentNotifications,
-      ...processedUploadNotifications,
-      ...processedEmploymentNotifications,
-      ...processedTotNotifications,
-      ...processedCertificationNotifications,
-    ];
+    // Merge sources, drop duplicate rows for the same action (e.g. INFO + SUCCESS tags)
+    const allNotifications = dedupeInboxNotifications(
+      [
+        ...processedfCenterNotifications,
+        ...processedRefurbishmentNotifications,
+        ...processedUploadNotifications,
+        ...processedEmploymentNotifications,
+        ...processedTotNotifications,
+        ...processedCertificationNotifications,
+      ],
+      role
+    );
     allNotifications.sort((a, b) => {
       const dateA = new Date(a.created_at);
       const dateB = new Date(b.created_at);
@@ -1132,17 +1302,13 @@ const getUploadCenterDetails = async (uploadId, userId, role) => {
  */
 const sendNotificationToAdmins = async (notificationData) => {
   try {
-    // Get all admin and super admin users
-    const [admins] = await pool.query(
-      `SELECT id FROM users WHERE role IN ('ADMIN', 'SUPER_ADMIN') AND status = 'active'`
-    );
+    const { getActiveAdminIds } = require('../../../services/emailDispatch.service');
+    const adminIds = await getActiveAdminIds();
 
-    if (admins.length === 0) {
+    if (adminIds.length === 0) {
       console.warn('No active admins found to send notification');
       return [];
     }
-
-    const adminIds = admins.map((admin) => admin.id);
 
     // Create notifications for all admins
     return await createBulkNotifications(adminIds, {
@@ -1198,6 +1364,18 @@ const notifyAdminsAboutNewCenter = async (centerId, partnerId) => {
     });
 
     console.log('✅ Notification result:', result);
+
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      fireEmail(
+        'center.pending_admin',
+        { partnerName: center.partner_name, centerName: center.center_name },
+        { audience: 'admin' }
+      );
+    } catch (emailErr) {
+      console.warn('[email] new center email skipped:', emailErr.message);
+    }
+
     return { success: true, count: result?.length || 0 };
   } catch (error) {
     console.error('❌ Error notifying admins about new center:', error);
@@ -1253,13 +1431,16 @@ const notifyPartnerAboutCenterApproval = async (centerId, partnerId) => {
     });
 
     // Send email notification
-    const emailService = require('../../../utils/email.util');
-    await emailService.sendCenterApprovalEmail({
-      email: center.contact_email,
-      name: center.partner_name,
-      centerName: center.center_name,
-      centerCode: center.center_code || center.id.substring(0, 8).toUpperCase(),
-    });
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      fireEmail(
+        'center.approved_partner',
+        { partnerName: center.partner_name, centerName: center.center_name },
+        { audience: 'partner', partnerId }
+      );
+    } catch (emailErr) {
+      console.warn('[email] center approved email skipped:', emailErr.message);
+    }
 
     return true;
   } catch (error) {

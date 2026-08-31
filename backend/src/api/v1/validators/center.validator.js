@@ -61,7 +61,7 @@ exports.createCenterValidator = [
     .withMessage('Address must not exceed 500 characters'),
 
   body('year_of_establishment')
-    .optional()
+    .optional({ checkFalsy: true })
     .isInt({ min: 1900, max: new Date().getFullYear() })
     .withMessage('Invalid year of establishment'),
 
@@ -81,12 +81,17 @@ exports.createCenterValidator = [
     .withMessage('Center head name must not exceed 255 characters'),
 
   body('mobile_number')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^[0-9]{10}$/)
     .withMessage('Mobile number must be exactly 10 digits'),
 
-  body('email').optional().trim().isEmail().withMessage('Invalid email format').normalizeEmail(),
+  body('email')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isEmail()
+    .withMessage('Invalid email format')
+    .normalizeEmail(),
 
   body('latitude').optional().isDecimal().withMessage('Latitude must be a decimal number'),
 
@@ -165,7 +170,7 @@ exports.updateCenterValidator = [
     .withMessage('Address must not exceed 500 characters'),
 
   body('year_of_establishment')
-    .optional()
+    .optional({ checkFalsy: true })
     .isInt({ min: 1900, max: new Date().getFullYear() })
     .withMessage('Invalid year of establishment'),
 
@@ -185,12 +190,17 @@ exports.updateCenterValidator = [
     .withMessage('Center head name must not exceed 255 characters'),
 
   body('mobile_number')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^[0-9]{10}$/)
     .withMessage('Mobile number must be exactly 10 digits'),
 
-  body('email').optional().trim().isEmail().withMessage('Invalid email format').normalizeEmail(),
+  body('email')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isEmail()
+    .withMessage('Invalid email format')
+    .normalizeEmail(),
 
   body('latitude').optional().isDecimal().withMessage('Latitude must be a decimal number'),
 

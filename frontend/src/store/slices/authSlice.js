@@ -47,7 +47,10 @@ export const login = createAsyncThunk(
       console.error("Error response:", error.response);
       console.error("Error response data:", error.response?.data);
 
-      const message = error.response?.data?.message || "Login failed";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Login failed";
       console.log("Returning error message:", message);
 
       return rejectWithValue(message);
@@ -60,7 +63,7 @@ export const login = createAsyncThunk(
  */
 export const logout = createAsyncThunk(
   "auth/logout",
-  async (_, { rejectWithValue }) => {
+  async () => {
     try {
       // Call logout API
       await authApi.logout();
@@ -101,7 +104,7 @@ export const verifyTokenOnMount = createAsyncThunk(
       }
 
       return authApi.getStoredUser();
-    } catch (error) {
+    } catch (_error) {
       // Token verification failed, clear auth
       authApi.clearAuth();
       return rejectWithValue("Token verification failed");

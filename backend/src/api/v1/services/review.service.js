@@ -855,6 +855,17 @@ class ReviewService {
 
       await connection.commit();
 
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'trainee.center_approved_partner',
+          { centerName: center.center_name },
+          { audience: 'partner', partnerId: center.actual_partner_id }
+        );
+      } catch (e) {
+        /* non-blocking */
+      }
+
       return {
         success: true,
         approvedCenterId,
@@ -958,6 +969,17 @@ class ReviewService {
       }
 
       await connection.commit();
+
+      try {
+        const { fireEmail } = require('../../../services/emailDispatch.service');
+        fireEmail(
+          'trainee.center_rejected_partner',
+          { centerName: center.center_name },
+          { audience: 'partner', partnerId: center.actual_partner_id }
+        );
+      } catch (e) {
+        /* non-blocking */
+      }
 
       return {
         success: true,

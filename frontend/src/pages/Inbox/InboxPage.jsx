@@ -75,6 +75,7 @@ const AlertTypeBadge = ({ alertType }) => {
   const styles = {
     info: "bg-blue-100 text-blue-700 border-blue-200",
     success: "bg-primary-100 text-primary-700 border-primary-200",
+    sent: "bg-teal-100 text-teal-800 border-teal-200",
     warning: "bg-secondary-100 text-secondary-700 border-secondary-200",
     error: "bg-destructive/10 text-destructive border-destructive/20",
   };
@@ -140,22 +141,26 @@ const NotificationItem = ({
             className={`h-10 w-10 rounded-full flex items-center justify-center ${
               notification.alert_type === "success"
                 ? "bg-primary-100"
-                : notification.alert_type === "error"
-                  ? "bg-destructive/10"
-                  : notification.alert_type === "warning"
-                    ? "bg-secondary-100"
-                    : "bg-blue-100"
+                : notification.alert_type === "sent"
+                  ? "bg-teal-100"
+                  : notification.alert_type === "error"
+                    ? "bg-destructive/10"
+                    : notification.alert_type === "warning"
+                      ? "bg-secondary-100"
+                      : "bg-blue-100"
             }`}
           >
             <BellIcon
               className={`h-5 w-5 ${
                 notification.alert_type === "success"
                   ? "text-primary-600"
-                  : notification.alert_type === "error"
-                    ? "text-destructive"
-                    : notification.alert_type === "warning"
-                      ? "text-secondary-600"
-                      : "text-blue-600"
+                  : notification.alert_type === "sent"
+                    ? "text-teal-700"
+                    : notification.alert_type === "error"
+                      ? "text-destructive"
+                      : notification.alert_type === "warning"
+                        ? "text-secondary-600"
+                        : "text-blue-600"
               }`}
             />
           </div>

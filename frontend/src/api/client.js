@@ -39,6 +39,13 @@ apiClient.interceptors.request.use(
 let isRefreshing = false;
 let failedQueue = [];
 
+const isAuthEndpoint = (url = "") => {
+  const normalizedUrl = url.toLowerCase();
+  return ["/auth/login", "/auth/register", "/auth/refresh"].some((endpoint) =>
+    normalizedUrl.includes(endpoint)
+  );
+};
+
 const processQueue = (error, token = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -57,9 +64,10 @@ apiClient.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    const isAuthRequest = isAuthEndpoint(originalRequest?.url || "");
 
     // If error is 401 and we haven't tried to refresh token yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       if (isRefreshing) {
         // If token refresh is already in progress, queue this request
         return new Promise((resolve, reject) => {

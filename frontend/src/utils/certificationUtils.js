@@ -1,5 +1,41 @@
 import { ROUTES } from "../constants/routes";
 
+export const CERTIFICATION_REQUEST_JOURNEY_STEPS = [
+  {
+    key: "received",
+    short: "Request Received",
+  },
+  {
+    key: "accepted",
+    short: "Request Accepted by Admin & Sent to ESSCI",
+  },
+  {
+    key: "uploaded",
+    short: "Certificate Uploaded by ESSCI",
+  },
+];
+
+export function getCertificationSubmittedByLabel(details) {
+  const role = String(details?.uploaded_by_role || "").toUpperCase();
+  if (role === "ADMIN" || role === "SUPER_ADMIN") return "Admin";
+  if (role === "PARTNER") return "Partner";
+  if (details?.uploaded_by_name) return details.uploaded_by_name;
+  return "—";
+}
+
+export function hasDownloadableCertificationFiles(details) {
+  const pdf = details?.pdf;
+  if (!pdf) return false;
+  const archivedCerts = (pdf.archived_files || []).filter(
+    (file) => file.file_type === "certificate",
+  );
+  if (archivedCerts.length > 0) return true;
+  if (Array.isArray(pdf.certification_files) && pdf.certification_files.length > 0) {
+    return true;
+  }
+  return Boolean(pdf.zip_file_url);
+}
+
 export const CERTIFICATION_ESSCI_WORKFLOW_STEPS = [
   {
     key: "certificates",

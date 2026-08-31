@@ -46,6 +46,18 @@ import {
   deletePartner,
 } from "../../services/data.service";
 
+const getApiErrorMessage = (error, fallback) => {
+  const data = error.response?.data;
+  const fieldErrors = data?.errors;
+  if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
+    return fieldErrors
+      .map((item) => item.message || item.msg)
+      .filter(Boolean)
+      .join(". ");
+  }
+  return data?.message || error.message || fallback;
+};
+
 const OrganizationPartnersPage = ({ embedded = false }) => {
   const { user } = useSelector((state) => state.auth);
   const isReadOnly = ["SEIF_READONLY", "SEIF_READONLY_DOWNLOAD"].includes(
@@ -117,8 +129,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       setEditingPartner(null);
       fetchPartners();
     } catch (error) {
-      console.error("Error creating partner:", error);
-      toast.error(error.response?.data?.message || "Failed to create partner");
+      toast.error(getApiErrorMessage(error, "Failed to create partner"));
     } finally {
       setSubmitting(false);
     }
@@ -136,7 +147,7 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
       fetchPartners();
     } catch (error) {
       console.error("Error updating partner:", error);
-      toast.error(error.response?.data?.message || "Failed to update partner");
+      toast.error(getApiErrorMessage(error, "Failed to update partner"));
     } finally {
       setSubmitting(false);
     }

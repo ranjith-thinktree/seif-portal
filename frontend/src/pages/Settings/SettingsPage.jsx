@@ -12,6 +12,7 @@ import {
   ChartBarIcon,
   LockClosedIcon,
   TableCellsIcon,
+  EnvelopeIcon,
 } from "@heroicons/react/24/outline";
 import {
   getPortalSettings,
@@ -20,6 +21,8 @@ import {
 } from "../../services/certification.service";
 import KpiSettingsPanel from "./KpiSettingsPanel";
 import DashboardDataEditor from "./DashboardDataEditor";
+import PerformanceRatingSettingsPanel from "./PerformanceRatingSettingsPanel";
+import EmailTemplatesPanel from "./EmailTemplatesPanel";
 
 const INSTRUCTION_KEYS = [
   {
@@ -326,6 +329,11 @@ const SettingsPage = () => {
       icon: DocumentArrowDownIcon,
     },
     {
+      id: "email-notifications",
+      label: "Email Notifications",
+      icon: EnvelopeIcon,
+    },
+    {
       id: "kpi",
       label: "KPI Cards",
       icon: ChartBarIcon,
@@ -334,6 +342,11 @@ const SettingsPage = () => {
       id: "dashboard-data",
       label: "Dashboard Data",
       icon: TableCellsIcon,
+    },
+    {
+      id: "performance-ratings",
+      label: "Performance Ratings",
+      icon: ChartBarIcon,
     },
   ];
 
@@ -437,8 +450,12 @@ const SettingsPage = () => {
               />
             ))}
           </div>
+        ) : activeTab === "email-notifications" ? (
+          <EmailTemplatesPanel />
         ) : activeTab === "kpi" ? (
           <KpiSettingsPanel />
+        ) : activeTab === "performance-ratings" ? (
+          <PerformanceRatingSettingsPanel />
         ) : (
           <DashboardDataEditor />
         )}

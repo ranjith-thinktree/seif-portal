@@ -15,6 +15,15 @@ const {
   rejectCenterValidator,
 } = require('../validators/center.validator');
 
+/** Partners cannot send partner_id from the UI; attach it before validators run. */
+const attachPartnerIdForPartnerUsers = (req, res, next) => {
+  if (req.user?.role === 'PARTNER' && req.user.partner_id) {
+    req.body = req.body || {};
+    req.body.partner_id = req.user.partner_id;
+  }
+  next();
+};
+
 // Multer configuration for CSV uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -40,7 +49,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',
@@ -85,7 +94,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',
@@ -103,7 +112,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',
@@ -147,7 +156,7 @@ router.get(
   authenticate,
   checkRole([
     'ADMIN',
-    'SUPER_ADMIN',
+    'SUPER_ADMIN',
     'SEIF_READONLY',
     'SEIF_READONLY_DOWNLOAD',
     'PARTNER',
@@ -166,6 +175,7 @@ router.post(
   '/',
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN', 'PARTNER']),
+  attachPartnerIdForPartnerUsers,
   createCenterValidator,
   validate(),
   centerController.createCenter

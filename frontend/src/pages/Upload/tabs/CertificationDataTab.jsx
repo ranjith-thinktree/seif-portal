@@ -336,7 +336,7 @@ const CertificationDataTab = ({
             {/* Center Spoke */}
             <div>
               <h2 className="font-semibold text-gray-800 mb-3">
-                Center Spoke Details
+                Center Spoc Details
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -347,7 +347,7 @@ const CertificationDataTab = ({
                     type="text"
                     value={certSpokeName}
                     onChange={(e) => setCertSpokeName(e.target.value)}
-                    placeholder="Spoke contact name"
+                    placeholder="Spoc contact name"
                     required
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
                   />
@@ -458,7 +458,7 @@ const CertificationDataTab = ({
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
                     Select a batch number from the list or type an other batch
-                    number. Add batch and assessment dates and spoke contact
+                    number. Add batch and assessment dates and spoc contact
                     details.
                   </p>
                 </div>
@@ -483,17 +483,17 @@ const CertificationDataTab = ({
                 </span>
                 <div className="pt-1.5">
                   <p className="text-base font-semibold text-foreground">
-                    Need ESSCI Spoke help?
+                    Need ESSCI Spoc help?
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
                     If you have queries, open{" "}
                     <Link
-                      to={`${ROUTES.HELP}?tab=support&focus=essci-spoke`}
+                      to={`${ROUTES.HELP}?tab=support&focus=essci-spoc`}
                       className="text-[#009530] font-medium underline underline-offset-2 hover:text-[#007a28]"
                     >
                       Support &amp; Contacts
                     </Link>{" "}
-                    for ESSCI Spoke details.
+                    for ESSCI Spoc details.
                   </p>
                 </div>
               </div>

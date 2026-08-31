@@ -14,6 +14,9 @@ import {
 import {
   formatCertificationDate,
   toCertificationDateInput,
+  CERTIFICATION_REQUEST_JOURNEY_STEPS,
+  getCertificationSubmittedByLabel,
+  hasDownloadableCertificationFiles,
 } from "../../utils/certificationUtils";
 import { parseEssciResultSummaryFile } from "../../utils/essciResultSummaryParser";
 import { downloadFile } from "../../services/data.service";
@@ -23,10 +26,7 @@ import {
   resolvePartnerFileUrl,
 } from "../../utils/refurbishmentUtils";
 
-const WORKFLOW_STEPS = [
-  { key: "received", short: "Request Received" },
-  { key: "certificates", short: "Certificates" },
-];
+const WORKFLOW_STEPS = CERTIFICATION_REQUEST_JOURNEY_STEPS;
 
 function DetailField({ label, value }) {
   return (
@@ -143,11 +143,13 @@ function WorkflowStepper({ steps, activeViewStep, isStepDone, onStepClick }) {
   const stepCircle = (num, { active, done }) => (
     <div
       className={`flex items-center justify-center w-8 h-8 rounded-full border-2 font-semibold text-sm shrink-0 transition-colors ${
-        active
-          ? "bg-green-600 text-white border-green-600"
-          : done
-            ? "bg-green-100 text-green-600 border-green-500"
-            : "bg-white text-gray-400 border-gray-300"
+        done
+          ? active
+            ? "bg-green-600 text-white border-green-600"
+            : "bg-green-100 text-green-600 border-green-500"
+          : active
+            ? "bg-gray-200 text-gray-500 border-gray-400"
+            : "bg-gray-100 text-gray-400 border-gray-300"
       }`}
     >
       {done && !active ? <CheckCircleIcon className="w-4 h-4" /> : num}
@@ -156,7 +158,7 @@ function WorkflowStepper({ steps, activeViewStep, isStepDone, onStepClick }) {
 
   return (
     <div className="px-1 pt-1 pb-3 border-b border-gray-100">
-      <div className="flex items-center w-full">
+      <div className="flex items-start w-full">
         {steps.map((step, idx) => {
           const done = isStepDone(idx);
           const active = activeViewStep === idx;
@@ -170,11 +172,13 @@ function WorkflowStepper({ steps, activeViewStep, isStepDone, onStepClick }) {
               >
                 {stepCircle(idx + 1, { active, done })}
                 <span
-                  className={`text-[11px] font-medium text-center leading-tight max-w-[96px] ${
-                    active
-                      ? "text-gray-900 font-semibold"
-                      : done
-                        ? "text-green-600"
+                  className={`text-[11px] font-medium text-center leading-tight max-w-[132px] ${
+                    done
+                      ? active
+                        ? "text-gray-900 font-semibold"
+                        : "text-green-600"
+                      : active
+                        ? "text-gray-600 font-semibold"
                         : "text-gray-400"
                   }`}
                 >
@@ -196,11 +200,33 @@ const CompletedBadge = () => (
   </span>
 );
 
-const CurrentBadge = () => (
-  <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-    Current step
+const PendingBadge = () => (
+  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
+    Pending
   </span>
 );
+
+function CertificateUploadHistory({ details }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+      <h4 className="text-sm font-bold text-gray-900">Certificate Upload History</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
+        <DetailField
+          label="Request submitted by"
+          value={getCertificationSubmittedByLabel(details)}
+        />
+        <DetailField
+          label="Request Received Date"
+          value={formatCertificationDate(details?.created_at)}
+        />
+        <DetailField
+          label="Certificate Uploaded Date"
+          value={formatCertificationDate(details?.pdf?.created_at)}
+        />
+      </div>
+    </div>
+  );
+}
 
 function SectionHeading({ title, badge }) {
   return (
@@ -260,15 +286,21 @@ export default function ESSCICertificationWorkflowPanel({
   readOnly = false,
   initialStep,
 }) {
-  const certificatesDone = details?.pdf?.status === "approved";
-  const hasCertificatesUploaded = Boolean(details?.pdf?.id || details?.pdf);
+  const certificatesDone = hasDownloadableCertificationFiles(details);
+  const adminAccepted = details?.status === "approved";
   const canEditCertificates =
     !readOnly &&
     details?.status === "approved" &&
     (!details?.pdf || details?.pdf?.status === "rejected");
 
-  /** Step 1 = Request Received (0); Step 2 = Certificates (1) */
-  const defaultViewStep = hasCertificatesUploaded ? 1 : 0;
+  /** Step 1 received; Step 2 admin accepted; Step 3 ESSCI uploaded */
+  const defaultViewStep = certificatesDone
+    ? 2
+    : canEditCertificates
+      ? 2
+      : adminAccepted
+        ? 1
+        : 0;
 
   const resolveInitialStep = () => {
     if (typeof initialStep === "number") return initialStep;
@@ -304,6 +336,7 @@ export default function ESSCICertificationWorkflowPanel({
 
   const isStepDone = (idx) => {
     if (idx === 0) return true;
+    if (idx === 1) return adminAccepted;
     return certificatesDone;
   };
 
@@ -418,8 +451,65 @@ export default function ESSCICertificationWorkflowPanel({
           )}
         </div>
       </div>
+      <CertificateUploadHistory details={details} />
     </div>
   );
+
+  const renderAcceptedStep = () => {
+    const accepted = details?.status === "approved";
+    const rejected = details?.status === "rejected";
+    return (
+      <div className="space-y-3">
+        <SectionHeading
+          title="Request Accepted by Admin & Sent to ESSCI"
+          badge={
+            accepted ? (
+              <CompletedBadge />
+            ) : rejected ? (
+              <PendingBadge />
+            ) : (
+              <PendingBadge />
+            )
+          }
+        />
+        {accepted ? (
+          <div className="rounded-xl border border-green-200 bg-green-50/60 p-4 space-y-3">
+            <p className="text-sm text-green-800">
+              Admin has accepted this request and sent it to ESSCI for certificate processing.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+              <DetailField
+                label="Accepted Date"
+                value={formatCertificationDate(details?.reviewed_at)}
+              />
+              <DetailField label="Partner" value={details?.partner_name} />
+              <DetailField
+                label="Batch"
+                value={details?.batch_number || details?.other_batch_number}
+              />
+            </div>
+            {details?.remarks ? (
+              <p className="text-xs text-gray-600">
+                <span className="font-semibold">Admin remarks: </span>
+                {details.remarks}
+              </p>
+            ) : null}
+          </div>
+        ) : rejected ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            This request was not accepted by admin.
+            {details?.rejection_reason || details?.remarks
+              ? ` ${details.rejection_reason || details.remarks}`
+              : ""}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+            Waiting for admin to accept this request. After acceptance it will be sent to ESSCI.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderCertificatesReadOnly = () => {
     const pdf = details.pdf;
@@ -508,23 +598,19 @@ export default function ESSCICertificationWorkflowPanel({
   const renderCertificatesStep = () => (
     <div className="space-y-3">
       <SectionHeading
-        title={
-          certificatesDone
-            ? "Certificates Ready"
-            : details?.pdf && details?.pdf?.status !== "rejected"
-              ? "Certificates Under Review"
-              : "Awaiting Assessment & Certificates"
-        }
-        badge={
-          certificatesDone ? (
-            <CompletedBadge />
-          ) : canEditCertificates ? (
-            <CurrentBadge />
-          ) : null
-        }
+        title="Certificate Uploaded by ESSCI"
+        badge={certificatesDone ? <CompletedBadge /> : <PendingBadge />}
       />
 
-      {certificatesDone || (details.pdf && details.pdf.status !== "rejected") ? (
+      {!certificatesDone && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+          Certificate is awaiting upload from the ESSCI team.
+        </div>
+      )}
+
+      <CertificateUploadHistory details={details} />
+
+      {certificatesDone ? (
         renderCertificatesReadOnly()
       ) : canEditCertificates ? (
         <div className="space-y-3">
@@ -631,6 +717,7 @@ export default function ESSCICertificationWorkflowPanel({
 
   const renderStepContent = () => {
     if (activeViewStep === 0) return renderReceivedStep();
+    if (activeViewStep === 1) return renderAcceptedStep();
     return renderCertificatesStep();
   };
 

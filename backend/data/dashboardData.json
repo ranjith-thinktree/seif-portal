@@ -2,8 +2,8 @@
   "2023": {
     "total_students": 37499,
     "india": 34892,
-    "greater_india": 2607,
-    "nsi": 24846,
+    "greater_india": 0,
+    "nsi": 0,
     "female": 4341,
     "male": 33158,
     "tot": 312,
@@ -34,7 +34,7 @@
       "march": {
         "total": 3446,
         "india": 2850,
-        "greater_india": 596,
+        "greater_india": 0,
         "nsi": 0,
         "female": 135,
         "male": 3311,
@@ -67,7 +67,7 @@
       "june": {
         "total": 4892,
         "india": 4242,
-        "greater_india": 650,
+        "greater_india": 0,
         "nsi": 0,
         "female": 2001,
         "male": 2891,
@@ -78,7 +78,7 @@
       "july": {
         "total": 2349,
         "india": 2200,
-        "greater_india": 149,
+        "greater_india": 0,
         "nsi": 0,
         "female": 450,
         "male": 1899,
@@ -89,7 +89,7 @@
       "august": {
         "total": 3600,
         "india": 3200,
-        "greater_india": 400,
+        "greater_india": 0,
         "nsi": 0,
         "female": 425,
         "male": 3175,
@@ -100,7 +100,7 @@
       "september": {
         "total": 5000,
         "india": 4800,
-        "greater_india": 200,
+        "greater_india": 0,
         "nsi": 7680,
         "female": 200,
         "male": 4800,
@@ -111,7 +111,7 @@
       "october": {
         "total": 3700,
         "india": 3500,
-        "greater_india": 200,
+        "greater_india": 0,
         "nsi": 0,
         "female": 200,
         "male": 3500,
@@ -122,7 +122,7 @@
       "november": {
         "total": 3800,
         "india": 3600,
-        "greater_india": 200,
+        "greater_india": 0,
         "nsi": 0,
         "female": 250,
         "male": 3550,
@@ -133,7 +133,7 @@
       "december": {
         "total": 2712,
         "india": 2500,
-        "greater_india": 212,
+        "greater_india": 0,
         "nsi": 0,
         "female": 550,
         "male": 2162,
@@ -147,7 +147,7 @@
   "2024": {
     "total_students": 47354,
     "india": 43800,
-    "greater_india": 3554,
+    "greater_india": 0,
     "nsi": 0,
     "female": 9210,
     "male": 38144,
@@ -179,7 +179,7 @@
       "march": {
         "total": 4754,
         "india": 4000,
-        "greater_india": 754,
+        "greater_india": 0,
         "nsi": 0,
         "female": 2500,
         "male": 2254,
@@ -212,7 +212,7 @@
       "june": {
         "total": 4152,
         "india": 3300,
-        "greater_india": 852,
+        "greater_india": 0,
         "nsi": 0,
         "female": 800,
         "male": 3352,
@@ -223,7 +223,7 @@
       "july": {
         "total": 3685,
         "india": 3500,
-        "greater_india": 185,
+        "greater_india": 0,
         "nsi": 0,
         "female": 650,
         "male": 3035,
@@ -234,7 +234,7 @@
       "august": {
         "total": 4110,
         "india": 3900,
-        "greater_india": 210,
+        "greater_india": 0,
         "nsi": 0,
         "female": 560,
         "male": 3550,
@@ -245,7 +245,7 @@
       "september": {
         "total": 3800,
         "india": 3400,
-        "greater_india": 400,
+        "greater_india": 0,
         "nsi": 7680,
         "female": 550,
         "male": 3250,
@@ -256,7 +256,7 @@
       "october": {
         "total": 3800,
         "india": 3500,
-        "greater_india": 300,
+        "greater_india": 0,
         "nsi": 0,
         "female": 800,
         "male": 3000,
@@ -267,7 +267,7 @@
       "november": {
         "total": 4153,
         "india": 3900,
-        "greater_india": 253,
+        "greater_india": 0,
         "nsi": 0,
         "female": 700,
         "male": 3453,
@@ -278,7 +278,7 @@
       "december": {
         "total": 6800,
         "india": 6200,
-        "greater_india": 600,
+        "greater_india": 0,
         "nsi": 0,
         "female": 800,
         "male": 6000,
@@ -292,7 +292,7 @@
   "2025": {
     "total_students": 60556,
     "india": 56140,
-    "greater_india": 4416,
+    "greater_india": 0,
     "nsi": 0,
     "female": 10245,
     "male": 50311,
@@ -302,7 +302,7 @@
       "january": {
         "total": 4103,
         "india": 3770,
-        "greater_india": 333,
+        "greater_india": 0,
         "nsi": 17166,
         "female": 1200,
         "male": 2903,
@@ -313,7 +313,7 @@
       "february": {
         "total": 3800,
         "india": 3500,
-        "greater_india": 300,
+        "greater_india": 0,
         "nsi": 0,
         "female": 1400,
         "male": 2400,
@@ -324,7 +324,7 @@
       "march": {
         "total": 3133,
         "india": 2800,
-        "greater_india": 333,
+        "greater_india": 0,
         "nsi": 0,
         "female": 245,
         "male": 2888,
@@ -357,7 +357,7 @@
       "june": {
         "total": 4500,
         "india": 3500,
-        "greater_india": 1000,
+        "greater_india": 0,
         "nsi": 0,
         "female": 1100,
         "male": 3400,
@@ -368,7 +368,7 @@
       "july": {
         "total": 4550,
         "india": 4200,
-        "greater_india": 350,
+        "greater_india": 0,
         "nsi": 0,
         "female": 900,
         "male": 3650,
@@ -379,7 +379,7 @@
       "august": {
         "total": 5500,
         "india": 5200,
-        "greater_india": 300,
+        "greater_india": 0,
         "nsi": 0,
         "female": 850,
         "male": 4650,
@@ -390,7 +390,7 @@
       "september": {
         "total": 4500,
         "india": 4300,
-        "greater_india": 200,
+        "greater_india": 0,
         "nsi": 7680,
         "female": 600,
         "male": 3900,
@@ -401,7 +401,7 @@
       "october": {
         "total": 4700,
         "india": 4500,
-        "greater_india": 200,
+        "greater_india": 0,
         "nsi": 0,
         "female": 500,
         "male": 4200,
@@ -412,7 +412,7 @@
       "november": {
         "total": 6600,
         "india": 5400,
-        "greater_india": 1200,
+        "greater_india": 0,
         "nsi": 0,
         "female": 700,
         "male": 5900,
@@ -423,7 +423,7 @@
       "december": {
         "total": 11400,
         "india": 11200,
-        "greater_india": 200,
+        "greater_india": 0,
         "nsi": 0,
         "female": 800,
         "male": 10600,
@@ -437,7 +437,7 @@
   "2026": {
     "total_students": 12700,
     "india": 11800,
-    "greater_india": 900,
+    "greater_india": 0,
     "nsi": 0,
     "female": 2700,
     "male": 10000,
@@ -447,7 +447,7 @@
       "january": {
         "total": 5500,
         "india": 5200,
-        "greater_india": 300,
+        "greater_india": 0,
         "nsi": 17166,
         "female": 1500,
         "male": 4000,
@@ -458,7 +458,7 @@
       "february": {
         "total": 3800,
         "india": 3500,
-        "greater_india": 300,
+        "greater_india": 0,
         "nsi": 0,
         "female": 800,
         "male": 3000,
@@ -469,7 +469,7 @@
       "march": {
         "total": 3400,
         "india": 3100,
-        "greater_india": 300,
+        "greater_india": 0,
         "nsi": 0,
         "female": 400,
         "male": 3000,

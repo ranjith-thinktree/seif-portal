@@ -461,6 +461,11 @@ class CenterService {
         'last_refurbishment_date',
       ];
 
+      if (existingCenter.approval_status === 'rejected') {
+        updates.push('approval_status = ?');
+        values.push('pending');
+      }
+
       allowedFields.forEach((field) => {
         if (updateData[field] !== undefined) {
           updates.push(`${field} = ?`);

@@ -1145,11 +1145,16 @@ const approveUpload = async (uploadId, reviewedBy, remarks = null) => {
 
     await connection.commit();
 
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      fireEmail('trainee.approved_partner', {}, { audience: 'partner', partnerId: uploadInfo?.[0]?.partner_id });
+    } catch (e) {
+      /* non-blocking */
+    }
+
     return { success: true };
   } catch (error) {
     await connection.rollback();
-    // Re-throw structured errors (e.g. DUPLICATE_STUDENTS) as-is so the controller
-    // can inspect error.code / error.conflicts and return the right HTTP status.
     if (error.code) throw error;
     throw new Error(`Failed to approve upload: ${error.message}`);
   } finally {
@@ -1217,10 +1222,18 @@ const rejectUpload = async (uploadId, reviewedBy, rejectionReason, remarks = nul
 
     await connection.commit();
 
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      fireEmail(
+        'trainee.rejected_partner',
+        {},
+        { audience: 'partner', partnerId: uploadInfo?.[0]?.partner_id }
+      );
+    } catch (e) {
+      /* non-blocking */
+    }
+
     return { success: true };
-  } catch (error) {
-    await connection.rollback();
-    throw new Error(`Failed to reject upload: ${error.message}`);
   } finally {
     connection.release();
   }
@@ -1414,21 +1427,32 @@ const resubmitWithEdits = async (originalUploadId, editedStudents, userId, partn
       }
     }
 
-    // Create notification for admin about resubmission
-    const adminNotificationId = uuidv4();
-    await connection.query(
-      `INSERT INTO notifications 
-      (id, recipient_id, recipient_role, type, alert_type, title, message, related_entity_type, related_entity_id, is_read, sent_via, created_at) 
-      VALUES (?, NULL, 'admin', 'upload', 'info', ?, ?, 'data_upload', ?, 0, 'platform', NOW())`,
-      [
-        adminNotificationId,
-        'Data Resubmitted - Version ' + version,
-        `Partner has resubmitted data with corrections. This is version ${version} of the upload.`,
-        newUploadId,
-      ]
-    );
+    // Create in-app notifications for every active admin
+    const { ACTIVE_ADMIN_SQL } = require('../../../services/emailDispatch.service');
+    const [admins] = await connection.query(`SELECT id FROM users WHERE ${ACTIVE_ADMIN_SQL}`);
+    for (const admin of admins) {
+      await connection.query(
+        `INSERT INTO notifications 
+        (id, recipient_id, recipient_role, type, alert_type, title, message, related_entity_type, related_entity_id, is_read, sent_via, created_at) 
+        VALUES (?, ?, 'ADMIN', 'upload', 'info', ?, ?, 'data_upload', ?, 0, 'platform', NOW())`,
+        [
+          uuidv4(),
+          admin.id,
+          'Data Resubmitted - Version ' + version,
+          `Partner has resubmitted data with corrections. This is version ${version} of the upload.`,
+          newUploadId,
+        ]
+      );
+    }
 
     await connection.commit();
+
+    try {
+      const { fireEmail } = require('../../../services/emailDispatch.service');
+      fireEmail('trainee.resubmitted_admin', {}, { audience: 'admin' });
+    } catch (e) {
+      /* non-blocking */
+    }
 
     return {
       success: true,

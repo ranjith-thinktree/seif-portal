@@ -36,6 +36,23 @@ function startOfToday() {
 }
 
 /**
+ * Partner-facing certification alerts must go to a PARTNER user for the
+ * upload's partner_id — never the acting admin (uploaded_by can be ADMIN).
+ */
+async function resolvePartnerRecipientIds(partnerId, connection) {
+  if (!partnerId) return [];
+  const sql = `
+    SELECT id FROM users
+    WHERE partner_id = ?
+      AND role = 'PARTNER'
+      AND LOWER(COALESCE(status, 'active')) = 'active'`;
+  const [rows] = connection
+    ? await connection.query(sql, [partnerId])
+    : await db.query(sql, [partnerId]);
+  return (rows || []).map((row) => row.id).filter(Boolean);
+}
+
+/**
  * Partner certification submit/resubmit date rules:
  * - Start, End, and Assessment dates are all required
  * - Start Date cannot be in the future
@@ -144,6 +161,7 @@ async function fetchCertificationNotifyContext(uploadId, executor = null) {
   const [[row]] = await run(
     `SELECT
        cu.id AS upload_id,
+       cu.partner_id,
        p.name AS partner_name,
        COALESCE(c.center_name, cu.center_name) AS center_name,
        COALESCE(b.batch_number, cu.other_batch_number) AS batch_number
@@ -165,6 +183,7 @@ async function fetchCertificationNotifyContextByPdfId(pdfId, executor = null) {
   const [[row]] = await run(
     `SELECT
        cu.id AS upload_id,
+       COALESCE(cu.partner_id, cp.partner_id) AS partner_id,
        p.name AS partner_name,
        COALESCE(c.center_name, cu.center_name) AS center_name,
        COALESCE(b.batch_number, cu.other_batch_number, b2.batch_number) AS batch_number
@@ -212,7 +231,7 @@ async function fetchActiveAdminUsers(executor = null) {
   const [rows] = await run(
     `SELECT email, full_name
      FROM users
-     WHERE role = 'ADMIN'
+     WHERE role IN ('ADMIN', 'SUPER_ADMIN')
        AND LOWER(status) = 'active'
        AND email IS NOT NULL
        AND TRIM(email) <> ''`
@@ -237,32 +256,19 @@ async function fetchPartnerPrimaryContact(partnerId, executor = null) {
 
 async function sendAssessmentRequestAdminEmails({ uploadId, assessmentDate }) {
   try {
-    const emailService = require('../../../utils/email.util');
+    const { fireEmail } = require('../../../services/emailDispatch.service');
     const notifyCtx = await fetchCertificationNotifyContext(uploadId);
     if (!notifyCtx) return;
-
-    const admins = await fetchActiveAdminUsers();
-    const emailPayload = {
-      partnerName: notifyCtx.partner_name,
-      centerName: notifyCtx.center_name,
-      assessmentDate,
-      requestId: uploadId,
-    };
-
-    for (const admin of admins) {
-      try {
-        await emailService.sendCertificationAssessmentRequestAdminEmail({
-          toEmail: admin.email,
-          recipientName: admin.full_name || 'Admin',
-          ...emailPayload,
-        });
-      } catch (emailErr) {
-        console.error(
-          `[certification] admin assessment-request email failed for ${admin.email}:`,
-          emailErr.message
-        );
-      }
-    }
+    fireEmail(
+      'assessment.request_admin',
+      {
+        partnerName: notifyCtx.partner_name,
+        centerName: notifyCtx.center_name,
+        batchNumber: notifyCtx.batch_number,
+        assessmentDate,
+      },
+      { audience: 'admin' }
+    );
   } catch (emailBatchErr) {
     console.error(
       '[certification] admin assessment-request email batch failed:',
@@ -273,7 +279,7 @@ async function sendAssessmentRequestAdminEmails({ uploadId, assessmentDate }) {
 
 async function sendAssessmentApprovedPartnerEmail({ uploadId }) {
   try {
-    const emailService = require('../../../utils/email.util');
+    const { fireEmail } = require('../../../services/emailDispatch.service');
     const [[uploadRow]] = await db.query(
       `SELECT partner_id, assessment_date
        FROM certification_uploads
@@ -282,18 +288,19 @@ async function sendAssessmentApprovedPartnerEmail({ uploadId }) {
       [uploadId]
     );
     const notifyCtx = await fetchCertificationNotifyContext(uploadId);
-    const partnerContact = await fetchPartnerPrimaryContact(uploadRow?.partner_id);
-    if (!notifyCtx || !partnerContact?.email) return;
-
-    await emailService.sendCertificationAssessmentApprovedPartnerEmail({
-      toEmail: partnerContact.email,
-      recipientName: partnerContact.contact_name || partnerContact.partner_name || 'Partner',
+    if (!notifyCtx) return;
+    const vars = {
       partnerName: notifyCtx.partner_name,
       centerName: notifyCtx.center_name,
       batchNumber: notifyCtx.batch_number,
       assessmentDate: formatCertificationAssessmentDate(uploadRow?.assessment_date),
-      requestId: uploadId,
+      location: notifyCtx.center_name,
+    };
+    fireEmail('assessment.approved_partner', vars, {
+      audience: 'partner',
+      partnerId: uploadRow?.partner_id,
     });
+    fireEmail('assessment.approved_essci', vars, { audience: 'essci' });
   } catch (emailErr) {
     console.error('[certification] partner approval email failed:', emailErr.message);
   }
@@ -391,23 +398,25 @@ const createCertificationUpload = async (params) => {
     ]
   );
 
-  // Notify submitting partner
-  await db.query(
-    `INSERT INTO notifications
-       (id, recipient_id, type, alert_type, title, message, payload,
-        related_entity_type, related_entity_id, is_read, sent_via, created_at)
-     VALUES (UUID(), ?, 'certification_submitted', 'success',
-       'Certification Request Received',
-       ?,
-       ?,
-       'certification_upload', ?, 0, 'platform', NOW())`,
-    [
-      uploadedBy,
-      `Your certification data for ${center} (Batch ${batch}) has been submitted and is pending admin approval.`,
-      payloadJson,
-      uploadId,
-    ]
-  );
+  const partnerRecipientIds = await resolvePartnerRecipientIds(partnerId);
+  for (const partnerRecipientId of partnerRecipientIds) {
+    await db.query(
+      `INSERT INTO notifications
+         (id, recipient_id, recipient_role, type, alert_type, title, message, payload,
+          related_entity_type, related_entity_id, is_read, sent_via, created_at)
+       VALUES (UUID(), ?, 'PARTNER', 'certification_submitted', 'sent',
+         'Certification Request Received',
+         ?,
+         ?,
+         'certification_upload', ?, 0, 'platform', NOW())`,
+      [
+        partnerRecipientId,
+        `Your certification data for ${center} (Batch ${batch}) has been submitted and is pending admin approval.`,
+        payloadJson,
+        uploadId,
+      ]
+    );
+  }
 
   await sendAssessmentRequestAdminEmails({
     uploadId,
@@ -518,22 +527,25 @@ const resubmitCertificationUpload = async (uploadId, partnerId, params) => {
       ]
     );
 
-    await connection.query(
-      `INSERT INTO notifications
-         (id, recipient_id, type, alert_type, title, message, payload,
-          related_entity_type, related_entity_id, is_read, sent_via, created_at)
-       VALUES (UUID(), ?, 'certification_submitted', 'success',
-         'Certification Request Resubmitted',
-         ?,
-         ?,
-         'certification_upload', ?, 0, 'platform', NOW())`,
-      [
-        uploadedBy,
-        `Your corrected certification data for ${center} (Batch ${batch}) has been resubmitted and is pending admin approval.`,
-        payloadJson,
-        uploadId,
-      ]
-    );
+    const partnerRecipientIds = await resolvePartnerRecipientIds(partnerId, connection);
+    for (const partnerRecipientId of partnerRecipientIds) {
+      await connection.query(
+        `INSERT INTO notifications
+           (id, recipient_id, recipient_role, type, alert_type, title, message, payload,
+            related_entity_type, related_entity_id, is_read, sent_via, created_at)
+         VALUES (UUID(), ?, 'PARTNER', 'certification_submitted', 'sent',
+           'Certification Request Resubmitted',
+           ?,
+           ?,
+           'certification_upload', ?, 0, 'platform', NOW())`,
+        [
+          partnerRecipientId,
+          `Your corrected certification data for ${center} (Batch ${batch}) has been resubmitted and is pending admin approval.`,
+          payloadJson,
+          uploadId,
+        ]
+      );
+    }
 
     await connection.commit();
 
@@ -795,6 +807,8 @@ const getUploadDetails = async (uploadId, partnerId = null, options = {}) => {
        cu.reviewed_at AS updated_at,
             p.name as partner_name,
             p.organization_type as partner_type,
+            uu.full_name AS uploaded_by_name,
+            uu.role AS uploaded_by_role,
             cp.id AS pdf_id,
             cp.status AS pdf_status,
             cp.trainees_attended,
@@ -815,6 +829,7 @@ const getUploadDetails = async (uploadId, partnerId = null, options = {}) => {
      LEFT JOIN centers  c ON c.id = cu.center_id
      LEFT JOIN batches  b ON b.id = cu.batch_id
      LEFT JOIN partners p ON p.id = cu.partner_id
+     LEFT JOIN users uu ON uu.id = cu.uploaded_by
      LEFT JOIN certification_pdfs cp ON cp.id = (
        SELECT cp2.id
        FROM certification_pdfs cp2
@@ -934,22 +949,28 @@ const approveCertificationUpload = async (uploadId, adminId, remarks = null) => 
       const { partner, center, batch } = formatCertNotifyParts(notifyCtx);
       const payloadJson = certificationNotifyPayload(notifyCtx);
 
-      await connection.query(
-        `INSERT INTO notifications
-           (id, recipient_id, type, alert_type, title, message, payload,
-            related_entity_type, related_entity_id, is_read, sent_via, created_at)
-         VALUES (UUID(), ?, 'certification_approved', 'success',
-           'Certification Data Approved',
-           ?,
-           ?,
-           'certification_upload', ?, 0, 'platform', NOW())`,
-        [
-          upload.uploaded_by,
-          `Your certification data for ${center} (Batch ${batch}) has been approved by the admin.`,
-          payloadJson,
-          uploadId,
-        ]
+      const partnerRecipientIds = await resolvePartnerRecipientIds(
+        upload.partner_id,
+        connection
       );
+      for (const partnerRecipientId of partnerRecipientIds) {
+        await connection.query(
+          `INSERT INTO notifications
+             (id, recipient_id, recipient_role, type, alert_type, title, message, payload,
+              related_entity_type, related_entity_id, is_read, sent_via, created_at)
+           VALUES (UUID(), ?, 'PARTNER', 'certification_approved', 'success',
+             'Certification Data Approved',
+             ?,
+             ?,
+             'certification_upload', ?, 0, 'platform', NOW())`,
+          [
+            partnerRecipientId,
+            `Your certification data for ${center} (Batch ${batch}) has been approved by the admin.`,
+            payloadJson,
+            uploadId,
+          ]
+        );
+      }
       await connection.query(
         `INSERT INTO notifications
            (id, recipient_role, type, alert_type, title, message, payload,
@@ -970,60 +991,6 @@ const approveCertificationUpload = async (uploadId, adminId, remarks = null) => 
     await connection.commit();
 
     await sendAssessmentApprovedPartnerEmail({ uploadId });
-
-    // Email all active ESSCI users (non-blocking for approval success)
-    try {
-      const [[ctx]] = await db.query(
-        `SELECT cu.id,
-                cu.assessment_date,
-                COALESCE(c.center_name, cu.center_name) AS center_name,
-                COALESCE(b.batch_number, cu.other_batch_number) AS batch_number,
-                p.name AS partner_name
-         FROM certification_uploads cu
-         LEFT JOIN centers c ON c.id = cu.center_id
-         LEFT JOIN batches b ON b.id = cu.batch_id
-         LEFT JOIN partners p ON p.id = cu.partner_id
-         WHERE cu.id = ?`,
-        [uploadId]
-      );
-      const [essciUsers] = await db.query(
-        `SELECT email, full_name
-         FROM users
-         WHERE role = 'ESSCI'
-           AND LOWER(status) = 'active'
-           AND email IS NOT NULL
-           AND TRIM(email) <> ''`
-      );
-      if (ctx && essciUsers.length) {
-        const emailService = require('../../../utils/email.util');
-        const assessmentDate =
-          ctx.assessment_date instanceof Date
-            ? ctx.assessment_date.toISOString().slice(0, 10)
-            : ctx.assessment_date
-              ? String(ctx.assessment_date).slice(0, 10)
-              : null;
-        for (const user of essciUsers) {
-          try {
-            await emailService.sendCertificationApprovedEssciEmail({
-              toEmail: user.email,
-              recipientName: user.full_name || 'ESSCI Team',
-              partnerName: ctx.partner_name,
-              centerName: ctx.center_name,
-              batchNumber: ctx.batch_number,
-              requestId: uploadId,
-              assessmentDate,
-            });
-          } catch (emailErr) {
-            console.error(
-              `[certification] ESSCI approval email failed for ${user.email}:`,
-              emailErr.message
-            );
-          }
-        }
-      }
-    } catch (emailBatchErr) {
-      console.error('[certification] ESSCI approval email batch failed:', emailBatchErr.message);
-    }
   } catch (err) {
     await connection.rollback();
     throw err;
@@ -1079,24 +1046,30 @@ const rejectCertificationUpload = async (uploadId, adminId, rejectionReason, rem
         center_name: upload.center_name,
         batch_number: upload.batch_number,
       });
-      await connection.query(
-        `INSERT INTO notifications
-           (id, recipient_id, type, alert_type, title, message, remark, payload,
-            related_entity_type, related_entity_id, is_read, sent_via, created_at)
-         VALUES (UUID(), ?, 'certification_rejected', 'error',
-           'Certification Request Rejected',
-           ?,
-           ?,
-           ?,
-           'certification_upload', ?, 0, 'platform', NOW())`,
-        [
-          upload.uploaded_by,
-          `Your certification request for ${center} (Batch ${batch}) was rejected. Please review the reason and resubmit the same request with corrected details.`,
-          rejectionReason,
-          payloadJson,
-          uploadId,
-        ]
+      const partnerRecipientIds = await resolvePartnerRecipientIds(
+        upload.partner_id,
+        connection
       );
+      for (const partnerRecipientId of partnerRecipientIds) {
+        await connection.query(
+          `INSERT INTO notifications
+             (id, recipient_id, recipient_role, type, alert_type, title, message, remark, payload,
+              related_entity_type, related_entity_id, is_read, sent_via, created_at)
+           VALUES (UUID(), ?, 'PARTNER', 'certification_rejected', 'error',
+             'Certification Request Rejected',
+             ?,
+             ?,
+             ?,
+             'certification_upload', ?, 0, 'platform', NOW())`,
+          [
+            partnerRecipientId,
+            `Your certification request for ${center} (Batch ${batch}) was rejected. Please review the reason and resubmit the same request with corrected details.`,
+            rejectionReason,
+            payloadJson,
+            uploadId,
+          ]
+        );
+      }
     }
 
     await connection.commit();
@@ -1535,9 +1508,9 @@ const uploadCertificatePDF = async ({
 
       await connection.query(
         `INSERT INTO notifications
-           (id, recipient_id, type, alert_type, title, message, payload,
+           (id, recipient_id, recipient_role, type, alert_type, title, message, payload,
             related_entity_type, related_entity_id, is_read, sent_via, created_at)
-         VALUES (UUID(), ?, 'certificate_ready', 'success',
+         VALUES (UUID(), ?, 'PARTNER', 'certificate_ready', 'success',
            'Certificates Ready for Download',
            ?,
            ?,
@@ -1562,110 +1535,25 @@ const uploadCertificatePDF = async ({
 
     // Email partner + all active ADMIN users (non-blocking)
     try {
-      const emailService = require('../../../utils/email.util');
+      const { fireEmail } = require('../../../services/emailDispatch.service');
       const notifyCtx =
         (certificationUploadId
           ? await fetchCertificationNotifyContext(certificationUploadId)
           : null) ||
         (await fetchCertificationNotifyContextByPdfId(pdfId));
-      const assessmentDateValue =
-        assessmentDate ||
-        (notifyCtx?.assessment_date
-          ? String(notifyCtx.assessment_date).slice(0, 10)
-          : null);
-
-      // Prefer assessment_date from upload record
-      let assessmentForEmail = assessmentDateValue;
-      if (!assessmentForEmail && notifyCtx?.upload_id) {
-        const [[uploadRow]] = await db.query(
-          'SELECT assessment_date FROM certification_uploads WHERE id = ?',
-          [notifyCtx.upload_id]
-        );
-        if (uploadRow?.assessment_date) {
-          assessmentForEmail =
-            uploadRow.assessment_date instanceof Date
-              ? uploadRow.assessment_date.toISOString().slice(0, 10)
-              : String(uploadRow.assessment_date).slice(0, 10);
-        }
-      }
-
-      const requestId = notifyCtx?.upload_id || certificationUploadId || null;
-      const emailPayload = {
+      const vars = {
         partnerName: notifyCtx?.partner_name,
         centerName: notifyCtx?.center_name,
         batchNumber: notifyCtx?.batch_number,
-        requestId,
-        assessmentDate: assessmentForEmail,
+        assessmentDate: assessmentDate || notifyCtx?.assessment_date,
+        yourName: process.env.SMTP_FROM_NAME || 'SEIF Portal',
       };
-
-      const partnerRecipients = [];
-      const seenEmails = new Set();
-
-      const addPartnerRecipient = (email, recipientName) => {
-        const normalized = String(email || '').trim().toLowerCase();
-        if (!normalized || seenEmails.has(normalized)) return;
-        seenEmails.add(normalized);
-        partnerRecipients.push({
-          email: String(email).trim(),
-          recipientName: recipientName || notifyCtx?.partner_name || 'Partner',
-        });
-      };
-
-      let partnerIdForContact = pdf?.partner_id || null;
-      let spokeName = null;
-      let spokeEmail = null;
-      if (requestId) {
-        const [[uploadContact]] = await db.query(
-          `SELECT partner_id, spoke_name, spoke_email
-           FROM certification_uploads
-           WHERE id = ?
-           LIMIT 1`,
-          [requestId]
-        );
-        partnerIdForContact = uploadContact?.partner_id || partnerIdForContact;
-        spokeName = uploadContact?.spoke_name || null;
-        spokeEmail = uploadContact?.spoke_email || null;
-      }
-
-      const partnerContact = await fetchPartnerPrimaryContact(partnerIdForContact);
-      if (partnerContact?.email) {
-        addPartnerRecipient(
-          partnerContact.email,
-          partnerContact.contact_name || partnerContact.partner_name
-        );
-      }
-      addPartnerRecipient(spokeEmail, spokeName);
-
-      for (const recipient of partnerRecipients) {
-        try {
-          await emailService.sendCertificationCertificatesReadyPartnerEmail({
-            toEmail: recipient.email,
-            recipientName: recipient.recipientName,
-            ...emailPayload,
-          });
-        } catch (emailErr) {
-          console.error(
-            `[certification] partner certificates email failed for ${recipient.email}:`,
-            emailErr.message
-          );
-        }
-      }
-
-      const adminUsers = await fetchActiveAdminUsers();
-      for (const admin of adminUsers) {
-        try {
-          await emailService.sendCertificationCertificatesReadyAdminEmail({
-            toEmail: admin.email,
-            recipientName: admin.full_name || 'Admin',
-            ...emailPayload,
-          });
-        } catch (emailErr) {
-          console.error(
-            `[certification] admin certificates email failed for ${admin.email}:`,
-            emailErr.message
-          );
-        }
-      }
+      fireEmail('assessment.results_admin', vars, { audience: 'admin' });
+      fireEmail('assessment.results_partner', vars, {
+        audience: 'partner',
+        partnerId: notifyCtx?.partner_id || pdf?.partner_id,
+        extraEmails: [],
+      });
     } catch (emailBatchErr) {
       console.error(
         '[certification] certificates-ready email batch failed:',
@@ -1722,9 +1610,9 @@ const approveCertificatePDF = async (pdfId, adminId, remarks = null) => {
 
       await connection.query(
         `INSERT INTO notifications
-           (id, recipient_id, type, alert_type, title, message, payload,
+           (id, recipient_id, recipient_role, type, alert_type, title, message, payload,
             related_entity_type, related_entity_id, is_read, sent_via, created_at)
-         VALUES (UUID(), ?, 'certificate_ready', 'success',
+         VALUES (UUID(), ?, 'PARTNER', 'certificate_ready', 'success',
            'Certificate PDF Ready for Download',
            ?,
            ?,
@@ -1777,9 +1665,9 @@ const rejectCertificatePDF = async (pdfId, adminId, rejectionReason, remarks = n
 
       await connection.query(
         `INSERT INTO notifications
-           (id, recipient_id, type, alert_type, title, message, remark, payload,
+           (id, recipient_id, recipient_role, type, alert_type, title, message, remark, payload,
             related_entity_type, related_entity_id, is_read, sent_via, created_at)
-         VALUES (UUID(), ?, 'certificate_pdf_rejected', 'error',
+         VALUES (UUID(), ?, 'ESSCI', 'certificate_pdf_rejected', 'error',
            'Certificate PDF Rejected',
            ?,
            ?,

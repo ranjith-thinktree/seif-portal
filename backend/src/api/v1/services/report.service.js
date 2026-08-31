@@ -1,5 +1,14 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../../../database/connection');
+const { getPerformanceRatingSettings } = require('./settings.service');
+
+const DEFAULT_PERFORMANCE_RATING_SETTINGS = [
+  { minScore: 0, maxScore: 50, stars: 1, rating: 1 },
+  { minScore: 51, maxScore: 75, stars: 2, rating: 2 },
+  { minScore: 76, maxScore: 100, stars: 3, rating: 3 },
+  { minScore: 101, maxScore: 150, stars: 4, rating: 4 },
+  { minScore: 151, maxScore: null, stars: 5, rating: 5 },
+];
 
 const ALL_REPORTING_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SEIF_READONLY', 'SEIF_READONLY_DOWNLOAD'];
 
@@ -804,10 +813,11 @@ class AnalyticsService {
     return rows;
   }
 
-  /** Top 15 centers by students trained */
+  /** Centers ranked by yearly students trained with the configured rating */
   static async getCenterPerformance(year) {
     const { sql: yw, params: yp } = this.yearWhere(year);
-    const [rows] = await db.query(
+    const [centerResult, ratingSettings] = await Promise.all([
+      db.query(
       `SELECT
          c.center_name,
          p.name AS partner_name,
@@ -826,11 +836,61 @@ class AnalyticsService {
        WHERE c.status = 'active' ${yw}
        GROUP BY c.id, c.center_name, p.name, c.state
        HAVING students_trained > 0
-       ORDER BY students_trained DESC
-       LIMIT 15`,
+       ORDER BY students_trained DESC`,
       yp
-    );
-    return rows;
+      ),
+      getPerformanceRatingSettings(),
+    ]);
+    const [rows] = centerResult;
+
+    const savedSettings = Array.isArray(ratingSettings) ? ratingSettings : [];
+    const settings = (savedSettings.length
+      ? savedSettings
+      : DEFAULT_PERFORMANCE_RATING_SETTINGS
+    )
+      .map((setting) => ({
+        minScore: Number(setting.minScore ?? setting.min_score),
+        maxScore:
+          (setting.maxScore == null && setting.max_score == null)
+            ? null
+            : Number(setting.maxScore ?? setting.max_score),
+        stars: Number(setting.stars),
+        rating: Number(setting.rating),
+      }))
+      .filter(
+        (setting) =>
+          Number.isInteger(setting.minScore) &&
+          (setting.maxScore === null || Number.isInteger(setting.maxScore)) &&
+          Number.isInteger(setting.stars) &&
+          Number.isInteger(setting.rating),
+      );
+
+    return rows.map((row) => {
+      const studentsTrained = Number(row.students_trained);
+      const matchingSetting =
+       settings.find(
+       (setting) =>
+         studentsTrained >= setting.minScore &&
+         (setting.maxScore === null || studentsTrained <= setting.maxScore),
+       ) ||
+       DEFAULT_PERFORMANCE_RATING_SETTINGS.find(
+         (setting) =>
+           studentsTrained >= setting.minScore &&
+           (setting.maxScore === null || studentsTrained <= setting.maxScore),
+       );
+
+      return {
+       ...row,
+       students_trained: studentsTrained,
+       placed: Number(row.placed),
+       placement_pct:
+         row.placement_pct === null ? null : Number(row.placement_pct),
+       rating_stars: matchingSetting?.stars ?? null,
+       performance_rating: matchingSetting?.rating ?? null,
+       rating_min_students: matchingSetting?.minScore ?? null,
+       rating_max_students: matchingSetting?.maxScore ?? null,
+      };
+    });
   }
 }
 

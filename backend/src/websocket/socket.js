@@ -154,8 +154,26 @@ const emitToRole = (role, event, data) => {
     return;
   }
 
-  io.to(`role:${role}`).emit(event, data);
-  console.log(`📤 Emitted "${event}" to role ${role}`);
+  const normalized = String(role || '').trim().toUpperCase();
+  const rooms = new Set();
+  if (normalized) {
+    rooms.add(normalized);
+  }
+  if (role) {
+    rooms.add(String(role));
+  }
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') {
+    rooms.add('ADMIN');
+    rooms.add('SUPER_ADMIN');
+  }
+  if (normalized === 'PARTNER') {
+    rooms.add('partner');
+  }
+
+  rooms.forEach((roomRole) => {
+    io.to(`role:${roomRole}`).emit(event, data);
+  });
+  console.log(`📤 Emitted "${event}" to role ${normalized || role}`);
 };
 
 /**

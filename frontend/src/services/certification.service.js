@@ -303,6 +303,28 @@ export const exportCertificationMergedExcel = exportCertificationArchiveExcel;
 // SETTINGS (Admin)
 // ─────────────────────────────────────────────────────────────────────────────
 
+export const getEmailTemplates = async () => {
+  const response = await apiClient.get("/settings/email-templates");
+  return response.data?.data || [];
+};
+
+export const updateEmailTemplate = async (key, payload) => {
+  const response = await apiClient.put(`/settings/email-templates/${key}`, payload);
+  return response.data?.data;
+};
+
+export const resetEmailTemplate = async (key) => {
+  const response = await apiClient.post(`/settings/email-templates/${key}/reset`);
+  return response.data?.data;
+};
+
+export const testEmailTemplate = async (key, toEmail) => {
+  const response = await apiClient.post(`/settings/email-templates/${key}/test`, {
+    toEmail,
+  });
+  return response.data;
+};
+
 export const getPortalSettings = async () => {
   const response = await apiClient.get("/settings");
   return response.data;
@@ -321,6 +343,26 @@ export const updateTemplate = async (key, file) => {
   const response = await apiClient.put(`/settings/${key}/template`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+  return response.data;
+};
+
+export const getPerformanceRatingSettings = async () => {
+  const response = await apiClient.get("/settings/performance-ratings");
+  return response.data?.data || [];
+};
+
+export const createPerformanceRatingSetting = async (payload) => {
+  const response = await apiClient.post("/settings/performance-ratings", payload);
+  return response.data?.data;
+};
+
+export const updatePerformanceRatingSetting = async (id, payload) => {
+  const response = await apiClient.put(`/settings/performance-ratings/${id}`, payload);
+  return response.data?.data;
+};
+
+export const deletePerformanceRatingSetting = async (id) => {
+  const response = await apiClient.delete(`/settings/performance-ratings/${id}`);
   return response.data;
 };
 

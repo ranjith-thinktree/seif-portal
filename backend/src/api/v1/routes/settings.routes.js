@@ -12,6 +12,33 @@ const { uploadTemplateFile, handleUploadError } = require('../../../middleware/u
  */
 router.get('/', authenticate, settingsController.getSettings);
 
+router.get(
+  '/performance-ratings',
+  authenticate,
+  settingsController.getPerformanceRatingSettings
+);
+
+router.post(
+  '/performance-ratings',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  settingsController.createPerformanceRatingSetting
+);
+
+router.put(
+  '/performance-ratings/:id',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  settingsController.updatePerformanceRatingSetting
+);
+
+router.delete(
+  '/performance-ratings/:id',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  settingsController.deletePerformanceRatingSetting
+);
+
 /**
  * PUT /settings/:key/instruction  — ADMIN / SUPER_ADMIN only
  */
@@ -52,6 +79,34 @@ router.put(
   authenticate,
   checkRole(['ADMIN', 'SUPER_ADMIN']),
   settingsController.updateDashboardData
+);
+
+router.get(
+  '/email-templates',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  settingsController.listEmailTemplates
+);
+
+router.put(
+  '/email-templates/:key',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  settingsController.updateEmailTemplate
+);
+
+router.post(
+  '/email-templates/:key/reset',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  settingsController.resetEmailTemplate
+);
+
+router.post(
+  '/email-templates/:key/test',
+  authenticate,
+  checkRole(['ADMIN', 'SUPER_ADMIN']),
+  settingsController.testEmailTemplate
 );
 
 module.exports = router;

@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { toast } from "react-toastify";
+import { useAuth } from "../../hooks/useAuth";
 import ConfirmationModal from "../../components/common/ConfirmationModal";
 import {
   Dialog,
@@ -51,7 +52,21 @@ import {
  * Shows approved centers with detailed contact and address information
  * Different from Data Centers Page which shows pending approvals
  */
+const getApiErrorMessage = (error, fallback) => {
+  const data = error.response?.data;
+  const fieldErrors = data?.errors;
+  if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
+    return fieldErrors
+      .map((item) => item.message || item.msg)
+      .filter(Boolean)
+      .join(". ");
+  }
+  return data?.message || error.message || fallback;
+};
+
 const OrganizationCentersPage = ({ embedded = false }) => {
+  const { role } = useAuth();
+  const isPartner = role === "PARTNER";
   // State Management
   const [centers, setCenters] = useState([]);
   const [table, setTable] = useState(null);
@@ -85,18 +100,21 @@ const OrganizationCentersPage = ({ embedded = false }) => {
     try {
       setLoading(true);
       // Request all centers with a large limit for client-side pagination
-      const response = await getCenters({
-        limit: 1000,
-        approval_status: "approved",
-      });
+      const params = { limit: 1000 };
+      if (!isPartner) {
+        params.approval_status = "approved";
+      }
+
+      const response = await getCenters(params);
 
       if (response.success) {
-        // Filter only approved centers (status = 'active' or 'inactive')
-        const approvedCenters = response.data.filter(
-          (center) =>
-            center.status === "active" || center.status === "inactive",
-        );
-        setCenters(approvedCenters);
+        const visibleCenters = (response.data || []).filter((center) => {
+          if (isPartner) {
+            return center.approval_status !== "rejected";
+          }
+          return center.status === "active" || center.status === "inactive";
+        });
+        setCenters(visibleCenters);
       } else {
         throw new Error(response.message);
       }
@@ -109,7 +127,7 @@ const OrganizationCentersPage = ({ embedded = false }) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isPartner]);
 
   useEffect(() => {
     fetchCenters();
@@ -156,17 +174,17 @@ const OrganizationCentersPage = ({ embedded = false }) => {
       if (!response.success) {
         throw new Error(response.message || "Failed to create center");
       }
-      toast.success("Center created successfully");
+      toast.success(
+        isPartner
+          ? "Center created successfully and is awaiting admin approval."
+          : "Center created successfully",
+      );
       setShowForm(false);
       setEditingCenter(null);
       fetchCenters();
     } catch (error) {
       console.error("Error creating center:", error);
-      toast.error(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to create center",
-      );
+      toast.error(getApiErrorMessage(error, "Failed to create center"));
     } finally {
       setIsSubmitting(false);
     }
@@ -187,11 +205,7 @@ const OrganizationCentersPage = ({ embedded = false }) => {
       fetchCenters();
     } catch (error) {
       console.error("Error updating center:", error);
-      toast.error(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to update center",
-      );
+      toast.error(getApiErrorMessage(error, "Failed to update center"));
     } finally {
       setIsSubmitting(false);
     }
@@ -387,11 +401,21 @@ const OrganizationCentersPage = ({ embedded = false }) => {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => (
-          <Badge
-            variant={row.original.status === "active" ? "success" : "secondary"}
-          >
-            {row.original.status}
-          </Badge>
+          <div className="flex flex-col gap-1">
+            <Badge
+              variant={
+                row.original.status === "active" ? "success" : "secondary"
+              }
+            >
+              {row.original.status}
+            </Badge>
+            {row.original.approval_status &&
+              row.original.approval_status !== "approved" && (
+                <Badge variant="outline">
+                  {row.original.approval_status}
+                </Badge>
+              )}
+          </div>
         ),
         enableSorting: true,
       },

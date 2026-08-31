@@ -325,10 +325,15 @@ class BatchService {
         `SELECT 
           b.*,
           c.partner_id,
+          c.status as center_status,
+          c.approval_status,
           (SELECT COUNT(*) FROM students WHERE batch_id = b.id) as enrolled_students
         FROM batches b
         JOIN centers c ON c.id = b.center_id
         WHERE b.center_id = ?
+          AND c.status = 'active'
+          AND COALESCE(c.approval_status, 'approved') = 'approved'
+          AND COALESCE(b.status, 'active') NOT IN ('cancelled', 'inactive', 'pending', 'rejected')
         ORDER BY b.batch_start_date DESC`,
         [centerUuid]
       );

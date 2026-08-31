@@ -920,7 +920,12 @@ const UploadPage = () => {
           setCertBatchesLoading(true);
           try {
             const batchRes = await getBatchesByCenter(data.center_id);
-            if (!cancelled) setCertBatches(batchRes.data || batchRes || []);
+            const batchList = Array.isArray(batchRes?.data)
+              ? batchRes.data
+              : Array.isArray(batchRes)
+                ? batchRes
+                : [];
+            if (!cancelled) setCertBatches(batchList.filter(isApprovedCertificationBatch));
           } catch {
             if (!cancelled) setCertBatches([]);
           } finally {
@@ -944,6 +949,20 @@ const UploadPage = () => {
     };
   }, [certResubmitId, activeTab, certCentersLoading]);
 
+  const isApprovedCertificationBatch = (batch) => {
+    const status = String(batch?.status ?? "").trim().toLowerCase();
+    const approvalStatus = String(
+      batch?.approval_status ?? batch?.batch_approval_status ?? "",
+    )
+      .trim()
+      .toLowerCase();
+
+    return (
+      ["active", "approved", "completed"].includes(status) ||
+      approvalStatus === "approved"
+    );
+  };
+
   const handleCertCenterChange = async (centerId) => {
     setCertCenterId(centerId);
     setCertBatchId("");
@@ -953,7 +972,8 @@ const UploadPage = () => {
     setCertBatchesLoading(true);
     try {
       const res = await getBatchesByCenter(centerId);
-      setCertBatches(res.data || res || []);
+      const batchList = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      setCertBatches(batchList.filter(isApprovedCertificationBatch));
     } catch {
       setCertBatches([]);
       setCertError("Failed to load batches for the selected center.");
