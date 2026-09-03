@@ -72,7 +72,7 @@ export const KPI_CARD_DEFINITIONS = [
   {
     key: "edp",
     label: "EDP",
-    analyticsField: "edpCount",
+    analyticsField: null, // Dashboard Data + KPI custom only
   },
   {
     key: "youth_employed",

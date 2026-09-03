@@ -15,21 +15,15 @@ import {
   getDashboardData,
   updateDashboardData,
 } from "../../services/certification.service";
-
-const MONTHS = [
-  "january",
-  "february",
-  "march",
-  "april",
-  "may",
-  "june",
-  "july",
-  "august",
-  "september",
-  "october",
-  "november",
-  "december",
-];
+import {
+  YEAR_TOTAL_FIELDS,
+  MONTH_FIELDS,
+  MONTHS,
+  emptyYearData,
+  applyMonthlyChange,
+  applyAnnualChange,
+  recomputeAllYears,
+} from "../../utils/dashboardMetrics";
 
 const MONTH_LABELS = {
   january: "January",
@@ -45,57 +39,6 @@ const MONTH_LABELS = {
   november: "November",
   december: "December",
 };
-
-const YEAR_TOTAL_FIELDS = [
-  { key: "total_students", label: "Total Students" },
-  { key: "india", label: "India" },
-  { key: "greater_india", label: "Greater India" },
-  { key: "nsi", label: "NSI" },
-  { key: "female", label: "Female" },
-  { key: "male", label: "Male" },
-  { key: "tot", label: "TOT" },
-  { key: "employment", label: "Employment" },
-];
-
-const MONTH_FIELDS = [
-  { key: "total", label: "Total" },
-  { key: "india", label: "India" },
-  { key: "greater_india", label: "Gr. India" },
-  { key: "nsi", label: "NSI" },
-  { key: "female", label: "Female" },
-  { key: "male", label: "Male" },
-  { key: "tot", label: "TOT" },
-  { key: "employment", label: "Employment" },
-];
-
-const emptyMonthly = () => {
-  const monthly = {};
-  MONTHS.forEach((m) => {
-    monthly[m] = {
-      total: 0,
-      india: 0,
-      greater_india: 0,
-      nsi: 0,
-      female: 0,
-      male: 0,
-      tot: 0,
-      employment: 0,
-    };
-  });
-  return monthly;
-};
-
-const emptyYearData = () => ({
-  total_students: 0,
-  india: 0,
-  greater_india: 0,
-  nsi: 0,
-  female: 0,
-  male: 0,
-  tot: 0,
-  employment: 0,
-  monthly: emptyMonthly(),
-});
 
 const DashboardDataEditor = () => {
   const [data, setData] = useState(null);
@@ -114,7 +57,7 @@ const DashboardDataEditor = () => {
     try {
       const res = await getDashboardData();
       if (res.success) {
-        setData(res.data);
+        setData(recomputeAllYears(res.data || {}));
       } else {
         setError(res.message || "Failed to load dashboard data");
       }
@@ -139,29 +82,14 @@ const DashboardDataEditor = () => {
     : ["all"];
 
   const handleYearTotalChange = (field, value) => {
-    setData((prev) => ({
-      ...prev,
-      [selectedYear]: {
-        ...prev[selectedYear],
-        [field]: Number(value) || 0,
-      },
-    }));
+    if (selectedYear === "all") return;
+    setData((prev) => applyAnnualChange(prev, selectedYear, field, value));
   };
 
   const handleMonthlyChange = (month, field, value) => {
-    setData((prev) => ({
-      ...prev,
-      [selectedYear]: {
-        ...prev[selectedYear],
-        monthly: {
-          ...prev[selectedYear].monthly,
-          [month]: {
-            ...prev[selectedYear].monthly[month],
-            [field]: Number(value) || 0,
-          },
-        },
-      },
-    }));
+    setData((prev) =>
+      applyMonthlyChange(prev, selectedYear, month, field, value),
+    );
   };
 
   const handleAddYear = () => {
@@ -186,7 +114,7 @@ const DashboardDataEditor = () => {
     setData((prev) => {
       const next = { ...prev };
       delete next[year];
-      return next;
+      return recomputeAllYears(next);
     });
     setSelectedYear("all");
     setDeleteConfirm(null);
@@ -196,8 +124,9 @@ const DashboardDataEditor = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await updateDashboardData(data);
+      const res = await updateDashboardData(recomputeAllYears(data));
       if (res.success) {
+        if (res.data) setData(recomputeAllYears(res.data));
         toast.success("Dashboard data saved successfully!");
       } else {
         toast.error(res.message || "Save failed");
@@ -338,7 +267,7 @@ const DashboardDataEditor = () => {
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-gray-900">
           {selectedYear === "all"
-            ? "Overall Totals (All Years Combined)"
+            ? "Overall Custom Totals (All Years Combined)"
             : `Year ${selectedYear} — Annual Data`}
         </h3>
         {selectedYear !== "all" && (
@@ -364,8 +293,8 @@ const DashboardDataEditor = () => {
           </h4>
           <p className="text-xs text-gray-500 mt-0.5">
             {selectedYear === "all"
-              ? "Grand totals across all years combined"
-              : "Total counts for the full calendar year"}
+              ? "Sum of every year's annual totals. Edit a year to change these numbers."
+              : "Editing a month updates this total. Editing a total here clears that field in every month."}
           </p>
         </div>
         <div className="p-5">
@@ -374,13 +303,15 @@ const DashboardDataEditor = () => {
               <div key={key}>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   {label}
+                  {key === "total_students" ? " (India + GI + NSI)" : ""}
                 </label>
                 <Input
                   type="number"
                   min="0"
+                  readOnly={selectedYear === "all" || key === "total_students"}
                   value={currentYearData[key] ?? 0}
                   onChange={(e) => handleYearTotalChange(key, e.target.value)}
-                  className="h-9 text-sm"
+                  className={`h-9 text-sm ${selectedYear === "all" || key === "total_students" ? "bg-gray-50" : ""}`}
                 />
               </div>
             ))}
@@ -453,11 +384,12 @@ const DashboardDataEditor = () => {
                             <Input
                               type="number"
                               min="0"
+                              readOnly={key === "total"}
                               value={monthData[key] ?? 0}
                               onChange={(e) =>
                                 handleMonthlyChange(month, key, e.target.value)
                               }
-                              className="h-7 text-xs text-right px-2 w-full"
+                              className={`h-7 text-xs text-right px-2 w-full ${key === "total" ? "bg-gray-50" : ""}`}
                             />
                           </td>
                         ))}

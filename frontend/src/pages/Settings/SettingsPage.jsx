@@ -372,7 +372,7 @@ const SettingsPage = () => {
 
   return (
     <MainLayout>
-      <div className="p-6 max-w-5xl mx-auto">
+      <div className="p-6 max-w-7xl mx-auto">
         {/* ── Page Header ── */}
         <div className="mb-8 flex items-start justify-between">
           <div className="flex items-center gap-4">
@@ -392,12 +392,12 @@ const SettingsPage = () => {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex gap-1 mb-6 border-b border-gray-200">
+        <div className="flex gap-3 mb-6 border-b border-gray-200">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative ${
+              className={`flex items-center gap-1 px-2 py-3 text-sm font-medium transition-colors relative ${
                 activeTab === id
                   ? "text-[#009530] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#009530]"
                   : "text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-t-lg"

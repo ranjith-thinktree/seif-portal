@@ -1,4 +1,6 @@
 const db = require('../../../database/connection');
+const { KpiService } = require('./kpi.service');
+const { loadCustomStats } = require('../../../utils/dashboardData.util');
 
 /**
  * Analytics Service
@@ -14,14 +16,15 @@ class AnalyticsService {
     try {
       const { financialYear, partnerId, centerId, gender } = filters;
 
-      // Build WHERE clause dynamically
+      // Build WHERE clause dynamically — match Home: approved students only
       let whereConditions = [];
       let queryParams = [];
 
       // Financial Year filter (April to March)
+      // Financial Year filter (April to March of startYear / startYear+1)
       if (financialYear && financialYear !== 'all') {
-        const startYear = parseInt(financialYear.split('-')[0]);
-        const endYear = parseInt(financialYear.split('-')[1]);
+        const startYear = parseInt(financialYear.split('-')[0], 10);
+        const endYear = startYear + 1;
         whereConditions.push(
           `((YEAR(s.enrollment_date) = ? AND MONTH(s.enrollment_date) >= 4) OR (YEAR(s.enrollment_date) = ? AND MONTH(s.enrollment_date) <= 3))`
         );
@@ -57,6 +60,7 @@ class AnalyticsService {
           COALESCE((SELECT SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) FROM uploaded_students s ${whereClause}), 0) as female_students,
           (SELECT COUNT(*) FROM partners WHERE status = 'active') as total_partners,
           (SELECT COUNT(*) FROM centers WHERE status = 'active') as total_centers,
+          (SELECT COUNT(*) FROM employment e INNER JOIN students s ON e.student_id = s.id WHERE e.is_verified = 1) as total_employments,
           0 as total_completed_training
         FROM dual`;
 
@@ -64,6 +68,10 @@ class AnalyticsService {
         summaryQuery,
         queryParams.concat(queryParams, queryParams)
       );
+      const summary = summaryStats[0] || {};
+      const kpiSettings = await KpiService.getSettings(financialYear || 'all');
+      const customStats = await loadCustomStats(financialYear || 'all');
+      const totalTrainers = await KpiService.countTrainers();
 
       // 2. Get Partner-wise Breakdown (Top 10 partners only for performance)
       const [partnerBreakdown] = await db.query(
@@ -151,13 +159,14 @@ class AnalyticsService {
       );
 
       return {
-        summary: summaryStats[0] || {
-          total_students: 0,
-          male_students: 0,
-          female_students: 0,
-          total_partners: 0,
-          total_centers: 0,
-          total_employments: 0,
+        summary: {
+          total_students: Number(summary.total_students) || 0,
+          male_students: Number(summary.male_students) || 0,
+          female_students: Number(summary.female_students) || 0,
+          total_partners: Number(summary.total_partners) || 0,
+          total_centers: Number(summary.total_centers) || 0,
+          total_employments: Number(summary.total_employments) || 0,
+          total_trainers: totalTrainers,
         },
         partnerBreakdown: Array.isArray(partnerBreakdown) ? partnerBreakdown : [],
         centerBreakdown: Array.isArray(centerBreakdown) ? centerBreakdown : [],
@@ -166,6 +175,8 @@ class AnalyticsService {
         availableYears: Array.isArray(availableYears)
           ? availableYears.map((y) => y.financial_year)
           : [],
+        kpiSettings,
+        customStats,
       };
     } catch (error) {
       console.error('Error in getConsolidatedAnalytics:', error);

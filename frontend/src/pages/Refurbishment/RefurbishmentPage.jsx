@@ -531,6 +531,7 @@ const RefurbishmentPage = () => {
           }}
           onSelectInstant={handleSelectInstant}
           onSelectSchedule={handleSelectSchedule}
+          defaultMessage={refurbishmentSettings.defaultCustomMessage}
         />
 
         <ScheduleNotificationModal

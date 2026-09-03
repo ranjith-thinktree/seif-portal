@@ -20,7 +20,7 @@ const StatCard = ({ title, value, trend = "up", graphData = [] }) => {
   const TrendIcon = isUpTrend ? ArrowTrendingUpIcon : ArrowTrendingDownIcon;
 
   return (
-    <div className="relative bg-white rounded-[16px] border border-[#A5A5A5] p-3 transition-shadow duration-300 min-h-[150px] flex flex-col">
+    <div className="relative bg-white rounded-[16px] border border-[#A5A5A5] p-3 transition-shadow duration-300 min-h-[120px] flex flex-col">
       {/* Header Section */}
       <div className="flex items-start justify-between mb-2">
         <h3 className="text-base md:text-sm text-[#1F2937] leading-relaxed">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   EyeIcon,
   EyeSlashIcon,
@@ -12,6 +12,11 @@ import {
   getKpiLiveValues,
   reorderKpiSettings,
 } from "../../services/kpi.service";
+import { getDashboardData } from "../../services/certification.service";
+import {
+  buildDisplayMetrics,
+  customStatsForYear,
+} from "../../utils/dashboardMetrics";
 
 const YEAR_OPTIONS = [
   { value: "all", label: "All Years (Global)" },
@@ -29,6 +34,7 @@ const KpiSettingsPanel = () => {
   const [settings, setSettings] = useState({});
   const [orderedDefs, setOrderedDefs] = useState([...KPI_CARD_DEFINITIONS]);
   const [liveValues, setLiveValues] = useState({});
+  const [historicalCustom, setHistoricalCustom] = useState({});
   const [saving, setSaving] = useState({});
   const [saved, setSaved] = useState({});
   const [loadError, setLoadError] = useState(null);
@@ -54,7 +60,6 @@ const KpiSettingsPanel = () => {
     }
   }, [selectedYear]);
 
-  // Fetch live DB counts once on mount (year-independent)
   useEffect(() => {
     getKpiLiveValues()
       .then(setLiveValues)
@@ -62,8 +67,47 @@ const KpiSettingsPanel = () => {
   }, []);
 
   useEffect(() => {
+    getDashboardData()
+      .then((res) => {
+        const payload = res?.data || res || {};
+        setHistoricalCustom(customStatsForYear(payload, selectedYear));
+      })
+      .catch(() => setHistoricalCustom({}));
+  }, [selectedYear]);
+
+  useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  const previewMetrics = useMemo(
+    () =>
+      buildDisplayMetrics({
+        db: {
+          students: liveValues.youth_trained,
+          partners: liveValues.partners,
+          centers: liveValues.centers,
+          states: liveValues.states_uts,
+          employments: liveValues.youth_employed,
+          tot: liveValues.trainers_trained,
+        },
+        custom: historicalCustom,
+        kpiSettings: settings,
+      }),
+    [liveValues, historicalCustom, settings],
+  );
+
+  const displayedByKpi = {
+    youth_trained: previewMetrics.students,
+    trainers_trained: previewMetrics.tot,
+    edp: previewMetrics.edp,
+    youth_employed: previewMetrics.employments,
+    partners: previewMetrics.partners,
+    centers: previewMetrics.centers,
+    states_uts: previewMetrics.states,
+    greater_india: previewMetrics.greaterIndia,
+    nsi: previewMetrics.nsi,
+    alumni: previewMetrics.alumni,
+  };
 
   const handleCustomValueChange = (key, value) => {
     setSettings((prev) => ({
@@ -167,10 +211,10 @@ const KpiSettingsPanel = () => {
       <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-xl text-sm text-green-800">
         <span className="text-green-600 mt-0.5">ℹ</span>
         <span>
-          Drag rows to reorder KPI cards on the dashboard. Set a custom value to
-          add to the live count, rename the dashboard title, or hide individual
-          cards. Order and titles are global — custom values and visibility can
-          be configured per financial year.
+          Custom value is added on top of the live database count and Dashboard
+          Data. Trainers Trained uses the live TOT list (Data → TOT), plus any
+          TOT you enter in Dashboard Data or here. Greater India, NSI, Alumni,
+          and EDP are custom-only.
         </span>
       </div>
 
@@ -229,13 +273,8 @@ const KpiSettingsPanel = () => {
               };
               const isVisible = setting.isVisible !== false;
               const liveCount =
-                typeof liveValues[key] === "number" ? liveValues[key] : null;
-              const customVal =
-                typeof setting.customValue === "number"
-                  ? setting.customValue
-                  : 0;
-              const displayedTotal =
-                liveCount !== null ? liveCount + customVal : null;
+                typeof liveValues[key] === "number" ? liveValues[key] : 0;
+              const displayedTotal = displayedByKpi[key] ?? 0;
               const isDragTarget =
                 dragOverIndex === idx && dragIndexRef.current !== idx;
 

@@ -3,46 +3,15 @@
 const settingsService = require('../services/settings.service');
 const ApiResponse = require('../../../utils/response.util');
 const path = require('path');
-const fs = require('fs').promises;
-
-// Path to the dashboard data file (stored within backend/data)
-const DASHBOARD_DATA_PATH = path.resolve(__dirname, '../../../../data/dashboardData.json');
+const {
+  YEAR_TOTAL_FIELDS,
+  MONTH_FIELDS,
+  MONTHS,
+  readDashboardDataFile,
+  writeDashboardDataFile,
+} = require('../../../utils/dashboardData.util');
 
 const VALID_YEAR_KEYS = (key) => key === 'all' || /^\d{4}$/.test(key);
-const YEAR_TOTAL_FIELDS = [
-  'total_students',
-  'india',
-  'greater_india',
-  'nsi',
-  'female',
-  'male',
-  'tot',
-  'employment',
-];
-const MONTH_FIELDS = [
-  'total',
-  'india',
-  'greater_india',
-  'nsi',
-  'female',
-  'male',
-  'tot',
-  'employment',
-];
-const MONTHS = [
-  'january',
-  'february',
-  'march',
-  'april',
-  'may',
-  'june',
-  'july',
-  'august',
-  'september',
-  'october',
-  'november',
-  'december',
-];
 
 const toFileUrl = (filePath) => {
   if (!filePath) return null;
@@ -156,10 +125,7 @@ exports.deletePerformanceRatingSetting = async (req, res) => {
  */
 exports.getDashboardData = async (req, res) => {
   try {
-    let raw = await fs.readFile(DASHBOARD_DATA_PATH, 'utf-8');
-    // Strip UTF-8 BOM if present (files saved by Excel/Notepad may include it)
-    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
-    const data = JSON.parse(raw);
+    const data = await readDashboardDataFile();
     return ApiResponse.success(res, data, 'Dashboard data retrieved');
   } catch (error) {
     console.error('[settingsController] getDashboardData error:', error);
@@ -235,12 +201,10 @@ exports.updateDashboardData = async (req, res) => {
       }
     }
 
-    // Write to file with pretty formatting
-    const json = JSON.stringify(data, null, 2);
-    await fs.writeFile(DASHBOARD_DATA_PATH, json, 'utf-8');
+    const saved = await writeDashboardDataFile(data);
 
     console.log(`[settingsController] Dashboard data updated by user ${req.user.id}`);
-    return ApiResponse.success(res, null, 'Dashboard data saved successfully');
+    return ApiResponse.success(res, saved, 'Dashboard data saved successfully');
   } catch (error) {
     console.error('[settingsController] updateDashboardData error:', error);
     return ApiResponse.error(res, 'Failed to save dashboard data', 500);

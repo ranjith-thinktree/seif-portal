@@ -1,15 +1,15 @@
-﻿{
+{
   "all": {
     "total_students": 158109,
     "india": 146632,
-    "greater_india": 11477,
-    "nsi": 24846,
+    "greater_india": 0,
+    "nsi": 0,
     "female": 26496,
     "male": 131613,
     "tot": 1112,
     "employment": 1203,
-    "alumni": 91,
-    "edp": 2403
+    "alumni": 0,
+    "edp": 0
   },
   "2023": {
     "total_students": 37499,

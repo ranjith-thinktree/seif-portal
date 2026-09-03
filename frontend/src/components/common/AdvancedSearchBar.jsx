@@ -57,7 +57,11 @@ const AdvancedSearchBar = ({
   const filteredSuggestions = suggestions
     .filter(
       (suggestion) =>
-        value && suggestion.label.toLowerCase().includes(value.toLowerCase()),
+        value &&
+        (suggestion.label || suggestion.value || "")
+          .toString()
+          .toLowerCase()
+          .includes(value.toLowerCase()),
     )
     .slice(0, 10); // Limit to 10 suggestions
   const sortRef = useRef(null);
@@ -155,7 +159,10 @@ const AdvancedSearchBar = ({
     if (!searchTerm) return group.options;
 
     return group.options.filter((option) =>
-      option.label.toLowerCase().includes(searchTerm),
+      (option.label || option.value || "")
+        .toString()
+        .toLowerCase()
+        .includes(searchTerm),
     );
   };
 

@@ -99,7 +99,10 @@ const OrganizationPartnersPage = ({ embedded = false }) => {
         throw new Error(response.message);
       }
 
-      const approvedPartners = response.data.filter(
+      const approvedPartners = (Array.isArray(response.data)
+        ? response.data
+        : []
+      ).filter(
         (partner) =>
           partner.status === "active" || partner.status === "inactive",
       );

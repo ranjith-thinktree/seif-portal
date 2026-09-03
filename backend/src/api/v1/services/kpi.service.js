@@ -194,6 +194,45 @@ class KpiService {
     }
   }
 
+  static async countTrainers() {
+    try {
+      const [rows] = await db.query(`SELECT COUNT(*) as total FROM tots`);
+      return Number(rows[0]?.total) || 0;
+    } catch {
+      try {
+        const [rows] = await db.query(`SELECT COUNT(*) as total FROM trainer_profiles`);
+        return Number(rows[0]?.total) || 0;
+      } catch {
+        try {
+          const [rows] = await db.query(`SELECT COUNT(*) as total FROM trainers`);
+          return Number(rows[0]?.total) || 0;
+        } catch {
+          return 0;
+        }
+      }
+    }
+  }
+
+  /** Same count as Data → Employment (verified records linked to a student). */
+  static async countYouthEmployed() {
+    try {
+      const [rows] = await db.query(
+        `SELECT COUNT(*) as total
+         FROM employment e
+         INNER JOIN students s ON e.student_id = s.id
+         WHERE e.is_verified = 1`
+      );
+      return Number(rows[0]?.total) || 0;
+    } catch {
+      try {
+        const [rows] = await db.query(`SELECT COUNT(*) as total FROM employment`);
+        return Number(rows[0]?.total) || 0;
+      } catch {
+        return 0;
+      }
+    }
+  }
+
   /**
    * Get actual live DB counts for each KPI key (without custom value offset).
    * Used in the Settings panel to show admins the real numbers.
@@ -202,7 +241,7 @@ class KpiService {
   static async getLiveValues() {
     try {
       const [students] = await db.query(
-        `SELECT COUNT(*) as total FROM uploaded_students WHERE approval_status = 'approved'`
+        `SELECT COUNT(*) as total FROM uploaded_students`
       );
       const [partners] = await db.query(
         `SELECT COUNT(*) as total FROM partners WHERE status = 'active'`
@@ -210,27 +249,23 @@ class KpiService {
       const [centers] = await db.query(
         `SELECT COUNT(*) as total FROM centers WHERE status = 'active'`
       );
-      const [employments] = await db.query(`SELECT COUNT(*) as total FROM employment`);
       const [states] = await db.query(
         `SELECT COUNT(DISTINCT state) as total FROM centers WHERE status = 'active'`
       );
-      const [edp] = await db.query(
-        `SELECT COUNT(DISTINCT us.id) as total
-         FROM uploaded_students us
-         WHERE us.approval_status = 'approved' AND us.course_name LIKE '%EDP%'`
-      );
+      const trainers = await KpiService.countTrainers();
+      const employments = await KpiService.countYouthEmployed();
 
       return {
-        youth_trained: students[0]?.total || 0,
-        trainers_trained: 0, // custom value only, no DB source
-        edp: edp[0]?.total || 0,
-        youth_employed: employments[0]?.total || 0,
-        partners: partners[0]?.total || 0,
-        centers: centers[0]?.total || 0,
-        states_uts: states[0]?.total || 0,
-        greater_india: 0, // custom value only
-        nsi: 0, // custom value only
-        alumni: 0, // custom value only
+        youth_trained: Number(students[0]?.total) || 0,
+        trainers_trained: trainers,
+        edp: 0,
+        youth_employed: employments,
+        partners: Number(partners[0]?.total) || 0,
+        centers: Number(centers[0]?.total) || 0,
+        states_uts: Number(states[0]?.total) || 0,
+        greater_india: 0,
+        nsi: 0,
+        alumni: 0,
       };
     } catch (error) {
       console.error('[KpiService] getLiveValues error:', error);

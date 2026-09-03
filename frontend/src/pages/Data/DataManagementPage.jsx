@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { MainLayout } from "../../components/layout";
@@ -35,17 +35,23 @@ const DataManagementPage = () => {
     user?.role === "SEIF_READONLY" ||
     user?.role === "SEIF_READONLY_DOWNLOAD";
 
-  const tabs = [
-    { id: "overview", label: "Overview", visible: !isEssci },
-    { id: "partners", label: "Partner List", visible: isAdmin },
-    { id: "centers", label: "Center List", visible: true },
-    { id: "batches", label: "Batch List", visible: true },
-    { id: "students", label: "Students List", visible: true },
-    { id: "tot", label: "TOT", visible: !isEssci },
-    { id: "employment", label: "Employment", visible: !isEssci },
-  ];
-
-  const visibleTabs = tabs.filter((tab) => tab.visible);
+  const visibleTabs = useMemo(() => {
+    const essci = user?.role === "ESSCI";
+    const admin =
+      user?.role === "ADMIN" ||
+      user?.role === "SUPER_ADMIN" ||
+      user?.role === "SEIF_READONLY" ||
+      user?.role === "SEIF_READONLY_DOWNLOAD";
+    return [
+      { id: "overview", label: "Overview", visible: !essci },
+      { id: "partners", label: "Partner List", visible: admin },
+      { id: "centers", label: "Center List", visible: true },
+      { id: "batches", label: "Batch List", visible: true },
+      { id: "students", label: "Students List", visible: true },
+      { id: "tot", label: "TOT", visible: !essci },
+      { id: "employment", label: "Employment", visible: !essci },
+    ].filter((tab) => tab.visible);
+  }, [user?.role]);
 
   useEffect(() => {
     if (!visibleTabs.some((tab) => tab.id === activeTab)) {

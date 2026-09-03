@@ -117,13 +117,13 @@ const ESSCIRequestsTab = ({
       {
         id: "updated_at",
         accessorKey: "updated_at",
-        header: "Last Updated",
+        header: "Request Received On",
         cell: ({ row }) => (
           <span className="text-sm text-gray-600">
             {formatDate(
-              row.original.updated_at ||
-                row.original.reviewed_at ||
-                row.original.created_at,
+              row.original.created_at ||
+                row.original.updated_at ||
+                row.original.reviewed_at,
             )}
           </span>
         ),

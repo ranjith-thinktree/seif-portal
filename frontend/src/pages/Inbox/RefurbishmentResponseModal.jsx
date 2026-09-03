@@ -468,10 +468,16 @@ const RefurbishmentResponseModal = ({
     });
   };
 
-  // Document upload handlers — shown in the final preview step
+  // Document upload handlers — Excel templates only (.xlsx / .csv)
   const handleRefurbishmentDocUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const name = (file.name || "").toLowerCase();
+    if (!name.endsWith(".xlsx") && !name.endsWith(".csv")) {
+      toast.error("Please upload an Excel file (.xlsx or .csv)");
+      e.target.value = "";
+      return;
+    }
     if (file.size > 20 * 1024 * 1024) {
       toast.error("Document must be under 20MB");
       return;
@@ -483,6 +489,12 @@ const RefurbishmentResponseModal = ({
   const handleUpgradationDocUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const name = (file.name || "").toLowerCase();
+    if (!name.endsWith(".xlsx") && !name.endsWith(".csv")) {
+      toast.error("Please upload an Excel file (.xlsx or .csv)");
+      e.target.value = "";
+      return;
+    }
     if (file.size > 20 * 1024 * 1024) {
       toast.error("Document must be under 20MB");
       return;
@@ -493,6 +505,40 @@ const RefurbishmentResponseModal = ({
 
   // Navigate to next course, then show refurbishment-only preview first
   const handleNext = () => {
+    if (!currentCourse?.packages?.length) {
+      toast.error("No packages available for this course");
+      return;
+    }
+
+    const selectedPkgs = currentCourse.packages.filter(
+      (pkg) => selections[pkg.package_id],
+    );
+
+    if (selectedPkgs.length === 0) {
+      toast.error("Please select at least one package for this course");
+      return;
+    }
+
+    for (const pkg of selectedPkgs) {
+      const justification = (justifications[pkg.package_id] || "").trim();
+      const newImages = imageFiles[pkg.package_id] || [];
+      const existingImages = existingImageUrls[pkg.package_id] || [];
+      if (!justification) {
+        toast.error(
+          `Please add a justification for "${pkg.package_name}"`,
+        );
+        setActivePackageId(pkg.package_id);
+        return;
+      }
+      if (newImages.length === 0 && existingImages.length === 0) {
+        toast.error(
+          `Please upload images of the existing lab for "${pkg.package_name}"`,
+        );
+        setActivePackageId(pkg.package_id);
+        return;
+      }
+    }
+
     if (currentCourseIndex < totalCourses - 1) {
       setCurrentCourseIndex((prev) => prev + 1);
     } else {
@@ -899,12 +945,17 @@ const RefurbishmentResponseModal = ({
                 <h2 className="text-3xl font-bold text-gray-900 mb-3">
                   Do you need upgradation?
                 </h2>
-                <p className="text-sm text-gray-500 max-w-md">
-                  We've received your request. You'll be notified once it's
-                  reviewed by the admin.
-                </p>
               </div>
               <div className="flex items-center gap-4 w-full max-w-md">
+                <button
+                  onClick={() => {
+                    setUpgradationRequested(true);
+                    setUpgradationStep("room");
+                  }}
+                  className="flex-1 px-10 py-3.5 rounded-2xl text-green-600 border border-green-600 text-sm font-bold transition-colors"
+                >
+                  Yes
+                </button>
                 <button
                   onClick={() => {
                     setUpgradationRequested(false);
@@ -914,18 +965,9 @@ const RefurbishmentResponseModal = ({
                     setIsFinalPreview(true);
                     setShowPreview(true);
                   }}
-                  className="flex-1 px-10 py-3.5 rounded-2xl border-2 border-gray-300 text-gray-800 text-sm font-bold hover:border-gray-400 transition-colors"
-                >
-                  No, Thanks.
-                </button>
-                <button
-                  onClick={() => {
-                    setUpgradationRequested(true);
-                    setUpgradationStep("room");
-                  }}
                   className="flex-1 px-10 py-3.5 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-bold transition-colors"
                 >
-                  Yes
+                  No, Thanks.
                 </button>
               </div>
             </div>
@@ -958,9 +1000,18 @@ const RefurbishmentResponseModal = ({
   // ============================================================
   if (upgradationStep === "room") {
     const handleRoomContinue = () => {
-      const { length_feet, breadth_feet, height_feet } = upgradationDetails;
+      const { length_feet, breadth_feet, height_feet, justification } =
+        upgradationDetails;
       if (!length_feet || !breadth_feet || !height_feet) {
-        toast.error("Please fill in all room dimensions");
+        toast.error("Please fill in all new room dimensions");
+        return;
+      }
+      if (!(justification || "").trim()) {
+        toast.error("Please add a justification for the new room");
+        return;
+      }
+      if (upgradationPhotoFiles.length === 0) {
+        toast.error("Please upload images of the existing lab for the new room");
         return;
       }
       setUpgradationStep("packages");
@@ -986,12 +1037,12 @@ const RefurbishmentResponseModal = ({
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">
-                ROOM DIMENSION (IN FEET)
+                NEW ROOM DIMENSION (IN FEET)
               </p>
               <div className="flex gap-4 mb-6">
                 <input
                   type="number"
-                  placeholder="LENGHT"
+                  placeholder="LENGTH"
                   value={upgradationDetails.length_feet}
                   onChange={(e) =>
                     setUpgradationDetails((prev) => ({
@@ -1044,23 +1095,67 @@ const RefurbishmentResponseModal = ({
               />
 
               <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
-                UPLOAD ROOM PICTURES
+                UPLOAD NEW ROOM PICTURES
               </p>
-              <label className="cursor-pointer inline-flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+              <label className="cursor-pointer inline-flex items-center gap-2 border-2 border-dashed border-gray-300 rounded-lg px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 hover:border-green-400">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/jpg,image/png"
                   multiple
                   className="hidden"
-                  onChange={(e) =>
-                    setUpgradationPhotoFiles((prev) => [
-                      ...prev,
-                      ...Array.from(e.target.files),
-                    ])
-                  }
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length === 0) return;
+                    for (const file of files) {
+                      if (!file.type.startsWith("image/")) {
+                        toast.error(`${file.name} is not an image file`);
+                        e.target.value = "";
+                        return;
+                      }
+                      if (file.size > 5 * 1024 * 1024) {
+                        toast.error(`${file.name} exceeds 5MB limit`);
+                        e.target.value = "";
+                        return;
+                      }
+                    }
+                    setUpgradationPhotoFiles((prev) => [...prev, ...files]);
+                    toast.success(`${files.length} image(s) added`);
+                    e.target.value = "";
+                  }}
                 />
-                Attach Images
+                <ArrowUpTrayIcon className="h-5 w-5 text-gray-700" />
+                Upload images of the existing lab
               </label>
+              {upgradationPhotoFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {upgradationPhotoFiles.map((file, imgIdx) => (
+                    <div
+                      key={`${file.name}-${imgIdx}`}
+                      className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 bg-white"
+                    >
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-10 h-10 object-cover rounded"
+                      />
+                      <span className="text-xs text-gray-700 truncate flex-1">
+                        {file.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUpgradationPhotoFiles((prev) =>
+                            prev.filter((_, i) => i !== imgIdx),
+                          )
+                        }
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <XCircleIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -1160,12 +1255,13 @@ const RefurbishmentResponseModal = ({
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            onClick={(e) => e.stopPropagation()}
                             onChange={(e) => {
                               e.stopPropagation();
                               setActiveUpgradationPackageId(pkgId);
                               setUpgradationSelections((prev) => ({
                                 ...prev,
-                                [pkgId]: !prev[pkgId],
+                                [pkgId]: e.target.checked,
                               }));
                             }}
                             className="flex-shrink-0 mt-0.5 h-5 w-5 rounded cursor-pointer"
@@ -1235,18 +1331,18 @@ const RefurbishmentResponseModal = ({
                         ? `upgradation-image-upload-${activeUpgradationPackageId}`
                         : undefined
                     }
-                    className={`flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 transition-colors ${
+                    className={`flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-800 transition-colors ${
                       activeUpgradationPackageId
-                        ? "cursor-pointer hover:border-purple-400 hover:bg-purple-50 hover:text-purple-600"
+                        ? "cursor-pointer hover:border-purple-400 hover:bg-purple-50 hover:text-purple-800"
                         : "cursor-default opacity-50"
                     }`}
                   >
-                    <ArrowUpTrayIcon className="h-5 w-5" />
-                    <span>
+                    <ArrowUpTrayIcon className="h-5 w-5 text-gray-700" />
+                    <span className="text-gray-800">
                       {activeUpgradationPackageId &&
                       activeUpgradationFiles.length > 0
                         ? `${activeUpgradationFiles.length} image(s) attached`
-                        : "Attach Image"}
+                        : "Upload images of the existing lab"}
                     </span>
                   </label>
 
@@ -1257,12 +1353,13 @@ const RefurbishmentResponseModal = ({
                       multiple
                       accept="image/jpeg,image/jpg,image/png"
                       className="hidden"
-                      onChange={(e) =>
+                      onChange={(e) => {
                         handleUpgradationImageUpload(
                           activeUpgradationPackageId,
                           e,
-                        )
-                      }
+                        );
+                        e.target.value = "";
+                      }}
                       disabled={activeUpgradationFiles.length >= 5}
                     />
                   )}
@@ -1315,6 +1412,37 @@ const RefurbishmentResponseModal = ({
                   </button>
                   <button
                     onClick={() => {
+                      const selectedUpgPkgs = upgradationPkgList.filter(
+                        (pkg) =>
+                          upgradationSelections[pkg.package_id || pkg.id],
+                      );
+                      if (selectedUpgPkgs.length === 0) {
+                        toast.error(
+                          "Please select at least one upgradation package",
+                        );
+                        return;
+                      }
+                      for (const pkg of selectedUpgPkgs) {
+                        const pkgId = pkg.package_id || pkg.id;
+                        const justification = (
+                          upgradationJustifications[pkgId] || ""
+                        ).trim();
+                        const files = upgradationImageFiles[pkgId] || [];
+                        if (!justification) {
+                          toast.error(
+                            `Please add a justification for "${pkg.package_name}"`,
+                          );
+                          setActiveUpgradationPackageId(pkgId);
+                          return;
+                        }
+                        if (files.length === 0) {
+                          toast.error(
+                            `Please upload images of the existing lab for "${pkg.package_name}"`,
+                          );
+                          setActiveUpgradationPackageId(pkgId);
+                          return;
+                        }
+                      }
                       setUpgradationStep(null);
                       setPreviewTab("upgradation");
                       setPreviewActivePackageId(null);
@@ -1855,7 +1983,7 @@ const RefurbishmentResponseModal = ({
                       Refurbishment Document{" "}
                       <span className="text-red-500">*</span>{" "}
                       <span className="text-gray-400 font-normal">
-                        (PDF, Excel, Image…)
+                        (.xlsx or .csv)
                       </span>
                     </label>
                     {refurbishmentDoc ? (
@@ -1889,7 +2017,7 @@ const RefurbishmentResponseModal = ({
                           <input
                             type="file"
                             className="hidden"
-                            accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                            accept=".xlsx,.csv"
                             onChange={handleRefurbishmentDocUpload}
                           />
                         </label>
@@ -1903,7 +2031,7 @@ const RefurbishmentResponseModal = ({
                         <input
                           type="file"
                           className="hidden"
-                          accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                          accept=".xlsx,.csv"
                           onChange={handleRefurbishmentDocUpload}
                         />
                       </label>
@@ -1916,7 +2044,7 @@ const RefurbishmentResponseModal = ({
                       <label className="block text-xs text-gray-600 font-medium mb-1">
                         Upgradation Document{" "}
                         <span className="text-gray-400 font-normal">
-                          (PDF, Excel, Image…)
+                          (.xlsx or .csv)
                         </span>
                       </label>
                       {upgradationDoc ? (
@@ -1950,7 +2078,7 @@ const RefurbishmentResponseModal = ({
                             <input
                               type="file"
                               className="hidden"
-                              accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                              accept=".xlsx,.csv"
                               onChange={handleUpgradationDocUpload}
                             />
                           </label>
@@ -1964,7 +2092,7 @@ const RefurbishmentResponseModal = ({
                           <input
                             type="file"
                             className="hidden"
-                            accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                            accept=".xlsx,.csv"
                             onChange={handleUpgradationDocUpload}
                           />
                         </label>
@@ -2091,9 +2219,13 @@ const RefurbishmentResponseModal = ({
                     <input
                       type="checkbox"
                       checked={isSelected}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
                         e.stopPropagation();
-                        togglePackageSelection(pkg.package_id);
+                        setSelections((prev) => ({
+                          ...prev,
+                          [pkg.package_id]: e.target.checked,
+                        }));
                         setActivePackageId(pkg.package_id);
                       }}
                       className="flex-shrink-0 h-5 w-5 rounded border-gray-400 focus:ring-green-500 cursor-pointer"
@@ -2150,7 +2282,7 @@ const RefurbishmentResponseModal = ({
                 className="flex-1 resize-none bg-white border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:border-green-400 focus:ring-green-400 disabled:opacity-60 disabled:cursor-default"
               />
 
-              {/* Attach Image */}
+              {/* Upload images of the existing lab */}
               <div>
                 <label
                   htmlFor={
@@ -2158,18 +2290,18 @@ const RefurbishmentResponseModal = ({
                       ? `image-upload-${activePackageId}`
                       : undefined
                   }
-                  className={`flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 transition-colors ${
+                  className={`flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-800 transition-colors ${
                     activePackageId
-                      ? "cursor-pointer hover:border-green-400 hover:bg-green-50 hover:text-green-600"
+                      ? "cursor-pointer hover:border-green-400 hover:bg-green-50 hover:text-green-800"
                       : "cursor-default opacity-50"
                   }`}
                 >
-                  <ArrowUpTrayIcon className="h-5 w-5" />
-                  <span>
+                  <ArrowUpTrayIcon className="h-5 w-5 text-gray-700" />
+                  <span className="text-gray-800">
                     {activePackageId &&
                     (imageFiles[activePackageId] || []).length > 0
                       ? `${(imageFiles[activePackageId] || []).length} image(s) attached`
-                      : "Attach Image"}
+                      : "Upload images of the existing lab"}
                   </span>
                 </label>
                 {activePackageId && (
@@ -2179,7 +2311,10 @@ const RefurbishmentResponseModal = ({
                     multiple
                     accept="image/jpeg,image/jpg,image/png"
                     className="hidden"
-                    onChange={(e) => handleImageUpload(activePackageId, e)}
+                    onChange={(e) => {
+                      handleImageUpload(activePackageId, e);
+                      e.target.value = "";
+                    }}
                     disabled={(imageFiles[activePackageId] || []).length >= 5}
                   />
                 )}

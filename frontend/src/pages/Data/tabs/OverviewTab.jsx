@@ -44,6 +44,12 @@ import {
 import { UserGroupIcon, UserIcon } from "@heroicons/react/24/outline";
 import dashboardData from "../../../data/dashboardData.json";
 import StudentBreakdownTooltip from "../../../components/data/StudentBreakdownTooltip";
+import {
+  buildDisplayMetrics,
+  customStatsForDisplay,
+  liveDbFromAnalytics,
+  unwrapAnalyticsPayload,
+} from "../../../utils/dashboardMetrics";
 
 /**
  * Overview Tab for Data Management
@@ -315,19 +321,11 @@ const OverviewTab = () => {
       setAnalyticsError(null);
 
       const response = await getConsolidatedAnalytics(filters);
-
-      // Backend returns {success, message, data} wrapped by successResponse
-      // apiClient returns response.data, so we get {success, message, data}
-      // We need to access the nested 'data' property
-      if (response && response.data) {
-        console.log("📊 Analytics received:", response.data);
-        setAnalytics(response.data);
-      } else if (response) {
-        // Fallback if response is already the data object
-        console.log("📊 Analytics received (direct):", response);
-        setAnalytics(response);
+      const payload = unwrapAnalyticsPayload(response);
+      if (payload && Object.keys(payload).length) {
+        setAnalytics(payload);
       } else {
-        console.error("❌ Invalid analytics response:", response);
+        console.error("Invalid analytics response:", response);
         setAnalyticsError("Invalid data format received from server");
       }
     } catch (err) {
@@ -364,6 +362,7 @@ const OverviewTab = () => {
         female: dashboardData.all?.female || 0,
         tot: dashboardData.all?.tot || 0,
         employment: dashboardData.all?.employment || 0,
+        edp: dashboardData.all?.edp || 0,
         monthly: null,
       };
     }
@@ -379,6 +378,7 @@ const OverviewTab = () => {
       female: 0,
       tot: 0,
       employment: 0,
+      edp: 0,
       monthly: null,
     };
 
@@ -395,12 +395,37 @@ const OverviewTab = () => {
         female: (baseData.female || 0) + (y2026.female || 0),
         tot: (baseData.tot || 0) + (y2026.tot || 0),
         employment: (baseData.employment || 0) + (y2026.employment || 0),
+        edp: (baseData.edp || 0) + (y2026.edp || 0),
         monthly: baseData.monthly,
       };
     }
 
     return baseData;
   }, [filters.financialYear]);
+
+  const displayMetrics = useMemo(() => {
+    const custom = customStatsForDisplay(
+      analytics?.customStats,
+      getFilteredDashboardData || {},
+    );
+    const metrics = buildDisplayMetrics({
+      db: liveDbFromAnalytics(analytics),
+      custom,
+      kpiSettings: analytics?.kpiSettings || {},
+    });
+    return {
+      students: metrics.students,
+      male: metrics.male,
+      female: metrics.female,
+      partners: metrics.partners,
+      centers: metrics.centers,
+      tot: metrics.tot,
+      employments: metrics.employments,
+      india: metrics.india,
+      greater_india: metrics.greaterIndia,
+      nsi: metrics.nsi,
+    };
+  }, [analytics, getFilteredDashboardData]);
 
   // Log matching results ONCE (prevents console spam)
   useEffect(() => {
@@ -619,26 +644,15 @@ const OverviewTab = () => {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                   <StudentBreakdownTooltip
                     breakdown={{
-                      india:
-                        (analytics.summary?.india || 0) +
-                        (getFilteredDashboardData.india || 0),
-                      greater_india:
-                        (analytics.summary?.greater_india || 0) +
-                        (getFilteredDashboardData.greater_india || 0),
-                      nsi:
-                        (analytics.summary?.nsi || 0) +
-                        (getFilteredDashboardData.nsi || 0),
-                      total:
-                        (analytics.summary?.total_students || 0) +
-                        (getFilteredDashboardData.total_students || 0),
+                      india: displayMetrics.india,
+                      greater_india: displayMetrics.greater_india,
+                      nsi: displayMetrics.nsi,
+                      total: displayMetrics.students,
                     }}
                   >
                     <StatCard
                       title="Total Students"
-                      value={
-                        (analytics.summary?.total_students || 0) +
-                        (getFilteredDashboardData.total_students || 0)
-                      }
+                      value={displayMetrics.students}
                       trend="up"
                       graphData={
                         filters.financialYear === "2025-26" &&
@@ -676,10 +690,7 @@ const OverviewTab = () => {
                   </StudentBreakdownTooltip>
                   <StatCard
                     title="Male Students"
-                    value={
-                      parseInt(analytics.summary?.male_students || 0) +
-                      (getFilteredDashboardData.male || 0)
-                    }
+                    value={displayMetrics.male}
                     trend="up"
                     graphData={
                       filters.financialYear === "2025-26" &&
@@ -705,10 +716,7 @@ const OverviewTab = () => {
                   />
                   <StatCard
                     title="Female Students"
-                    value={
-                      parseInt(analytics.summary?.female_students || 0) +
-                      (getFilteredDashboardData.female || 0)
-                    }
+                    value={displayMetrics.female}
                     trend="up"
                     graphData={
                       filters.financialYear === "2025-26" &&
@@ -734,7 +742,7 @@ const OverviewTab = () => {
                   />
                   <StatCard
                     title="Total Partners"
-                    value={analytics.summary?.total_partners || 0}
+                    value={displayMetrics.partners}
                     trend="up"
                     graphData={
                       filters.financialYear === "2025-26" &&
@@ -771,7 +779,7 @@ const OverviewTab = () => {
                   />
                   <StatCard
                     title="Total Centers"
-                    value={analytics.summary?.total_centers || 0}
+                    value={displayMetrics.centers}
                     trend="up"
                     graphData={
                       filters.financialYear === "2025-26" &&
@@ -808,10 +816,7 @@ const OverviewTab = () => {
                   />
                   <StatCard
                     title="Total Trainers (TOT)"
-                    value={
-                      (analytics.summary?.tot || 0) +
-                      (getFilteredDashboardData.tot || 0)
-                    }
+                    value={displayMetrics.tot}
                     trend="up"
                     graphData={
                       filters.financialYear === "2025-26" &&
@@ -832,10 +837,7 @@ const OverviewTab = () => {
                   />
                   <StatCard
                     title="Total Employments"
-                    value={
-                      (analytics.summary?.employment || 0) +
-                      (getFilteredDashboardData.employment || 0)
-                    }
+                    value={displayMetrics.employments}
                     trend="up"
                     graphData={
                       filters.financialYear === "2025-26" &&
@@ -857,57 +859,41 @@ const OverviewTab = () => {
                 </div>
 
                 {/* Charts Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                   {/* Gender Distribution Donut Chart */}
-                  <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 overflow-hidden">
+                    <h3 className="text-base font-semibold text-gray-800 mb-3">
                       Gender Distribution
                     </h3>
                     {(() => {
-                      // Combine API data + dashboardData.json
-                      const maleFromAPI =
-                        analytics.genderDistribution?.find(
-                          (g) => g.gender === "Male",
-                        )?.count || 0;
-                      const femaleFromAPI =
-                        analytics.genderDistribution?.find(
-                          (g) => g.gender === "Female",
-                        )?.count || 0;
-                      const maleFromDashboard =
-                        getFilteredDashboardData.male || 0;
-                      const femaleFromDashboard =
-                        getFilteredDashboardData.female || 0;
-
                       const combinedGenderData = [
                         {
                           gender: "Male",
-                          count: maleFromAPI + maleFromDashboard,
+                          count: displayMetrics.male,
                         },
                         {
                           gender: "Female",
-                          count: femaleFromAPI + femaleFromDashboard,
+                          count: displayMetrics.female,
                         },
                       ];
+                      const formatCount = (n) =>
+                        Number(n || 0).toLocaleString();
 
                       return combinedGenderData.some((g) => g.count > 0) ? (
-                        <div className="flex items-center gap-8">
-                          {/* Donut Chart */}
-                          <div className="flex-1">
-                            <ResponsiveContainer width="100%" height={300}>
-                              <PieChart>
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                          <div className="w-full sm:w-[46%] min-w-0 h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                                 <Pie
                                   data={combinedGenderData}
                                   dataKey="count"
                                   nameKey="gender"
                                   cx="50%"
                                   cy="50%"
-                                  innerRadius={80}
-                                  outerRadius={120}
+                                  innerRadius="52%"
+                                  outerRadius="78%"
                                   paddingAngle={2}
-                                  label={({ percent }) =>
-                                    `${(percent * 100).toFixed(0)}%`
-                                  }
-                                  labelLine={false}
+                                  label={false}
                                 >
                                   {combinedGenderData.map((entry, index) => (
                                     <Cell
@@ -920,60 +906,65 @@ const OverviewTab = () => {
                                     />
                                   ))}
                                 </Pie>
-                                <Tooltip />
+                                <Tooltip
+                                  formatter={(value) => formatCount(value)}
+                                />
                               </PieChart>
                             </ResponsiveContainer>
                           </div>
 
-                          {/* Stats Panel */}
-                          <div className="flex-shrink-0 w-64 space-y-4">
-                            <div className="bg-white rounded-xl p-4 border border-gray-100">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                  <UserIcon className="w-6 h-6 text-blue-500" />
+                          <div className="w-full sm:w-[54%] space-y-2">
+                            <div className="rounded-lg p-3 border border-gray-100">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                                  <UserIcon className="w-4 h-4 text-blue-500" />
                                 </div>
-                                <div>
-                                  <p className="text-sm text-gray-600 font-medium">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-gray-600 font-medium">
                                     Female students
                                   </p>
-                                  <p className="text-2xl font-bold text-gray-900">
-                                    {combinedGenderData.find(
-                                      (g) => g.gender === "Female",
-                                    )?.count || 0}
+                                  <p className="text-lg font-bold text-gray-900 leading-tight">
+                                    {formatCount(
+                                      combinedGenderData.find(
+                                        (g) => g.gender === "Female",
+                                      )?.count,
+                                    )}
                                   </p>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="bg-white rounded-xl p-4 border border-gray-100">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
-                                  <UserIcon className="w-6 h-6 text-red-500" />
+                            <div className="rounded-lg p-3 border border-gray-100">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0">
+                                  <UserIcon className="w-4 h-4 text-orange-500" />
                                 </div>
-                                <div>
-                                  <p className="text-sm text-gray-600 font-medium">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-gray-600 font-medium">
                                     Male students
                                   </p>
-                                  <p className="text-2xl font-bold text-gray-900">
-                                    {combinedGenderData.find(
-                                      (g) => g.gender === "Male",
-                                    )?.count || 0}
+                                  <p className="text-lg font-bold text-gray-900 leading-tight">
+                                    {formatCount(
+                                      combinedGenderData.find(
+                                        (g) => g.gender === "Male",
+                                      )?.count,
+                                    )}
                                   </p>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="bg-white rounded-xl p-4 border border-gray-100">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                  <UserGroupIcon className="w-6 h-6 text-gray-700" />
+                            <div className="rounded-lg p-3 border border-gray-100">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                  <UserGroupIcon className="w-4 h-4 text-gray-700" />
                                 </div>
-                                <div>
-                                  <p className="text-sm text-gray-600 font-medium">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-gray-600 font-medium">
                                     Total Students
                                   </p>
-                                  <p className="text-2xl font-bold text-gray-900">
-                                    {analytics.summary?.total_students || 0}
+                                  <p className="text-lg font-bold text-gray-900 leading-tight">
+                                    {formatCount(displayMetrics.students)}
                                   </p>
                                 </div>
                               </div>
@@ -981,7 +972,7 @@ const OverviewTab = () => {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center h-[300px] text-gray-400">
+                        <div className="flex items-center justify-center h-[200px] text-gray-400 text-sm">
                           No gender data available
                         </div>
                       );
@@ -989,11 +980,11 @@ const OverviewTab = () => {
                   </div>
 
                   {/* Yearly Trend Bar Chart */}
-                  <Card className="shadow-sm">
-                    <CardHeader>
-                      <CardTitle className="text-lg">Year-wise Trend</CardTitle>
+                  <Card className="shadow-sm overflow-hidden">
+                    <CardHeader className="p-4 pb-2">
+                      <CardTitle className="text-base">Year-wise Trend</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="px-3 pb-3">
                       {(() => {
                         // Combine API yearlyTrend + dashboardData.json yearly data
                         const apiYears = analytics.yearlyTrend || [];
@@ -1053,18 +1044,32 @@ const OverviewTab = () => {
                                 color: "#017FC5",
                               },
                             }}
-                            className="h-[300px] w-full"
+                            className="aspect-auto h-[240px] w-full"
                           >
                             <BarChart
                               data={combinedYearlyData}
                               accessibilityLayer
+                              margin={{ top: 16, right: 8, left: 0, bottom: 0 }}
                             >
                               <CartesianGrid vertical={false} />
                               <XAxis
                                 dataKey="financial_year"
                                 tickLine={false}
-                                tickMargin={10}
+                                tickMargin={8}
                                 axisLine={false}
+                                fontSize={11}
+                              />
+                              <YAxis
+                                tickLine={false}
+                                axisLine={false}
+                                width={40}
+                                fontSize={11}
+                                allowDecimals={false}
+                                tickFormatter={(value) =>
+                                  value >= 1000
+                                    ? `${Math.round(value / 1000)}k`
+                                    : String(value)
+                                }
                               />
                               <ChartTooltip
                                 content={<ChartTooltipContent hideLabel />}
@@ -1075,17 +1080,19 @@ const OverviewTab = () => {
                                 stackId="a"
                                 fill="var(--color-female_students)"
                                 radius={[0, 0, 4, 4]}
+                                maxBarSize={36}
                               />
                               <Bar
                                 dataKey="male_students"
                                 stackId="a"
                                 fill="var(--color-male_students)"
                                 radius={[4, 4, 0, 0]}
+                                maxBarSize={36}
                               />
                             </BarChart>
                           </ChartContainer>
                         ) : (
-                          <div className="flex items-center justify-center h-[300px] text-gray-400">
+                          <div className="flex items-center justify-center h-[240px] text-gray-400 text-sm">
                             No yearly trend data available
                           </div>
                         );

@@ -23,7 +23,7 @@ const STEPS = [
     icon: ClipboardDocumentListIcon,
     title: "Select Packages & Justify",
     description:
-      "Browse through the admin-curated packages for your center. Select all that apply and optionally provide a brief justification or attach supporting photos for each package.",
+      "Browse the admin-curated packages for your center. Select all that apply, and for each selected package provide a justification and upload images of the existing lab.",
     color: "green",
   },
   {
@@ -31,7 +31,7 @@ const STEPS = [
     icon: CheckCircleIcon,
     title: "Upgradation Request (Optional)",
     description:
-      "Indicate whether you require any infrastructure or equipment upgradation. If yes, you will select from the available upgradation packages.",
+      "Indicate whether you need any infrastructure or equipment upgradation. If yes, enter the new room details and select from the available upgradation packages.",
     color: "blue",
   },
   {
@@ -39,7 +39,7 @@ const STEPS = [
     icon: PhotoIcon,
     title: "Upload Documents",
     description:
-      "Attach the completed refurbishment template (mandatory) and the upgradation template (if applicable) along with any other supporting documents.",
+      "Upload the completed refurbishment Excel template (.xlsx or .csv — mandatory) and the upgradation Excel template if applicable.",
     color: "purple",
   },
   {
@@ -47,7 +47,7 @@ const STEPS = [
     icon: PaperAirplaneIcon,
     title: "Review & Submit",
     description:
-      "Preview all your selections on a summary screen. Once satisfied, submit your request. The SEIF admin team will review and respond.",
+      "Review all your selections on the summary screen. When you are satisfied, submit your request. The SEIF admin team will review and respond.",
     color: "orange",
   },
 ];
@@ -207,7 +207,7 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
                       onClick={() =>
                         handleDownload(
                           "refurbishment",
-                          "SEIF_Refurbishment_Template.csv",
+                          "SEIF_Refurbishment_Template.xlsx",
                         )
                       }
                       disabled={downloading === "refurbishment"}
@@ -216,7 +216,7 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
                       <ArrowDownTrayIcon className="h-3.5 w-3.5" />
                       {downloading === "refurbishment"
                         ? "Downloading…"
-                        : "Download CSV"}
+                        : "Download Excel (.xlsx)"}
                     </button>
                   </div>
 
@@ -243,7 +243,7 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
                       onClick={() =>
                         handleDownload(
                           "upgradation",
-                          "SEIF_Upgradation_Template.csv",
+                          "SEIF_Upgradation_Template.xlsx",
                         )
                       }
                       disabled={downloading === "upgradation"}
@@ -252,7 +252,7 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
                       <ArrowDownTrayIcon className="h-3.5 w-3.5" />
                       {downloading === "upgradation"
                         ? "Downloading…"
-                        : "Download CSV"}
+                        : "Download Excel (.xlsx)"}
                     </button>
                   </div>
                 </div>

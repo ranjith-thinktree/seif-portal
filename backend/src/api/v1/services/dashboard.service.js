@@ -1,6 +1,7 @@
 const db = require('../../../database/connection');
 const { DatabaseError } = require('../../../utils/error.util');
 const { KpiService } = require('./kpi.service');
+const { loadCustomStats } = require('../../../utils/dashboardData.util');
 
 /**
  * Dashboard Service
@@ -397,12 +398,26 @@ class DashboardService {
       );
       const totalCenters = centersResult[0].total;
 
-      // Get total students (approved)
+      const studentWhere = [];
+      const studentParams = [];
+      if (year && year !== 'all') {
+        const startYear = parseInt(String(year).split('-')[0], 10);
+        if (Number.isFinite(startYear)) {
+          studentWhere.push(
+            `((YEAR(enrollment_date) = ? AND MONTH(enrollment_date) >= 4) OR (YEAR(enrollment_date) = ? AND MONTH(enrollment_date) <= 3))`
+          );
+          studentParams.push(startYear, startYear + 1);
+        }
+      }
+      const studentWhereSql = studentWhere.length
+        ? studentWhere.join(' AND ')
+        : '1=1';
+
       const [studentsResult] = await db.query(
-        `SELECT COUNT(*) as total 
-         FROM uploaded_students 
-         WHERE approval_status = ?`,
-        ['approved']
+        `SELECT COUNT(*) as total
+         FROM uploaded_students
+         WHERE ${studentWhereSql}`,
+        studentParams
       );
       const totalStudents = studentsResult[0].total;
 
@@ -497,29 +512,19 @@ class DashboardService {
       const totalUTs = utSet.size;
       const totalStates = stateSet.size;
 
-      // Get gender distribution
+      // Gender from the same approved-student set as totalStudents (not batches)
       const [genderResult] = await db.query(
-        `SELECT 
-           SUM(male_students) as male,
-           SUM(female_students) as female
-         FROM batches`
+        `SELECT
+           SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) as male,
+           SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) as female
+         FROM uploaded_students
+         WHERE ${studentWhereSql}`,
+        studentParams
       );
       const maleStudents = genderResult[0]?.male || 0;
       const femaleStudents = genderResult[0]?.female || 0;
 
-      // Get total employments (records in the employment table)
-      const [employmentsResult] = await db.query(`SELECT COUNT(*) as total FROM employment`);
-      const totalEmployments = employmentsResult[0]?.total || 0;
-
-      // Get count of students in EDP courses
-      const [edpResult] = await db.query(
-        `SELECT COUNT(DISTINCT us.id) as total
-         FROM uploaded_students us
-         WHERE us.approval_status = ?
-           AND us.course_name LIKE ?`,
-        ['approved', '%EDP%']
-      );
-      const edpCount = edpResult[0]?.total || 0;
+      const totalEmployments = await KpiService.countYouthEmployed();
 
       // Get course breakdown
       const [courseBreakdown] = await db.query(
@@ -616,6 +621,8 @@ class DashboardService {
 
       // Fetch KPI settings (custom values + visibility) merged for this year
       const kpiSettings = await KpiService.getSettings(year || 'all');
+      const customStats = await loadCustomStats(year || 'all');
+      const totalTrainers = await KpiService.countTrainers();
 
       return {
         // Basic statistics for StatCards
@@ -626,17 +633,21 @@ class DashboardService {
         totalStates,
         totalUTs,
         utNames: utNamesList,
-        maleStudents,
-        femaleStudents,
+        maleStudents: Number(maleStudents) || 0,
+        femaleStudents: Number(femaleStudents) || 0,
+        totalTrainers,
 
-        // Extended KPI fields
-        edpCount,
+        // EDP is settings-only (Dashboard Data + KPI custom). Never counted from DB.
+        edpCount: 0,
 
         // Course breakdown for tooltip
         courseBreakdown,
 
         // KPI settings (admin-controlled custom values + visibility)
         kpiSettings,
+
+        // Historical / monthly custom stats from Settings → Dashboard Data
+        customStats,
 
         // Yearly data (for "all" years view)
         ...yearlyData,

@@ -23,7 +23,7 @@ export const getOverviewStats = async () => {
  * @returns {Promise} Analytics data with stats, trends, and breakdowns
  */
 export const getConsolidatedAnalytics = async (year = "all") => {
-  const params = year !== "all" ? { year } : {};
+  const params = year && year !== "all" ? { year } : {};
   const response = await apiClient.get("/dashboard/analytics", { params });
   return response.data;
 };

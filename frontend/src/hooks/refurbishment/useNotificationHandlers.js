@@ -52,11 +52,16 @@ export default function useNotificationHandlers({
     setShowTypeSelectorModal(true);
   };
 
-  const handleSelectInstant = async () => {
+  const handleSelectInstant = async (customMessage) => {
     const item = pendingNotifyItem;
     if (!item) return;
 
     setShowTypeSelectorModal(false);
+
+    const messageText =
+      (typeof customMessage === "string" && customMessage.trim()) ||
+      refurbishmentSettings.defaultCustomMessage ||
+      "";
 
     if (item.isManualRequest) {
       const allPackageIds = refurbishmentPackages.map((pkg) => pkg.id);
@@ -73,7 +78,7 @@ export default function useNotificationHandlers({
         reminderDate: instantDateTime,
         reminderTime: instantTime,
         frequency: "instant",
-        message: refurbishmentSettings.defaultCustomMessage,
+        message: messageText,
         packages: allPackageIds,
         isInstantMode: true,
         requestType: REQUEST_TYPE_LABELS.INSTANT,
@@ -110,7 +115,7 @@ export default function useNotificationHandlers({
         partnerId: item.partner_id,
         scheduledAt: instantDateTime,
         frequency: "instant",
-        message: refurbishmentSettings.defaultCustomMessage,
+        message: messageText,
         packages: transformedPackages,
         upgradation_packages: transformedUpgradationPackages,
         autoSend: true,

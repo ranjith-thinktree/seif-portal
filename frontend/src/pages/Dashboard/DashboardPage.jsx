@@ -35,6 +35,9 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import IndiaTrainingCard from "../../components/dashboard/IndiaTrainingCard";
 import { useNavigate } from "react-router-dom";
 import dataService from "../../services/data.service";
+import {
+  getConsolidatedAnalytics as getDataPageAnalytics,
+} from "../../services/analytics.service";
 import { essciGetData } from "../../services/certification.service";
 import { getCertificationNotificationNavigation } from "../../utils/certificationUtils";
 import {
@@ -42,6 +45,13 @@ import {
   resolveKpiCardTitle,
 } from "../../services/kpi.service";
 import dashboardData from "../../data/dashboardData.json";
+import {
+  buildDisplayMetrics,
+  customStatsForDisplay,
+  liveDbFromAnalytics,
+  toNumber,
+  unwrapAnalyticsPayload,
+} from "../../utils/dashboardMetrics";
 
 /**
  * Course Breakdown Tooltip Component
@@ -111,10 +121,24 @@ const CourseBreakdownTooltip = ({ courses, children }) => {
  * Gender Breakdown Tooltip Component
  * Shows male/female distribution with percentages
  */
-const GenderBreakdownTooltip = ({ male, female, children }) => {
-  const total = (male || 0) + (female || 0);
-  const malePercentage = total > 0 ? ((male / total) * 100).toFixed(1) : 0;
-  const femalePercentage = total > 0 ? ((female / total) * 100).toFixed(1) : 0;
+const GenderBreakdownTooltip = ({
+  male,
+  female,
+  total,
+  india = 0,
+  greaterIndia = 0,
+  nsi = 0,
+  children,
+}) => {
+  const maleCount = toNumber(male);
+  const femaleCount = toNumber(female);
+  const totalCount = total != null ? toNumber(total) : maleCount + femaleCount;
+  const indiaCount = toNumber(india);
+  const giCount = toNumber(greaterIndia);
+  const nsiCount = toNumber(nsi);
+  const regionBase = indiaCount + giCount + nsiCount || totalCount;
+  const pct = (part, base) =>
+    base > 0 ? ((part / base) * 100).toFixed(1) : "0.0";
 
   return (
     <Tooltip.Provider delayDuration={200}>
@@ -128,30 +152,49 @@ const GenderBreakdownTooltip = ({ male, female, children }) => {
             sideOffset={5}
           >
             <div className="space-y-2">
-              <div className="font-semibold text-gray-900 mb-3 pb-2 border-b">
+              <div className="font-semibold text-gray-900 pb-2 border-b">
+                Youth Trained
+              </div>
+              <p className="text-xs text-gray-500">
+                Total includes India + Greater India + NSI
+              </p>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">India</span>
+                <span className="font-semibold text-gray-900">
+                  {indiaCount.toLocaleString()} ({pct(indiaCount, regionBase)}%)
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">Greater India</span>
+                <span className="font-semibold text-gray-900">
+                  {giCount.toLocaleString()} ({pct(giCount, regionBase)}%)
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">NSI</span>
+                <span className="font-semibold text-gray-900">
+                  {nsiCount.toLocaleString()} ({pct(nsiCount, regionBase)}%)
+                </span>
+              </div>
+              <div className="pt-2 mt-1 border-t font-semibold text-sm flex justify-between">
+                <span>Total</span>
+                <span>{totalCount.toLocaleString()}</span>
+              </div>
+              <div className="font-semibold text-gray-900 pt-2 border-t">
                 Gender Distribution
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-700">Male</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">
-                    {male?.toLocaleString() || 0}
-                  </span>
-                  <span className="text-gray-500">({malePercentage}%)</span>
-                </div>
+                <span className="font-semibold text-gray-900">
+                  {maleCount.toLocaleString()} ({pct(maleCount, totalCount)}%)
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-700">Female</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">
-                    {female?.toLocaleString() || 0}
-                  </span>
-                  <span className="text-gray-500">({femalePercentage}%)</span>
-                </div>
-              </div>
-              <div className="pt-2 mt-2 border-t flex justify-between items-center font-semibold">
-                <span>Total</span>
-                <span>{total.toLocaleString()}</span>
+                <span className="font-semibold text-gray-900">
+                  {femaleCount.toLocaleString()} ({pct(femaleCount, totalCount)}
+                  %)
+                </span>
               </div>
             </div>
             <Tooltip.Arrow className="fill-white" />
@@ -384,6 +427,7 @@ const AdminDashboard = () => {
     return {
       totalStudents:
         (yearData.total_students || 0) + (extra?.total_students || 0),
+      india: (yearData.india || 0) + (extra?.india || 0),
       maleStudents: (yearData.male || 0) + (extra?.male || 0),
       femaleStudents: (yearData.female || 0) + (extra?.female || 0),
       totalEmployments: (yearData.employment || 0) + (extra?.employment || 0),
@@ -414,13 +458,33 @@ const AdminDashboard = () => {
 
         // Fetch consolidated analytics with year filter
         const response = await dataService.getConsolidatedAnalytics(
-          selectedYear === "all" ? null : selectedYear,
+          selectedYear === "all" ? "all" : selectedYear,
         );
+        const analyticsData = unwrapAnalyticsPayload(response) || {};
 
-        // Extract data from wrapped API response
-        // Backend wraps: { success, message, data, timestamp }
-        // We need the 'data' property which contains the actual analytics
-        const analyticsData = response?.data || response;
+        try {
+          const dataPage = unwrapAnalyticsPayload(
+            await getDataPageAnalytics({
+              financialYear: selectedYear === "all" ? "all" : selectedYear,
+            }),
+          );
+          const dataSummary = dataPage.summary || {};
+          if (dataSummary.total_students != null) {
+            analyticsData.totalStudents = dataSummary.total_students;
+            analyticsData.maleStudents = dataSummary.male_students;
+            analyticsData.femaleStudents = dataSummary.female_students;
+            analyticsData.totalEmployments = dataSummary.total_employments;
+            analyticsData.totalTrainers = dataSummary.total_trainers;
+          }
+          if (dataPage.customStats) {
+            analyticsData.customStats = dataPage.customStats;
+          }
+          if (dataPage.kpiSettings) {
+            analyticsData.kpiSettings = dataPage.kpiSettings;
+          }
+        } catch (overlayError) {
+          console.warn("Could not overlay Data page student totals:", overlayError);
+        }
 
         // Fetch centers by establishment year (service method already unwraps)
         const establishmentData = await dataService.getCentersByEstablishment(
@@ -579,55 +643,50 @@ const AdminDashboard = () => {
     }
   }, [selectedYear]);
 
-  // Combine API data with dashboardData.json (API takes priority, JSON is fallback)
+  // Same formula as Data Overview: India (DB + custom) + Greater India + NSI
   const combinedValues = useMemo(() => {
     const jsonData = getFilteredDashboardData;
     const apiData = analytics || {};
     const kpiSettings = apiData.kpiSettings || {};
+    const custom = customStatsForDisplay(apiData.customStats, {
+      india: jsonData?.india || 0,
+      male: jsonData?.maleStudents || 0,
+      female: jsonData?.femaleStudents || 0,
+    });
 
-    // Helper: dbValue + custom value from admin settings
-    const combined = (dbVal, kpiKey) => {
-      const custom = kpiSettings[kpiKey]?.customValue || 0;
-      return (dbVal || 0) + custom;
-    };
+    const db = liveDbFromAnalytics(apiData);
+    const metrics = buildDisplayMetrics({
+      db: {
+        ...db,
+        centers: db.centers || jsonData?.totalCenters || 0,
+        states: db.states || jsonData?.totalStates || 0,
+      },
+      custom,
+      kpiSettings,
+    });
 
-    // Merge: API data first, then JSON fallback, then 0
     const merged = {
-      partners: combined(apiData.totalPartners || 0, "partners"),
-      centers: combined(
-        apiData.totalCenters ?? jsonData?.totalCenters ?? 0,
-        "centers",
-      ),
-      students: combined(
-        apiData.totalStudents || jsonData?.totalStudents || 0,
-        "youth_trained",
-      ),
-      employments: combined(
-        apiData.totalEmployments || jsonData?.totalEmployments || 0,
-        "youth_employed",
-      ),
-      states: combined(
-        apiData.totalStates || jsonData?.totalStates || 28,
-        "states_uts",
-      ),
-      uts: apiData.totalUTs || 0,
+      partners: metrics.partners,
+      centers: metrics.centers,
+      students: metrics.students,
+      employments: metrics.employments,
+      states: metrics.states,
+      uts: metrics.uts,
       utNames: apiData.utNames || [],
-      maleStudents: apiData.maleStudents || jsonData?.maleStudents || 0,
-      femaleStudents: apiData.femaleStudents || jsonData?.femaleStudents || 0,
-      edpCount: combined(apiData.edpCount || jsonData?.edp || 0, "edp"),
-      trainersCount: combined(jsonData?.totalTot || 0, "trainers_trained"),
-      greaterIndia: combined(jsonData?.greaterIndia || 0, "greater_india"),
-      nsi: combined(jsonData?.nsi || 0, "nsi"),
-      alumni: combined(jsonData?.alumni || 0, "alumni"),
+      maleStudents: metrics.male,
+      femaleStudents: metrics.female,
+      edpCount: metrics.edp,
+      trainersCount: metrics.tot,
+      greaterIndia: metrics.greaterIndia,
+      nsi: metrics.nsi,
+      alumni: metrics.alumni,
+      india: metrics.india,
     };
 
-    // Attach visibility flags from kpiSettings (default all visible)
     merged.visibility = {};
     KPI_CARD_DEFINITIONS.forEach(({ key }) => {
       merged.visibility[key] = kpiSettings[key]?.isVisible !== false;
     });
-
-    console.log("Total Partners:", merged.partners);
 
     return merged;
   }, [analytics, getFilteredDashboardData]);
@@ -883,6 +942,10 @@ const AdminDashboard = () => {
                     key={card.key}
                     male={combinedValues.maleStudents}
                     female={combinedValues.femaleStudents}
+                    total={combinedValues.students}
+                    india={combinedValues.india}
+                    greaterIndia={combinedValues.greaterIndia}
+                    nsi={combinedValues.nsi}
                   >
                     {statCard}
                   </GenderBreakdownTooltip>
@@ -1013,13 +1076,13 @@ const AdminDashboard = () => {
                 notifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className="flex items-start gap-4 px-6 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="flex items-start gap-4 px-4 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => navigate("/inbox")}
                   >
                     {/* Avatar with New Badge */}
                     <div className="relative flex-shrink-0">
-                      <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-                        {/* Placeholder avatar */}
+                      <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
+                        <ClipboardDocumentListIcon className="w-6 h-6 text-blue-600" />
                       </div>
                       {!notification.is_read && (
                         <span className="absolute -top-1 -left-1 bg-[#FF4B4A] text-white text-[10px] font-medium px-2 py-0.5 rounded-full">

@@ -13,12 +13,13 @@ import {
  */
 const StudentBreakdownTooltip = ({ breakdown, children }) => {
   const { india = 0, greater_india = 0, nsi = 0, total = 0 } = breakdown || {};
+  const composed = Number(india) + Number(greater_india) + Number(nsi);
+  const base = Number(total) > 0 ? Number(total) : composed;
 
-  // Calculate percentages
-  const indiaPercent = total > 0 ? ((india / total) * 100).toFixed(1) : 0;
+  const indiaPercent = base > 0 ? ((india / base) * 100).toFixed(1) : 0;
   const greaterIndiaPercent =
-    total > 0 ? ((greater_india / total) * 100).toFixed(1) : 0;
-  const nsiPercent = total > 0 ? ((nsi / total) * 100).toFixed(1) : 0;
+    base > 0 ? ((greater_india / base) * 100).toFixed(1) : 0;
+  const nsiPercent = base > 0 ? ((nsi / base) * 100).toFixed(1) : 0;
 
   return (
     <TooltipProvider>
@@ -52,13 +53,13 @@ const StudentBreakdownTooltip = ({ breakdown, children }) => {
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-600">NSI:</span>
               <span className="font-medium text-gray-900">
-                {nsi.toLocaleString()} ({nsiPercent}%)
+                {Number(nsi).toLocaleString()} ({nsiPercent}%)
               </span>
             </div>
 
             <div className="flex justify-between items-center text-sm pt-2 border-t font-semibold">
               <span className="text-gray-700">Total:</span>
-              <span className="text-gray-900">{total.toLocaleString()}</span>
+              <span className="text-gray-900">{base.toLocaleString()}</span>
             </div>
           </div>
         </TooltipContent>

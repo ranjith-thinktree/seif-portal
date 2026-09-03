@@ -172,7 +172,7 @@ export default function useCertificationRequestsTab({
       "Batch",
       "Status",
       "Submitted",
-      "Last Updated",
+      "Request Received On",
     ];
     const lines = table.data.map((row, idx) =>
       [
@@ -182,7 +182,9 @@ export default function useCertificationRequestsTab({
         row.batch_number || row.other_batch_number,
         row.derived_status,
         formatCertificationDate(row.created_at),
-        formatCertificationDate(row.updated_at || row.reviewed_at),
+        formatCertificationDate(
+          row.created_at || row.updated_at || row.reviewed_at,
+        ),
       ]
         .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
         .join(","),

@@ -76,9 +76,16 @@ const CenterForm = ({
         limit: 1000,
         approval_status: "approved",
       });
-      setPartners(response.data.data);
+      // getPartners returns API body: { success, data: [...], pagination }
+      const list = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.data?.data)
+          ? response.data.data
+          : [];
+      setPartners(list);
     } catch (error) {
       console.error("Error fetching partners:", error);
+      setPartners([]);
     }
   }, []);
 
@@ -364,7 +371,7 @@ const CenterForm = ({
                   } bg-background px-3 py-2 text-sm`}
                 >
                   <option value="">Select Partner</option>
-                  {partners.map((partner) => (
+                  {(partners || []).map((partner) => (
                     <option key={partner.id} value={partner.id}>
                       {partner.name}
                     </option>
