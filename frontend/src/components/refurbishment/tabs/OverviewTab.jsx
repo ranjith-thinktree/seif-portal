@@ -102,6 +102,7 @@ const OverviewTab = ({
           formatDate={formatDate}
           filterOptions={allCentersFilterOptions}
           onExport={onExportAllCenters}
+          onShowHistory={onShowHistory}
         />
       )}
     </div>

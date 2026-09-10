@@ -115,19 +115,15 @@ const ESSCIRequestsTab = ({
         enableResizing: true,
       },
       {
-        id: "updated_at",
-        accessorKey: "updated_at",
+        id: "created_at",
+        accessorKey: "created_at",
         header: "Request Received On",
         cell: ({ row }) => (
           <span className="text-sm text-gray-600">
-            {formatDate(
-              row.original.created_at ||
-                row.original.updated_at ||
-                row.original.reviewed_at,
-            )}
+            {formatDate(row.original.created_at)}
           </span>
         ),
-        size: 140,
+        size: 160,
         enableHiding: true,
         enableResizing: true,
       },
@@ -198,7 +194,7 @@ const ESSCIRequestsTab = ({
   );
 
   const sortOptions = [
-    { label: "Last Update", value: "updated_at" },
+    { label: "Request Received On", value: "created_at" },
     { label: "Partner Name", value: "partner_name" },
     { label: "Center Name", value: "center_name" },
     { label: "Batch", value: "batch_number" },

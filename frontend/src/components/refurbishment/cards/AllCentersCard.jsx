@@ -19,6 +19,7 @@ const AllCentersCard = ({
   formatDate,
   filterOptions = {},
   onExport,
+  onShowHistory,
 }) => {
   // Use pre-processed data from parent's useTableSearch hook
   const paginatedData = table.data;
@@ -151,14 +152,47 @@ const AllCentersCard = ({
         enableResizing: true,
       },
       {
+        id: "last_notified_at",
+        accessorKey: "last_notified_at",
+        header: "Last Notified",
+        cell: ({ row }) => {
+          const d = row.original.last_notified_at;
+          if (!d) return <span className="text-gray-400 text-xs">Never</span>;
+          const count = row.original.total_send_count ?? 1;
+          return (
+            <button
+              type="button"
+              onClick={() => onShowHistory && onShowHistory(row.original)}
+              className="text-xs text-blue-600 font-medium underline underline-offset-2 hover:text-blue-800 transition-colors text-left"
+            >
+              <span className="block">{formatDate(d)}</span>
+              <span className="block text-[10px] text-blue-400 no-underline">
+                Sent {count}×
+              </span>
+            </button>
+          );
+        },
+        size: 150,
+        enableHiding: true,
+        enableResizing: true,
+      },
+      {
         id: "actions",
         header: "Notify",
         cell: ({ row }) => (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onNotify(row.original)}
-            disabled={loading}
+            onClick={(e) => {
+              e.stopPropagation();
+              onNotify(row.original);
+            }}
+            disabled={loading || !row.original.partner_id}
+            title={
+              !row.original.partner_id
+                ? "Center has no linked partner"
+                : "Send refurbishment notification"
+            }
           >
             <BellIcon className="w-4 h-4" />
           </Button>
@@ -168,7 +202,7 @@ const AllCentersCard = ({
         enableResizing: false,
       },
     ];
-  }, [formatDate, loading, onNotify]);
+  }, [formatDate, loading, onNotify, onShowHistory]);
 
   return (
     <div className="space-y-4">

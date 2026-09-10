@@ -1618,6 +1618,7 @@ const getRefurbishmentDetails = async (notificationId, userId, partnerId) => {
         : 'Pending',
       partner_name: notification.partner_name,
       subject: 'Request for Lab Refurbishment', // Fixed subject as per requirement
+      center_id: notification.center_id,
       center_name: notification.center_name,
       center_location: `${notification.city}, ${notification.state}`,
       date: notification.notification_date,

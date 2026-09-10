@@ -200,6 +200,7 @@ class RefurbishmentService {
           c.center_name,
           c.partner_id,
           p.name as organization_name,
+          p.name as partner_name,
           c.year_of_establishment,
           c.last_refurbishment_date,
           CASE
@@ -211,6 +212,8 @@ class RefurbishmentService {
           c.region,
           c.center_type,
           c.status,
+          sn.last_notified_at,
+          sn.total_send_count,
           CASE
             WHEN c.year_of_establishment IS NULL THEN NULL
             WHEN c.last_refurbishment_date IS NOT NULL THEN
@@ -227,6 +230,13 @@ class RefurbishmentService {
           END as is_eligible
         FROM centers c
         LEFT JOIN partners p ON c.partner_id = p.id
+        LEFT JOIN (
+          SELECT center_id, MAX(last_sent_at) as last_notified_at,
+                 SUM(send_count) as total_send_count
+          FROM scheduled_refurbishment_notifications
+          WHERE last_sent_at IS NOT NULL
+          GROUP BY center_id
+        ) sn ON sn.center_id = c.id
         WHERE c.status = 'active'
         ORDER BY is_eligible DESC, months_since_last_refurbishment DESC
       `;
@@ -318,6 +328,61 @@ class RefurbishmentService {
     } catch (error) {
       console.error('Error fetching recently refurbished centers:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Validate that an admin can notify a center.
+   * Eligibility is intentionally NOT checked — admin may notify any active center.
+   *
+   * @param {string} centerId
+   * @param {string} partnerId
+   * @returns {Promise<{ok: boolean, message?: string, center?: Object}>}
+   */
+  static async assertCenterCanBeNotified(centerId, partnerId) {
+    try {
+      const [rows] = await db.query(
+        `SELECT id, center_name, partner_id, status
+         FROM centers
+         WHERE id = ?
+         LIMIT 1`,
+        [centerId]
+      );
+
+      if (!rows.length) {
+        return { ok: false, message: 'Center not found' };
+      }
+
+      const center = rows[0];
+      if (String(center.status || '').toLowerCase() !== 'active') {
+        return {
+          ok: false,
+          message: `Center "${center.center_name}" is not active`,
+        };
+      }
+
+      if (
+        partnerId &&
+        center.partner_id &&
+        String(center.partner_id) !== String(partnerId)
+      ) {
+        return {
+          ok: false,
+          message: `Center "${center.center_name}" does not belong to the selected partner`,
+        };
+      }
+
+      if (!center.partner_id) {
+        return {
+          ok: false,
+          message: `Center "${center.center_name}" has no linked partner`,
+        };
+      }
+
+      return { ok: true, center };
+    } catch (error) {
+      console.error('[RefurbishmentService] assertCenterCanBeNotified error:', error);
+      return { ok: false, message: 'Failed to validate center for notification' };
     }
   }
 
@@ -1399,6 +1464,7 @@ class RefurbishmentService {
   /**
    * Send refurbishment notification to partner
    * Creates notification record (tracking handled by scheduled_notification_executions table)
+   * NOTE: Admin may notify ANY active center — do NOT apply eligibility filters here.
    * @param {string} centerId - Center UUID
    * @param {string} partnerId - Partner UUID
    * @param {string} message - Optional custom message
@@ -1409,9 +1475,27 @@ class RefurbishmentService {
       const notificationId = uuidv4();
       const sentAt = new Date();
 
-      // Create notification
+      // Validate center exists and is active — eligibility is intentionally NOT checked
+      const [centerRows] = await db.query(
+        `SELECT id, center_name, partner_id, status
+         FROM centers
+         WHERE id = ?
+         LIMIT 1`,
+        [centerId]
+      );
+
+      if (!centerRows.length) {
+        throw new Error(`Center not found: ${centerId}`);
+      }
+      if (String(centerRows[0].status || '').toLowerCase() !== 'active') {
+        throw new Error(
+          `Center "${centerRows[0].center_name}" is not active and cannot be notified`
+        );
+      }
+
       const settings = await this.getRefurbishmentSettings();
       const defaultMessage = message || settings.defaultCustomMessage;
+      const centerName = centerRows[0].center_name || 'Your Center';
 
       // Find the active partner user first (in-app notification recipient)
       const [partnerUserRows] = await db.query(
@@ -1426,10 +1510,11 @@ class RefurbishmentService {
       );
 
       if (partnerUserRows.length === 0) {
-        console.warn(
-          `[RefurbishmentService] No active PARTNER user found for partner ${partnerId}`
+        // Must fail so the API does not report false success
+        throw new Error(
+          `No active PARTNER portal user found for partner ${partnerId}. ` +
+            'Create/activate a partner login before sending the notification.'
         );
-        return { notificationId, sentAt };
       }
 
       const recipientId = partnerUserRows[0].id;
@@ -1438,14 +1523,6 @@ class RefurbishmentService {
       // Partner-facing eligibility email: organisation primary contact only
       const partnerEmail =
         partnerUserRows[0].contact_email || partnerUserRows[0].email || null;
-      const partnerContactName =
-        partnerUserRows[0].contact_person || partnerName;
-
-      // Fetch center name for email
-      const [centerRows] = await db.query(`SELECT center_name FROM centers WHERE id = ? LIMIT 1`, [
-        centerId,
-      ]);
-      const centerName = centerRows[0]?.center_name || 'Your Center';
 
       await db.query(
         `INSERT INTO notifications (
@@ -1472,7 +1549,7 @@ class RefurbishmentService {
       // Note: Notification tracking is now handled by scheduled_notification_executions table
       // No need to update centers table anymore
 
-      // Send eligibility email to partner primary contact (template #1)
+      // Send partner email (template #1) — same for eligible and non-eligible centers
       if (partnerEmail) {
         const due = new Date();
         due.setDate(due.getDate() + 14);
@@ -1494,7 +1571,7 @@ class RefurbishmentService {
       }
 
       console.log(
-        `[RefurbishmentService] Notification sent to partner ${partnerId} for center ${centerId}`
+        `[RefurbishmentService] Notification sent to partner ${partnerId} for center ${centerId} (${centerName})`
       );
 
       return {

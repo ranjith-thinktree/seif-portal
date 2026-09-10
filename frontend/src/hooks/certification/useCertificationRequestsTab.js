@@ -46,7 +46,7 @@ export default function useCertificationRequestsTab({
   const yearFilteredRequests = useMemo(() => {
     if (!selectedYear) return requests;
     return requests.filter((row) => {
-      const date = row.updated_at || row.reviewed_at || row.created_at;
+      const date = row.created_at;
       if (!date) return false;
       return new Date(date).getFullYear() === selectedYear;
     });
@@ -84,7 +84,7 @@ export default function useCertificationRequestsTab({
 
       if (filters.financialYear) {
         filtered = filtered.filter((r) => {
-          const dateToCheck = r.updated_at || r.reviewed_at || r.created_at;
+          const dateToCheck = r.created_at;
           if (!dateToCheck) return false;
           return getFinancialYear(dateToCheck) === filters.financialYear;
         });
@@ -109,7 +109,7 @@ export default function useCertificationRequestsTab({
       center: [],
       financialYear: "",
     },
-    initialSortBy: "updated_at",
+    initialSortBy: "created_at",
     initialSortOrder: "desc",
     customFilters,
     pageSize: 10,
@@ -171,7 +171,6 @@ export default function useCertificationRequestsTab({
       "Center",
       "Batch",
       "Status",
-      "Submitted",
       "Request Received On",
     ];
     const lines = table.data.map((row, idx) =>
@@ -182,9 +181,6 @@ export default function useCertificationRequestsTab({
         row.batch_number || row.other_batch_number,
         row.derived_status,
         formatCertificationDate(row.created_at),
-        formatCertificationDate(
-          row.created_at || row.updated_at || row.reviewed_at,
-        ),
       ]
         .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
         .join(","),

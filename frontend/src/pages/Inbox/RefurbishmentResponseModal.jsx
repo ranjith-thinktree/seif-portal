@@ -503,23 +503,20 @@ const RefurbishmentResponseModal = ({
     toast.success(`${file.name} attached as upgradation document`);
   };
 
-  // Navigate to next course, then show refurbishment-only preview first
+  // Navigate to next course, then show refurbishment-only preview first.
+  // At least one package must be selected across ALL courses (not per course).
   const handleNext = () => {
     if (!currentCourse?.packages?.length) {
       toast.error("No packages available for this course");
       return;
     }
 
-    const selectedPkgs = currentCourse.packages.filter(
+    const selectedPkgsOnThisCourse = currentCourse.packages.filter(
       (pkg) => selections[pkg.package_id],
     );
 
-    if (selectedPkgs.length === 0) {
-      toast.error("Please select at least one package for this course");
-      return;
-    }
-
-    for (const pkg of selectedPkgs) {
+    // If packages are selected on this course, require justification + images for those
+    for (const pkg of selectedPkgsOnThisCourse) {
       const justification = (justifications[pkg.package_id] || "").trim();
       const newImages = imageFiles[pkg.package_id] || [];
       const existingImages = existingImageUrls[pkg.package_id] || [];
@@ -539,15 +536,24 @@ const RefurbishmentResponseModal = ({
       }
     }
 
-    if (currentCourseIndex < totalCourses - 1) {
+    const isLastCourse = currentCourseIndex >= totalCourses - 1;
+
+    if (!isLastCourse) {
       setCurrentCourseIndex((prev) => prev + 1);
-    } else {
-      // Last course — always show refurbishment preview first
-      setPreviewTab(0);
-      setPreviewActivePackageId(null);
-      setIsFinalPreview(false);
-      setShowPreview(true);
+      return;
     }
+
+    // Leaving the last course → Package preview: need ≥1 package overall
+    const overallSelectedCount = Object.values(selections).filter(Boolean).length;
+    if (overallSelectedCount === 0) {
+      toast.error("Please select at least one package overall before continuing");
+      return;
+    }
+
+    setPreviewTab(0);
+    setPreviewActivePackageId(null);
+    setIsFinalPreview(false);
+    setShowPreview(true);
   };
 
   // Navigate to previous course
@@ -672,10 +678,29 @@ const RefurbishmentResponseModal = ({
   };
 
   // Upload a single file: S3 presigned PUT or local backend POST
+  const resolveUploadMimeType = (file) => {
+    if (file?.type) return file.type;
+    const name = String(file?.name || "").toLowerCase();
+    if (name.endsWith(".xlsx")) {
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    }
+    if (name.endsWith(".xls")) return "application/vnd.ms-excel";
+    if (name.endsWith(".csv")) return "text/csv";
+    if (name.endsWith(".pdf")) return "application/pdf";
+    if (name.endsWith(".png")) return "image/png";
+    if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+    if (name.endsWith(".doc")) return "application/msword";
+    if (name.endsWith(".docx")) {
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    }
+    return "application/octet-stream";
+  };
+
   const uploadFileToS3 = async (file, folder = "refurbishment/uploads") => {
+    const fileType = resolveUploadMimeType(file);
     const result = await refurbishmentService.generateUploadUrl({
       fileName: file.name,
-      fileType: file.type,
+      fileType,
       folder,
     });
 
@@ -696,14 +721,14 @@ const RefurbishmentResponseModal = ({
       const res = await fetch(uploadUrl, {
         method: "PUT",
         body: file,
-        headers: { "Content-Type": file.type },
+        headers: { "Content-Type": fileType },
       });
       if (!res.ok)
         throw new Error(`S3 upload failed: ${res.status} ${res.statusText}`);
       fileUrl = s3FileUrl;
     }
 
-    return { url: fileUrl, name: file.name, size: file.size, type: file.type };
+    return { url: fileUrl, name: file.name, size: file.size, type: fileType };
   };
 
   // Upload an array of File objects to S3 and return [{url, name, size, type}]
@@ -1124,7 +1149,7 @@ const RefurbishmentResponseModal = ({
                   }}
                 />
                 <ArrowUpTrayIcon className="h-5 w-5 text-gray-700" />
-                Upload images of the existing lab
+                Upload images of New Room 
               </label>
               {upgradationPhotoFiles.length > 0 && (
                 <div className="mt-3 space-y-2">

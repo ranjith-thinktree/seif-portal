@@ -21,15 +21,29 @@ const localRefurbishmentStorage = multer.diskStorage({
 
 const localRefurbishmentUpload = multer({
   storage: localRefurbishmentStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB (images + Excel templates)
   fileFilter: (_req, file, cb) => {
     const allowed = [
-      'image/jpeg', 'image/jpg', 'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      // Refurbishment / upgradation Excel templates
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'application/csv',
+      'text/plain',
     ];
-    cb(null, allowed.includes(file.mimetype));
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.csv'];
+    if (allowed.includes(file.mimetype) || allowedExt.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('File type not allowed'));
+    }
   },
 }).single('file');
 
@@ -216,7 +230,7 @@ const generateUploadUrl = async (req, res, next) => {
       return ApiResponse.error(res, 'fileName and fileType are required', 400);
     }
 
-    // Validate allowed types
+    // Validate allowed types (images, docs, and Excel templates)
     const allowedTypes = [
       'image/jpeg',
       'image/jpg',
@@ -224,14 +238,20 @@ const generateUploadUrl = async (req, res, next) => {
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'application/csv',
+      'text/plain',
     ];
-    if (!allowedTypes.includes(fileType)) {
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    const allowedExt = ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx', 'xlsx', 'xls', 'csv'];
+    if (!allowedTypes.includes(fileType) && !allowedExt.includes(ext)) {
       return ApiResponse.error(res, `File type not allowed`, 400);
     }
 
-    const ext = fileName.split('.').pop().toLowerCase();
     const safeFolder = (folder || 'refurbishment/uploads').replace(/[^a-zA-Z0-9/_-]/g, '');
-    const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext}`;
+    const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext || 'bin'}`;
 
     if (!isS3Configured()) {
       // S3 not available — tell the client to POST the file directly to our local endpoint

@@ -224,7 +224,7 @@ const EmailTemplatesPanel = () => {
               >
                 Restore default
               </button>
-              <div className="flex items-center gap-2 ml-auto">
+              {/* <div className="flex items-center gap-2 ml-auto">
                 <input
                   className="border rounded-lg px-3 py-2 text-sm w-56"
                   value={testEmail}
@@ -239,7 +239,7 @@ const EmailTemplatesPanel = () => {
                   <EnvelopeIcon className="w-4 h-4" />
                   {testing ? "Sending…" : "Send test"}
                 </button>
-              </div>
+              </div> */}
             </div>
           </>
         )}

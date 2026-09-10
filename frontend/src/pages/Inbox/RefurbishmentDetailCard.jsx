@@ -194,6 +194,8 @@ const RefurbishmentDetailCard = ({ notification, onDismiss }) => {
       {/* Guide Modal — shown before Response Modal */}
       <RefurbishmentGuideModal
         isOpen={showGuide}
+        centerId={details.center_id}
+        centerName={details.center_name}
         onStart={() => {
           setShowGuide(false);
           setShowResponseModal(true);

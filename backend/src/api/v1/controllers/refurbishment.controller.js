@@ -20,7 +20,7 @@ const adminLocalUpload = multer({
       cb(null, `${Date.now()}_${uuidv4()}${ext}`);
     },
   }),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = [
       'image/jpeg',
@@ -29,8 +29,19 @@ const adminLocalUpload = multer({
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'application/csv',
+      'text/plain',
     ];
-    cb(null, allowed.includes(file.mimetype));
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.csv'];
+    if (allowed.includes(file.mimetype) || allowedExt.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('File type not allowed'));
+    }
   },
 }).single('file');
 
@@ -564,6 +575,7 @@ class RefurbishmentController {
   /**
    * POST /api/v1/admin/refurbishment/schedule-notification
    * Create a scheduled refurbishment notification
+   * Admin may notify ANY active center — eligibility is NOT required.
    */
   static async scheduleNotification(req, res, next) {
     try {
@@ -616,6 +628,15 @@ class RefurbishmentController {
         throw new ValidationError('At least one package must be selected');
       }
 
+      // Ensure center exists/active and belongs to partner — do NOT check eligibility
+      const centerCheck = await RefurbishmentService.assertCenterCanBeNotified(
+        centerId,
+        partnerId
+      );
+      if (!centerCheck.ok) {
+        throw new ValidationError(centerCheck.message);
+      }
+
       const effectiveAutoSend = autoSend !== undefined ? autoSend : true;
       const effectiveFrequency = frequency || 'instant';
 
@@ -647,10 +668,22 @@ class RefurbishmentController {
             `[RefurbishmentController] Instant notification sent immediately to partner ${partnerId} for center ${centerId}`
           );
         } catch (sendError) {
-          // Log but don't fail the request — notification record is already created
+          // Do not leave a false "sent" record — surface the failure to the admin
           console.error(
             '[RefurbishmentController] Failed to send instant notification immediately:',
             sendError.message
+          );
+          try {
+            await ScheduledNotificationService.cancelScheduledNotification(result.id);
+          } catch (cleanupError) {
+            console.error(
+              '[RefurbishmentController] Failed to cancel unsent notification:',
+              cleanupError.message
+            );
+          }
+          throw new ValidationError(
+            sendError.message ||
+              'Notification record was created but delivery to the partner failed'
           );
         }
       }
@@ -1377,14 +1410,20 @@ class RefurbishmentController {
         'application/pdf',
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'text/csv',
+        'application/csv',
+        'text/plain',
       ];
-      if (!allowedTypes.includes(fileType)) {
+      const ext = (fileName.split('.').pop() || '').toLowerCase();
+      const allowedExt = ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx', 'xlsx', 'xls', 'csv'];
+      if (!allowedTypes.includes(fileType) && !allowedExt.includes(ext)) {
         return ApiResponse.error(res, 'File type not allowed', 400);
       }
 
-      const ext = fileName.split('.').pop().toLowerCase();
       const safeFolder = (folder || 'refurbishment/admin').replace(/[^a-zA-Z0-9/_-]/g, '');
-      const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext}`;
+      const key = `${safeFolder}/${Date.now()}_${uuidv4()}.${ext || 'bin'}`;
 
       if (!isS3Configured()) {
         const backendBase =

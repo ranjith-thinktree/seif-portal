@@ -3,6 +3,25 @@ import { toast } from "react-toastify";
 import refurbishmentService from "../../services/refurbishment.service";
 import { REQUEST_TYPE_LABELS } from "../../utils/refurbishmentUtils";
 
+/** Resolve center/partner IDs the same way for Eligible + All Centers rows. */
+function resolveNotifyTargets(item) {
+  if (!item) {
+    return { centerId: null, partnerId: null, centerName: "", partnerName: "" };
+  }
+
+  // Active-request rows carry request_id; overview center rows do not.
+  const isRequestRow = Boolean(item.request_id);
+  const centerId = isRequestRow
+    ? item.center_id || item.centerId || null
+    : item.id || item.center_id || item.centerId || null;
+  const partnerId = item.partner_id || item.partnerId || null;
+  const centerName = item.center_name || item.centerName || "";
+  const partnerName =
+    item.partner_name || item.organization_name || item.partnerName || "";
+
+  return { centerId, partnerId, centerName, partnerName, isRequestRow };
+}
+
 export default function useNotificationHandlers({
   allCentersData,
   packages,
@@ -47,7 +66,32 @@ export default function useNotificationHandlers({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [allCentersData]);
 
+  const getRefurbishmentPackageIds = () => {
+    const source =
+      Array.isArray(refurbishmentPackages) && refurbishmentPackages.length > 0
+        ? refurbishmentPackages
+        : (packages || []).filter(
+            (pkg) => !pkg.category || pkg.category === "refurbishment",
+          );
+    return source.map((pkg) => pkg.id).filter(Boolean);
+  };
+
   const handleNotifyPartner = (item) => {
+    if (!item) {
+      toast.error("No center selected for notification");
+      return;
+    }
+    const { centerId, partnerId } = resolveNotifyTargets(item);
+    if (!centerId) {
+      toast.error("This center is missing an ID and cannot be notified");
+      return;
+    }
+    if (!partnerId) {
+      toast.error(
+        "This center has no linked partner. Please link a partner first.",
+      );
+      return;
+    }
     setPendingNotifyItem(item);
     setShowTypeSelectorModal(true);
   };
@@ -64,7 +108,7 @@ export default function useNotificationHandlers({
       "";
 
     if (item.isManualRequest) {
-      const allPackageIds = refurbishmentPackages.map((pkg) => pkg.id);
+      const allPackageIds = getRefurbishmentPackageIds();
       const now = new Date();
       const instantDateTime = now.toISOString().split("T")[0];
       const instantTime = now.toTimeString().slice(0, 5);
@@ -91,9 +135,21 @@ export default function useNotificationHandlers({
     try {
       setLoading(true);
 
-      const isCenter = !item.request_id;
+      const { centerId, partnerId } = resolveNotifyTargets(item);
+      if (!centerId || !partnerId) {
+        toast.error(
+          "Cannot send notification: center or partner information is missing",
+        );
+        return;
+      }
 
-      const allPackageIds = refurbishmentPackages.map((pkg) => pkg.id);
+      const allPackageIds = getRefurbishmentPackageIds();
+      if (allPackageIds.length === 0) {
+        toast.error(
+          "No refurbishment packages available. Please create packages first.",
+        );
+        return;
+      }
 
       const transformedPackages = allPackageIds.map((packageId) => ({
         packageId,
@@ -101,18 +157,20 @@ export default function useNotificationHandlers({
         notes: null,
       }));
 
-      const transformedUpgradationPackages = upgradationPackages.map((pkg) => ({
-        packageId: pkg.id,
-        quantity: 1,
-        notes: null,
-      }));
+      const transformedUpgradationPackages = (upgradationPackages || []).map(
+        (pkg) => ({
+          packageId: pkg.id,
+          quantity: 1,
+          notes: null,
+        }),
+      );
 
       const now = new Date();
       const instantDateTime = now.toISOString();
 
       const createData = {
-        centerId: isCenter ? item.id : item.center_id,
-        partnerId: item.partner_id,
+        centerId,
+        partnerId,
         scheduledAt: instantDateTime,
         frequency: "instant",
         message: messageText,
@@ -131,16 +189,23 @@ export default function useNotificationHandlers({
 
       if (response.success) {
         toast.success("Instant notification sent successfully!");
-        refurbishmentRefresh.activeRequests();
-        refurbishmentRefresh.eligibleCenters();
-        refurbishmentRefresh.allCentersData();
-        refurbishmentRefresh.alerts();
+        // Refresh both Eligible + All Centers so Last Notified updates everywhere
+        await Promise.all([
+          refurbishmentRefresh.activeRequests?.(),
+          refurbishmentRefresh.eligibleCenters?.(),
+          refurbishmentRefresh.allCentersData?.(),
+          refurbishmentRefresh.alerts?.(),
+        ]);
       } else {
         toast.error(response.message || "Failed to send instant notification");
       }
     } catch (error) {
       console.error("Error sending instant notification:", error);
-      toast.error("Failed to send instant notification. Please try again.");
+      const apiMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to send instant notification. Please try again.";
+      toast.error(apiMessage);
     } finally {
       setLoading(false);
       setPendingNotifyItem(null);
@@ -153,28 +218,23 @@ export default function useNotificationHandlers({
 
     setShowTypeSelectorModal(false);
 
-    const allPackageIds = packages.map((pkg) => pkg.id);
+    const allPackageIds = getRefurbishmentPackageIds();
+    const { centerId, partnerId, centerName, partnerName, isRequestRow } =
+      resolveNotifyTargets(item);
 
     const now = new Date();
     now.setHours(now.getHours() + 1);
     const defaultDate = now.toISOString().split("T")[0];
     const defaultTime = now.toTimeString().slice(0, 5);
 
-    const isCenter = !item.request_id;
     const isManualRequest = item.isManualRequest || false;
 
     setNotificationFormData({
-      requestId: isCenter ? "" : item.id,
-      partnerId: isManualRequest ? "" : item.partner_id || "",
-      partnerName: isManualRequest
-        ? ""
-        : item.partner_name || item.organization_name || "",
-      centerId: isManualRequest
-        ? ""
-        : isCenter
-          ? item.id
-          : item.center_id || "",
-      centerName: isManualRequest ? "" : item.center_name || "",
+      requestId: isRequestRow ? item.id : "",
+      partnerId: isManualRequest ? "" : partnerId || "",
+      partnerName: isManualRequest ? "" : partnerName,
+      centerId: isManualRequest ? "" : centerId || "",
+      centerName: isManualRequest ? "" : centerName,
       reminderDate: defaultDate,
       reminderTime: defaultTime,
       frequency: "instant",
@@ -328,12 +388,12 @@ export default function useNotificationHandlers({
 
         toast.success(successMessage);
 
-        refurbishmentRefresh.activeRequests();
-        if (formData.frequency === "instant") {
-          refurbishmentRefresh.eligibleCenters();
-          refurbishmentRefresh.allCentersData();
-          refurbishmentRefresh.alerts();
-        }
+        await Promise.all([
+          refurbishmentRefresh.activeRequests?.(),
+          refurbishmentRefresh.eligibleCenters?.(),
+          refurbishmentRefresh.allCentersData?.(),
+          refurbishmentRefresh.alerts?.(),
+        ]);
 
         setShowNotificationModal(false);
         setNotificationFormData({
@@ -357,7 +417,11 @@ export default function useNotificationHandlers({
       }
     } catch (error) {
       console.error("Error scheduling notification:", error);
-      toast.error("Failed to schedule notification. Please try again.");
+      const apiMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to schedule notification. Please try again.";
+      toast.error(apiMessage);
     } finally {
       setLoading(false);
     }

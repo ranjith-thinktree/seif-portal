@@ -1040,24 +1040,28 @@ const UploadPage = () => {
     const trimmedSpokeEmail = certSpokeEmail.trim();
     const normalizedSpokeMobile = certSpokeMobile.replace(/[\s\-()]/g, "").trim();
     if (!trimmedSpokeName) {
-      setCertError("Spoke Name is required.");
+      setCertError("Spoc Name is required.");
+      return;
+    }
+    if (trimmedSpokeName.length <= 2) {
+      setCertError("Spoc Name must be more than 2 letters.");
       return;
     }
     if (!trimmedSpokeEmail) {
-      setCertError("Spoke Email is required.");
+      setCertError("Spoc Email is required.");
       return;
     }
     if (!isValidRfcEmail(trimmedSpokeEmail)) {
-      setCertError("Please enter a valid Spoke Email address.");
+      setCertError("Please enter a valid Spoc Email address.");
       return;
     }
     if (!normalizedSpokeMobile) {
-      setCertError("Spoke Mobile Number is required.");
+      setCertError("Spoc Mobile Number is required.");
       return;
     }
     if (!isValidPhone(normalizedSpokeMobile)) {
       setCertError(
-        "Spoke Mobile Number must be a valid 10-digit Indian mobile number.",
+        "Spoc Mobile Number must be a valid 10-digit Indian mobile number.",
       );
       return;
     }

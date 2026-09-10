@@ -79,30 +79,49 @@ const COLOR_MAP = {
   },
 };
 
-const downloadTemplate = async (name, filename) => {
+const downloadTemplate = async (name, filename, centerId) => {
   try {
     const response = await apiClient.get(`/templates/${name}`, {
       responseType: "blob",
+      params: centerId ? { centerId } : undefined,
     });
+
+    const contentType = String(response.headers?.["content-type"] || "");
+    if (contentType.includes("application/json")) {
+      const text = await response.data.text();
+      const parsed = JSON.parse(text);
+      throw new Error(parsed.message || `Failed to download ${filename}`);
+    }
+
+    const disposition = response.headers?.["content-disposition"] || "";
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const resolvedName = match?.[1] || filename;
+
     const url = URL.createObjectURL(new Blob([response.data]));
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename;
+    a.download = resolvedName;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  } catch {
-    toast.error(`Failed to download ${filename}. Please try again.`);
+  } catch (error) {
+    toast.error(
+      error?.message || `Failed to download ${filename}. Please try again.`,
+    );
   }
 };
 
-const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
+const RefurbishmentGuideModal = ({ isOpen, onStart, onClose, centerId, centerName }) => {
   const [downloading, setDownloading] = useState(null);
 
   const handleDownload = async (name, filename) => {
+    if (!centerId) {
+      toast.error("Center details are missing. Please reopen this request and try again.");
+      return;
+    }
     setDownloading(name);
-    await downloadTemplate(name, filename);
+    await downloadTemplate(name, filename, centerId);
     setDownloading(null);
   };
 
@@ -178,8 +197,14 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
                   Required Templates
                 </h3>
                 <p className="text-xs text-gray-500 mb-4">
-                  Download, fill in, and upload these templates with your
-                  request. The refurbishment template is{" "}
+                  Download pre-filled templates for{" "}
+                  <span className="font-semibold text-gray-700">
+                    {centerName || "your center"}
+                  </span>
+                  . The first row has centre details and request type filled in
+                  (Labs left blank). Add more rows for each lab — restricted
+                  columns only allow the same centre values. The refurbishment
+                  template is{" "}
                   <span className="font-semibold text-red-600">mandatory</span>.
                 </p>
 
@@ -200,8 +225,8 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mb-3">
-                      List centers, courses, packages, equipment condition, and
-                      reason for refurbishment.
+                      One centre row is pre-filled (Labs blank). Add a row per
+                      lab; type stays Refurbishment only.
                     </p>
                     <button
                       onClick={() =>
@@ -236,8 +261,8 @@ const RefurbishmentGuideModal = ({ isOpen, onStart, onClose }) => {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mb-3">
-                      Describe rooms/areas, required equipment, quantities,
-                      costs, and proposed improvements.
+                      One centre row is pre-filled (Labs blank). Add a row per
+                      lab; type stays Upgradation only.
                     </p>
                     <button
                       onClick={() =>

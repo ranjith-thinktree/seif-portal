@@ -59,15 +59,22 @@ const CertificationDataTab = ({
   handleCertCenterChange,
   handleCertUpload,
 }) => {
+  const spokeName = certSpokeName.trim();
+  const spokeEmail = certSpokeEmail.trim();
+  const spokeMobileDigits = certSpokeMobile.replace(/[\s\-()]/g, "").trim();
+  const isSpokeNameValid = spokeName.length > 2;
+  const isSpokeEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(spokeEmail);
+  const isSpokeMobileValid = /^[6-9]\d{9}$/.test(spokeMobileDigits);
+
   const canSubmit =
     certCenterId &&
     (certBatchId || certOtherBatchNumber.trim().length > 0) &&
     Boolean(certBatchStartDate) &&
     Boolean(certBatchEndDate) &&
     Boolean(certAssessmentDate) &&
-    certSpokeName.trim().length > 0 &&
-    certSpokeEmail.trim().length > 0 &&
-    certSpokeMobile.trim().length > 0;
+    isSpokeNameValid &&
+    isSpokeEmailValid &&
+    isSpokeMobileValid;
   const isResubmit = Boolean(certResubmitId);
 
   const today = startOfToday();
@@ -251,17 +258,23 @@ const CertificationDataTab = ({
                       setCertBatchId(e.target.value);
                       if (e.target.value) setCertOtherBatchNumber("");
                     }}
-                    disabled={!certCenterId || certBatchesLoading}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50"
+                    disabled={
+                      !certCenterId ||
+                      certBatchesLoading ||
+                      certOtherBatchNumber.trim().length > 0
+                    }
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50 disabled:text-gray-400"
                   >
                     <option value="">
                       {certBatchesLoading
                         ? "Loading batches…"
                         : !certCenterId
                           ? "-- Select center first --"
-                          : certBatches.length === 0
-                            ? "No batches found"
-                            : "-- Select batch --"}
+                          : certOtherBatchNumber.trim().length > 0
+                            ? "Disabled — other batch number entered"
+                            : certBatches.length === 0
+                              ? "No batches found"
+                              : "-- Select batch --"}
                     </option>
                     {certBatches.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -281,9 +294,13 @@ const CertificationDataTab = ({
                       setCertOtherBatchNumber(e.target.value);
                       if (e.target.value.trim()) setCertBatchId("");
                     }}
-                    disabled={!certCenterId}
-                    placeholder="Enter if not in the list above"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50"
+                    disabled={!certCenterId || Boolean(certBatchId)}
+                    placeholder={
+                      certBatchId
+                        ? "Disabled — batch already selected"
+                        : "Enter if not in the list above"
+                    }
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </div>
               </div>
@@ -333,10 +350,10 @@ const CertificationDataTab = ({
               </div>
             </div>
 
-            {/* Center Spoke */}
+            {/* Center Spoc */}
             <div>
               <h2 className="font-semibold text-gray-800 mb-3">
-                Center Spoc Details
+                Center Spoc Details <span className="text-red-500">*</span>
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -349,8 +366,17 @@ const CertificationDataTab = ({
                     onChange={(e) => setCertSpokeName(e.target.value)}
                     placeholder="Spoc contact name"
                     required
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                      certSpokeName && !isSpokeNameValid
+                        ? "border-red-400"
+                        : "border-gray-200"
+                    }`}
                   />
+                  {certSpokeName && !isSpokeNameValid && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Name must be more than 2 letters
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -362,8 +388,17 @@ const CertificationDataTab = ({
                     onChange={(e) => setCertSpokeEmail(e.target.value)}
                     placeholder="name@example.com"
                     required
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                      certSpokeEmail && !isSpokeEmailValid
+                        ? "border-red-400"
+                        : "border-gray-200"
+                    }`}
                   />
+                  {certSpokeEmail && !isSpokeEmailValid && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Enter a valid email address
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -375,10 +410,19 @@ const CertificationDataTab = ({
                     onChange={(e) => setCertSpokeMobile(e.target.value)}
                     placeholder="10-digit Indian mobile"
                     inputMode="numeric"
-                    maxLength={14}
+                    maxLength={10}
                     required
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                      certSpokeMobile && !isSpokeMobileValid
+                        ? "border-red-400"
+                        : "border-gray-200"
+                    }`}
                   />
+                  {certSpokeMobile && !isSpokeMobileValid && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Enter a valid 10-digit mobile number
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
