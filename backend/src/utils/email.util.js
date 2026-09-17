@@ -18,7 +18,19 @@ class EmailService {
   }
 
   get smtpPassword() {
-    return String(process.env.SMTP_PASSWORD || '').replace(/\s+/g, '');
+    // Trim + strip wrapping quotes. Do NOT strip internal spaces except for Gmail app passwords.
+    let pass = String(process.env.SMTP_PASSWORD || '').trim();
+    if (
+      (pass.startsWith('"') && pass.endsWith('"')) ||
+      (pass.startsWith("'") && pass.endsWith("'"))
+    ) {
+      pass = pass.slice(1, -1).trim();
+    }
+    // Gmail app passwords are often pasted with spaces; SE/corporate passwords must keep special chars as-is
+    if (this.usesGmailSmtp()) {
+      pass = pass.replace(/\s+/g, '');
+    }
+    return pass;
   }
 
   get fromEmail() {
@@ -34,22 +46,126 @@ class EmailService {
     return host.includes('gmail.com') || host.includes('google.com');
   }
 
+  getSmtpDebugContext() {
+    const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+    let secure =
+      String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
+
+    // Port 587 uses STARTTLS (secure=false). Port 465 uses implicit TLS (secure=true).
+    if (port === 587 && secure) {
+      console.warn(
+        '[email] SMTP_SECURE=true with port 587 is invalid for most SMTP servers. Using STARTTLS (secure=false, requireTLS=true).'
+      );
+      secure = false;
+    }
+
+    const rawPass = String(process.env.SMTP_PASSWORD || '');
+    // Corporate SMTP (smtp.se.com) often uses an internal/self-signed chain.
+    // PowerShell trusts the OS store; Node rejects unless rejectUnauthorized=false.
+    const rejectUnauthorized =
+      String(process.env.SMTP_TLS_REJECT_UNAUTHORIZED || 'false').toLowerCase() !== 'false';
+
+    return {
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port,
+      secure,
+      requireTLS: port === 587,
+      rejectUnauthorized,
+      hasUser: Boolean(this.smtpUser),
+      hasPassword: Boolean(this.smtpPassword),
+      passwordLength: this.smtpPassword.length,
+      passwordHadQuotes: /^\s*["']/.test(rawPass) || /["']\s*$/.test(rawPass),
+      passwordHadLeadingSpace: rawPass.startsWith(' '),
+      fromEmail: this.fromEmail,
+      fromName: this.fromName,
+    };
+  }
+
+  formatSmtpError(error, stage = 'smtp') {
+    const ctx = this.getSmtpDebugContext();
+    const code = error?.code || error?.responseCode || 'UNKNOWN';
+    const response = error?.response || error?.message || String(error);
+    const command = error?.command || null;
+
+    let hint = 'Check SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM_EMAIL.';
+    const lower = String(response).toLowerCase();
+    if (lower.includes('authentication required') || code === 'EAUTH' || String(code) === '530') {
+      hint =
+        'SMTP server requires authentication. Set valid SMTP_USER and SMTP_PASSWORD (empty credentials will fail).';
+    } else if (lower.includes('invalid login') || lower.includes('username and password not accepted')) {
+      hint = 'SMTP login failed. Verify SMTP_USER / SMTP_PASSWORD (for Gmail use an App Password).';
+    } else if (
+      lower.includes('self-signed certificate') ||
+      lower.includes('unable to verify the first certificate') ||
+      lower.includes('certificate chain')
+    ) {
+      hint =
+        'TLS certificate rejected by Node. Set SMTP_TLS_REJECT_UNAUTHORIZED=false (needed for corporate SMTP like smtp.se.com).';
+    } else if (code === 'ECONNECTION' || code === 'ETIMEDOUT' || code === 'ESOCKET') {
+      hint = 'Cannot reach SMTP host. Check SMTP_HOST/SMTP_PORT, firewall, and network access to the mail server.';
+    } else if (code === 'EDNS' || lower.includes('enotfound') || lower.includes('getaddrinfo')) {
+      hint =
+        'DNS cannot resolve SMTP_HOST. Connect to SE VPN / corporate network, or use the internal SMTP hostname IT provided (e.g. SMTP-ASH1.SE.COM).';
+    } else if (code === 'EENVELOPE' || lower.includes('sender') || lower.includes('from')) {
+      hint = 'Sender address rejected. Confirm SMTP_FROM_EMAIL is allowed for this SMTP account.';
+    }
+
+    return [
+      `[email] SMTP ${stage} failed`,
+      `code=${code}`,
+      command ? `command=${command}` : null,
+      `host=${ctx.host}`,
+      `port=${ctx.port}`,
+      `secure=${ctx.secure}`,
+      `rejectUnauthorized=${ctx.rejectUnauthorized}`,
+      `authUser=${ctx.hasUser ? 'set' : 'empty'}`,
+      `authPass=${ctx.hasPassword ? 'set' : 'empty'}`,
+      `from=${ctx.fromEmail}`,
+      `response=${response}`,
+      `hint=${hint}`,
+    ]
+      .filter(Boolean)
+      .join(' | ');
+  }
+
   get transporter() {
     if (!this._transporter) {
-      const port = parseInt(process.env.SMTP_PORT, 10) || 587;
-      const secure =
-        String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
-      this._transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port,
-        secure,
-        auth: this.smtpUser
-          ? {
-              user: this.smtpUser,
-              pass: this.smtpPassword,
-            }
-          : undefined,
-      });
+      try {
+        const ctx = this.getSmtpDebugContext();
+        console.log(
+          `[email] Creating SMTP transporter | host=${ctx.host} | port=${ctx.port} | secure=${ctx.secure} | requireTLS=${ctx.requireTLS} | rejectUnauthorized=${ctx.rejectUnauthorized} | auth=${ctx.hasUser ? 'yes' : 'no'} | passLen=${ctx.passwordLength}`
+        );
+
+        this._transporter = nodemailer.createTransport({
+          host: ctx.host,
+          port: ctx.port,
+          secure: ctx.secure,
+          requireTLS: ctx.requireTLS,
+          auth: this.smtpUser
+            ? {
+                user: this.smtpUser,
+                pass: this.smtpPassword,
+              }
+            : undefined,
+          tls: {
+            // Corporate SMTP often presents an internal CA / self-signed chain
+            rejectUnauthorized: ctx.rejectUnauthorized,
+            minVersion: 'TLSv1.2',
+          },
+          logger: process.env.SMTP_DEBUG === 'true',
+          debug: process.env.SMTP_DEBUG === 'true',
+          connectionTimeout: 20000,
+          greetingTimeout: 20000,
+          socketTimeout: 30000,
+        });
+      } catch (error) {
+        this._transporter = null;
+        const details = this.formatSmtpError(error, 'transporter-create');
+        console.error(details);
+        const wrapped = new Error(details);
+        wrapped.cause = error;
+        throw wrapped;
+      }
     }
     return this._transporter;
   }
@@ -65,30 +181,49 @@ class EmailService {
       );
     }
     if (this._verified) return;
-    await this.transporter.verify();
-    this._verified = true;
-    console.log(`[email] SMTP verified. Visible From: "${this.fromName}" <${this.fromEmail}>`);
-    if (this.usesGmailSmtp() && this.fromEmail.toLowerCase() !== this.smtpUser.toLowerCase()) {
-      console.warn(
-        `[email] Gmail will still show ${this.smtpUser} in From unless "${this.fromEmail}" is added as a Send mail as alias in that Gmail account (Settings → Accounts → Send mail as).`
-      );
+
+    try {
+      await this.transporter.verify();
+      this._verified = true;
+      console.log(`[email] SMTP verified. Visible From: "${this.fromName}" <${this.fromEmail}>`);
+      if (this.usesGmailSmtp() && this.fromEmail.toLowerCase() !== this.smtpUser.toLowerCase()) {
+        console.warn(
+          `[email] Gmail will still show ${this.smtpUser} in From unless "${this.fromEmail}" is added as a Send mail as alias in that Gmail account (Settings → Accounts → Send mail as).`
+        );
+      }
+    } catch (error) {
+      this._verified = false;
+      this._transporter = null;
+      const details = this.formatSmtpError(error, 'verify');
+      console.error(details);
+      const wrapped = new Error(details);
+      wrapped.cause = error;
+      throw wrapped;
     }
   }
 
   async sendConfiguredMail(options) {
-    await this.ensureReady();
-    const mail = {
-      ...options,
-      from: this.fromHeader,
-      replyTo: this.fromEmail,
-    };
-    // Gmail SMTP rejects envelope-from that is not the login mailbox.
-    // Other providers should send as SMTP_FROM_EMAIL, not the SMTP login.
-    if (!this.usesGmailSmtp()) {
-      mail.sender = this.fromEmail;
-      mail.envelope = { from: this.fromEmail, to: options.to };
+    try {
+      await this.ensureReady();
+      const mail = {
+        ...options,
+        from: this.fromHeader,
+        replyTo: this.fromEmail,
+      };
+      // Gmail SMTP rejects envelope-from that is not the login mailbox.
+      // Other providers should send as SMTP_FROM_EMAIL, not the SMTP login.
+      if (!this.usesGmailSmtp()) {
+        mail.sender = this.fromEmail;
+        mail.envelope = { from: this.fromEmail, to: options.to };
+      }
+      return await this.transporter.sendMail(mail);
+    } catch (error) {
+      const details = this.formatSmtpError(error, 'send');
+      console.error(details);
+      const wrapped = new Error(details);
+      wrapped.cause = error;
+      throw wrapped;
     }
-    return this.transporter.sendMail(mail);
   }
 
   /**
@@ -654,19 +789,19 @@ This is an automated email. Please do not reply to this message.
 
     const packageText = packageModifications
       ? [
-          packageModifications.removed?.length
-            ? `Removed packages: ${packageModifications.removed
-                .map((p) => `${p.package_name}${p.course_name ? ` (${p.course_name})` : ''}`)
-                .join(', ')}`
-            : null,
-          packageModifications.added?.length
-            ? `Added packages: ${packageModifications.added
-                .map((p) => `${p.package_name}${p.course_name ? ` (${p.course_name})` : ''}`)
-                .join(', ')}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join('\n')
+        packageModifications.removed?.length
+          ? `Removed packages: ${packageModifications.removed
+            .map((p) => `${p.package_name}${p.course_name ? ` (${p.course_name})` : ''}`)
+            .join(', ')}`
+          : null,
+        packageModifications.added?.length
+          ? `Added packages: ${packageModifications.added
+            .map((p) => `${p.package_name}${p.course_name ? ` (${p.course_name})` : ''}`)
+            .join(', ')}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join('\n')
       : '';
 
     const html = `
