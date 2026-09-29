@@ -24,7 +24,7 @@ const {
 router.post(
   '/login',
   (req, res, next) => {
-    console.log('🔵 Login route hit:', req.body);
+    console.log('🔵 Login route hit:', req.body?.email);
     next();
   },
   loginValidator,

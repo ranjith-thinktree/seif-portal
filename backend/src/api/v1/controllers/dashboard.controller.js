@@ -20,7 +20,10 @@ class DashboardController {
         return ApiResponse.error(res, 'Partner ID not found in user profile', 400);
       }
 
-      const dashboardData = await DashboardService.getPartnerDashboard(partnerId);
+      const dashboardData = await DashboardService.getPartnerDashboard(
+        partnerId,
+        req.query.year || null
+      );
 
       return ApiResponse.success(
         res,

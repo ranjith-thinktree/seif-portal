@@ -157,6 +157,7 @@ const completionImageUpload = multer({
 const uploadCompletionImages = completionImageUpload.array('images', 10);
 
 module.exports = {
+  packageImagesDir: frontendPublicDir,
   uploadPackageImages,
   uploadCompletionImages,
   handleImageUploadError,

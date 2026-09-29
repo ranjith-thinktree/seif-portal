@@ -39,6 +39,17 @@ class AuthService {
   }
 
   /**
+   * Exact compare first; if that fails, retry without surrounding whitespace,
+   * which is commonly picked up when copying a temporary password from an email.
+   */
+  static async comparePasswordAllowingPaste(password, hash) {
+    if (await this.comparePassword(password, hash)) return true;
+    const trimmed = typeof password === 'string' ? password.trim() : password;
+    if (!trimmed || trimmed === password) return false;
+    return await this.comparePassword(trimmed, hash);
+  }
+
+  /**
    * Generate JWT access token
    * @param {Object} user - User object
    * @returns {String} JWT token
@@ -127,7 +138,7 @@ class AuthService {
 
     // Verify password
     console.log('🟡 Comparing passwords...');
-    const isPasswordValid = await this.comparePassword(password, user.password_hash);
+    const isPasswordValid = await this.comparePasswordAllowingPaste(password, user.password_hash);
     console.log('🟡 Password valid:', isPasswordValid);
 
     if (!isPasswordValid) {
@@ -282,7 +293,10 @@ class AuthService {
 
     // Verify current password
     console.log('[AUTH_SERVICE] Verifying current password');
-    const isPasswordValid = await this.comparePassword(currentPassword, user.password_hash);
+    const isPasswordValid = await this.comparePasswordAllowingPaste(
+      currentPassword,
+      user.password_hash
+    );
     console.log('[AUTH_SERVICE] Password valid:', isPasswordValid);
 
     if (!isPasswordValid) {

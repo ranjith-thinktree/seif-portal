@@ -327,8 +327,8 @@ const AdminRefurbishmentReviewModal = ({
       : parseImages(pkg.images);
     const raw = imgs[0];
     if (!raw) return null;
-    if (typeof raw === "string") return raw;
-    return raw.url || raw.file_url || null;
+    if (typeof raw === "string") return resolvePartnerFileUrl(raw);
+    return resolvePartnerFileUrl(raw.url || raw.file_url || null) || null;
   };
 
   const fmtDate = (d) => {

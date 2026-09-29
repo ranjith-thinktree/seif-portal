@@ -1255,7 +1255,10 @@ const RefurbishmentResponseModal = ({
                     const pkgId = pkg.package_id || pkg.id;
                     const isSelected = upgradationSelections[pkgId] || false;
                     const pkgImages = safeJSONParse(pkg.images || "[]");
-                    const imageUrl = pkgImages.length > 0 ? pkgImages[0] : null;
+                    const imageUrl =
+                      pkgImages.length > 0
+                        ? resolvePartnerFileUrl(pkgImages[0])
+                        : null;
                     const isFocused = activeUpgradationPackageId
                       ? activeUpgradationPackageId === pkgId
                       : idx === 0;
@@ -1872,7 +1875,9 @@ const RefurbishmentResponseModal = ({
                       activeCoursePkgs.map((pkg, idx) => {
                         const pkgImages = safeJSONParse(pkg.images);
                         const pkgImageUrl =
-                          pkgImages.length > 0 ? pkgImages[0] : null;
+                          pkgImages.length > 0
+                            ? resolvePartnerFileUrl(pkgImages[0])
+                            : null;
                         const isFocused = previewActivePackageId
                           ? previewActivePackageId === pkg.package_id
                           : idx === 0;
@@ -2223,7 +2228,8 @@ const RefurbishmentResponseModal = ({
             <div className="w-[55%] overflow-y-auto scrollbar-subtle space-y-3 pr-1">
               {currentCourse.packages.map((pkg, index) => {
                 const images = safeJSONParse(pkg.images);
-                const imageUrl = images.length > 0 ? images[0] : null;
+                const imageUrl =
+                  images.length > 0 ? resolvePartnerFileUrl(images[0]) : null;
                 const isSelected = selections[pkg.package_id] || false;
                 const isActive = activePackageId === pkg.package_id;
 

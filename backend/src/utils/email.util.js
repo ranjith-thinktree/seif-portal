@@ -274,7 +274,8 @@ class EmailService {
    * @returns {string} Generated password
    */
   generatePassword(length = 12) {
-    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*';
+    // No look-alikes (0/O/o, 1/l/I) and no '&' — it can be mis-rendered as an HTML entity in emails.
+    const charset = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789@#$%*';
     let password = '';
     const array = new Uint8Array(length);
     crypto.getRandomValues(array);
@@ -304,9 +305,32 @@ class EmailService {
    * @returns {Promise<Object>} Email result
    */
   async sendPartnerWelcomeEmail(partnerData) {
-    const { email, name, partnerId, tempPassword } = partnerData;
+    const { email, name, partnerId, tempPassword, isResend = false } = partnerData;
+    const esc = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 
-    const subject = 'Welcome to SEIF Portal - Your Account Details';
+    // A distinct subject per resend stops Gmail threading it with older (now invalid) credentials.
+    const sentAt = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const subject = isResend
+      ? `SEIF Portal - Your New Login Credentials (${sentAt} IST)`
+      : 'Welcome to SEIF Portal - Your Account Details';
+    const resendNoticeHtml = isResend
+      ? `<p><strong>These credentials were generated on ${esc(sentAt)} IST. Any password sent to you earlier no longer works.</strong></p>`
+      : '';
+    const resendNoticeText = isResend
+      ? `These credentials were generated on ${sentAt} IST. Any password sent to you earlier no longer works.\n`
+      : '';
 
     const html = `
       <!DOCTYPE html>
@@ -336,22 +360,27 @@ class EmailService {
           </div>
           
           <div class="content">
-            <h2>Dear ${name},</h2>
-            <p>Your partner account has been successfully created by our administrator. We're excited to have you on board!</p>
+            <h2>Dear ${esc(name)},</h2>
+            <p>${
+              isResend
+                ? 'Your administrator has generated new login credentials for your partner account.'
+                : "Your partner account has been successfully created by our administrator. We're excited to have you on board!"
+            }</p>
+            ${resendNoticeHtml}
             
             <div class="credentials">
               <h3>Your Login Credentials</h3>
               <div class="credential-item">
                 <span class="credential-label">Partner ID:</span>
-                <span class="credential-value">${partnerId}</span>
+                <span class="credential-value">${esc(partnerId)}</span>
               </div>
               <div class="credential-item">
                 <span class="credential-label">Email:</span>
-                <span class="credential-value">${email}</span>
+                <span class="credential-value">${esc(email)}</span>
               </div>
               <div class="credential-item">
                 <span class="credential-label">Temporary Password:</span>
-                <span class="credential-value">${tempPassword}</span>
+                <span class="credential-value" style="user-select:all;-webkit-user-select:all;">${esc(tempPassword)}</span>
               </div>
             </div>
 
@@ -414,8 +443,8 @@ Welcome to SEIF Portal!
 
 Dear ${name},
 
-Your partner account has been successfully created. Here are your login credentials:
-
+${isResend ? 'New login credentials have been generated for your partner account.' : 'Your partner account has been successfully created.'} Here are your login credentials:
+${resendNoticeText}
 Partner ID: ${partnerId}
 Email: ${email}
 Temporary Password: ${tempPassword}

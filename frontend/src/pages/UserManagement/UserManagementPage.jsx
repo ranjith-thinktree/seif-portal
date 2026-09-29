@@ -417,25 +417,28 @@ const UserManagementPage = () => {
   };
 
   const handleResendCredentials = async (targetUser) => {
-    if (!targetUser) return;
+    if (!targetUser || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
       const response = await resendUserCredentials(targetUser.id);
-      const result = response.data || {};
-
-      if (result.warning && result.temporaryPassword) {
-        setSelectedUser(targetUser);
-        setResetPasswordResult({ temporaryPassword: result.temporaryPassword });
-        setShowResetPasswordModal(true);
-        toast.warning(result.warning);
-      } else {
-        toast.success(`New credentials emailed to ${targetUser.email}`);
+      const sentTo = response.data?.email || targetUser.email;
+      if (response.data?.temporaryPassword) {
+        toast.warning(
+          `Email to ${sentTo} failed. Share this new temporary password manually: ${response.data.temporaryPassword}`,
+          { autoClose: false },
+        );
+        return;
       }
+      toast.success(
+        `New credentials emailed to ${sentTo}. Any previously sent password no longer works — use the latest email.`,
+        { autoClose: 8000 },
+      );
     } catch (error) {
       console.error("Error resending credentials:", error);
       toast.error(
-        error.response?.data?.message || "Failed to resend credentials",
+        error.response?.data?.message || "Failed to send new credentials",
+        { autoClose: 8000 },
       );
     } finally {
       setIsSubmitting(false);

@@ -133,7 +133,7 @@ class DataService {
 
       // Total Batches (for this partner)
       const [batches] = await db.query(
-        `SELECT COUNT(*) as total FROM batches WHERE partner_id = ? AND status = 'active'`,
+        `SELECT COUNT(*) as total FROM batches WHERE partner_id = ?`,
         [partnerId]
       );
       const totalBatches = batches[0]?.total || 0;

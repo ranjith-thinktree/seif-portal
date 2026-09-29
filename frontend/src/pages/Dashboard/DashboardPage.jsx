@@ -35,6 +35,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import IndiaTrainingCard from "../../components/dashboard/IndiaTrainingCard";
 import { useNavigate } from "react-router-dom";
 import dataService from "../../services/data.service";
+import apiClient from "../../api/client";
 import {
   getConsolidatedAnalytics as getDataPageAnalytics,
 } from "../../services/analytics.service";
@@ -52,6 +53,9 @@ import {
   toNumber,
   unwrapAnalyticsPayload,
 } from "../../utils/dashboardMetrics";
+
+// Hidden for demo — set to true to restore the "Centers by Course Type" hover on the Centers card.
+const SHOW_CENTER_COURSE_BREAKDOWN = false;
 
 /**
  * Course Breakdown Tooltip Component
@@ -952,6 +956,7 @@ const AdminDashboard = () => {
                 );
               }
               if (card.wrapper === "course") {
+                if (!SHOW_CENTER_COURSE_BREAKDOWN) return statCard;
                 return (
                   <CourseBreakdownTooltip
                     key={card.key}
@@ -1131,6 +1136,36 @@ const AdminDashboard = () => {
  */
 const PartnerDashboard = ({ userName, partnerName }) => {
   const [selectedYear, setSelectedYear] = useState("all");
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStats = async () => {
+      setStatsLoading(true);
+      try {
+        const res = await apiClient.get("/dashboard/partner", {
+          params: { year: selectedYear },
+        });
+        if (!cancelled) setStats(res.data?.data?.statistics || null);
+      } catch (err) {
+        console.error("Failed to load partner dashboard stats:", err);
+        if (!cancelled) setStats(null);
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+    };
+    fetchStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedYear]);
+
+  const statValue = (key) => {
+    if (statsLoading) return "…";
+    if (!stats) return "—";
+    return toNumber(stats[key]).toLocaleString("en-IN");
+  };
 
   return (
     <div className="space-y-6">
@@ -1168,62 +1203,14 @@ const PartnerDashboard = ({ userName, partnerName }) => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="My Centers"
-          value="12"
-          trend="up"
-          graphData={[
-            { value: 10 },
-            { value: 10 },
-            { value: 11 },
-            { value: 11 },
-            { value: 11 },
-            { value: 12 },
-            { value: 12 },
-          ]}
-        />
-        <StatCard
-          title="Total Students"
-          value="1,456"
-          trend="up"
-          graphData={[
-            { value: 1300 },
-            { value: 1350 },
-            { value: 1380 },
-            { value: 1400 },
-            { value: 1420 },
-            { value: 1440 },
-            { value: 1456 },
-          ]}
-        />
+        <StatCard title="My Centers" value={statValue("totalCenters")} />
+        <StatCard title="Total Students" value={statValue("totalStudents")} />
         <StatCard
           title="Pending Uploads"
-          value="3"
+          value={statValue("pendingUploads")}
           trend="down"
-          graphData={[
-            { value: 8 },
-            { value: 7 },
-            { value: 6 },
-            { value: 5 },
-            { value: 4 },
-            { value: 3 },
-            { value: 3 },
-          ]}
         />
-        <StatCard
-          title="Active Requests"
-          value="5"
-          trend="up"
-          graphData={[
-            { value: 2 },
-            { value: 3 },
-            { value: 3 },
-            { value: 4 },
-            { value: 4 },
-            { value: 5 },
-            { value: 5 },
-          ]}
-        />
+        <StatCard title="Active Requests" value={statValue("activeRequests")} />
       </div>
 
       {/* Quick Actions */}

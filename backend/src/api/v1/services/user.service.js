@@ -265,6 +265,7 @@ class UserService {
         name: partner.name,
         partnerId: partner.partner_id,
         tempPassword,
+        isResend: true,
       });
 
       return {
@@ -287,10 +288,11 @@ class UserService {
    */
   static generateTempPassword() {
     const crypto = require('crypto');
-    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const lower = 'abcdefghijklmnopqrstuvwxyz';
-    const digits = '0123456789';
-    const special = '!@#$%^&*';
+    // No look-alikes (0/O/o, 1/l/I) and no '&' — it can be mis-rendered as an HTML entity in emails.
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const special = '@#$%*!';
     const charset = upper + lower + digits + special;
 
     const bytes = crypto.randomBytes(16);

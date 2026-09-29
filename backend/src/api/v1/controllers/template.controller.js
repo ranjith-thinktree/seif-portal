@@ -347,9 +347,9 @@ const replaceTemplate = async (req, res) => {
   const destPath = path.join(TEMPLATES_DIR, template.filename);
 
   try {
-    if (!fs.existsSync(TEMPLATES_DIR)) {
-      fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
-    }
+  if (!fs.existsSync(TEMPLATES_DIR)) {
+    fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
+  }
 
     if (isCsv) {
       fs.renameSync(req.file.path, destPath);

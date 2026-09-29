@@ -266,7 +266,7 @@ const OverviewTab = () => {
       setLoading(true);
       setError(null);
       const response = await getOverviewStats();
-      setStats(response.data);
+      setStats(response.data?.summary ?? response.data);
     } catch (err) {
       console.error("Error fetching overview stats:", err);
       setError(err.response?.data?.message || "Failed to load statistics");
@@ -1291,13 +1291,11 @@ const OverviewTab = () => {
             title="My Centers"
             value={stats.total_centers || 0}
             trend="up"
-            graphData={dummyGraphData}
           />
           <StatCard
             title="Pending Center Approvals"
             value={stats.pending_center_approvals || 0}
             trend={stats.pending_center_approvals > 0 ? "down" : "up"}
-            graphData={dummyGraphData}
           />
         </div>
       </div>
@@ -1312,25 +1310,21 @@ const OverviewTab = () => {
             title="My Batches"
             value={stats.total_batches || 0}
             trend="up"
-            graphData={dummyGraphData}
           />
           <StatCard
             title="My Students"
             value={stats.total_students || 0}
             trend="up"
-            graphData={dummyGraphData}
           />
           <StatCard
             title="Female Students"
             value={stats.total_female_students || 0}
             trend="up"
-            graphData={dummyGraphData}
           />
           <StatCard
             title="Male Students"
             value={stats.total_male_students || 0}
             trend="up"
-            graphData={dummyGraphData}
           />
         </div>
       </div>
@@ -1345,7 +1339,6 @@ const OverviewTab = () => {
             title="Pending Uploads"
             value={stats.pending_uploads || 0}
             trend={stats.pending_uploads > 0 ? "down" : "up"}
-            graphData={dummyGraphData}
           />
         </div>
       </div>

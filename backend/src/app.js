@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const config = require('./config');
 const { errorHandler, notFoundHandler } = require('./middleware/error.middleware');
+const { packageImagesDir } = require('./middleware/imageUpload.middleware');
 const Sentry = require('@sentry/node');
 
 // Create Express app
@@ -135,6 +136,8 @@ app.use('/uploads/certification', (req, res) => {
     message: 'Authentication required. Download certification files via the API.',
   });
 });
+// Package catalog images are written by imageUpload.middleware (outside the uploads dirs above).
+app.use('/uploads/packages', express.static(packageImagesDir));
 app.use('/uploads', express.static(projectUploadsDir));
 app.use('/uploads', express.static(backendUploadsDir));
 

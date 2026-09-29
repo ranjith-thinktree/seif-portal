@@ -40,7 +40,7 @@ describe('DashboardController', () => {
 
       await DashboardController.getPartnerDashboard(req, res, next);
 
-      expect(DashboardService.getPartnerDashboard).toHaveBeenCalledWith('partner-123');
+      expect(DashboardService.getPartnerDashboard).toHaveBeenCalledWith('partner-123', null);
       expect(ApiResponse.success).toHaveBeenCalledWith(
         res,
         mockData,
@@ -85,7 +85,7 @@ describe('DashboardController', () => {
 
       await DashboardController.getPartnerDashboard(req, res, next);
 
-      expect(DashboardService.getPartnerDashboard).toHaveBeenCalledWith('partner-456');
+      expect(DashboardService.getPartnerDashboard).toHaveBeenCalledWith('partner-456', null);
     });
   });
 

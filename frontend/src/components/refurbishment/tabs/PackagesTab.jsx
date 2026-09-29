@@ -20,6 +20,7 @@ import {
   DialogDescription,
 } from "../../ui/dialog";
 import { Checkbox } from "../../ui/checkbox";
+import { resolvePartnerFileUrl } from "../../../utils/refurbishmentUtils";
 
 /**
  * PackagesTab Component
@@ -534,10 +535,7 @@ const PackagesTab = ({
                   </p>
                   <div className="grid grid-cols-4 gap-3">
                     {existingImages.map((imagePath, index) => {
-                      // Handle both full URLs (http/https) and relative paths
-                      const imageUrl = imagePath.startsWith("http")
-                        ? imagePath
-                        : `${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
+                      const imageUrl = resolvePartnerFileUrl(imagePath);
 
                       return (
                         <div key={index} className="relative group">
@@ -549,13 +547,17 @@ const PackagesTab = ({
                           />
                           <button
                             type="button"
-                            onClick={() => handleRemoveExistingImage(index)}
-                            className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveExistingImage(index);
+                            }}
+                            className="absolute -top-2 -right-2 z-20 flex h-7 w-7 items-center justify-center cursor-pointer [&_*]:cursor-pointer bg-red-600 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
                             title="Remove image"
+                            aria-label="Remove image"
                           >
-                            <XMarkIcon className="w-4 h-4" />
+                            <XMarkIcon className="w-4 h-4 pointer-events-none cursor-pointer" />
                           </button>
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
+                          <div className="absolute inset-0 pointer-events-none bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
                             <EyeIcon className="w-5 h-5 text-white opacity-0 group-hover:opacity-80 transition-opacity" />
                           </div>
                         </div>
@@ -581,11 +583,15 @@ const PackagesTab = ({
                         />
                         <button
                           type="button"
-                          onClick={() => handleRemoveNewImage(index)}
-                          className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveNewImage(index);
+                          }}
+                          className="absolute -top-2 -right-2 z-20 flex h-7 w-7 items-center justify-center cursor-pointer [&_*]:cursor-pointer bg-red-600 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
                           title="Remove image"
+                          aria-label="Remove image"
                         >
-                          <XMarkIcon className="w-4 h-4" />
+                          <XMarkIcon className="w-4 h-4 pointer-events-none cursor-pointer" />
                         </button>
                         <div className="absolute top-1 left-1 bg-green-600 text-white text-xs px-2 py-0.5 rounded-full font-medium">
                           NEW
@@ -724,7 +730,9 @@ const PackagesTab = ({
                 {viewingPackage.images ? (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {JSON.parse(viewingPackage.images).map(
-                      (imageUrl, index) => (
+                      (imagePath, index) => {
+                        const imageUrl = resolvePartnerFileUrl(imagePath);
+                        return (
                         <div key={index} className="relative group">
                           <div className="aspect-w-16 aspect-h-9 rounded-xl overflow-hidden border-2 border-gray-200 shadow-md hover:shadow-xl transition-all duration-300">
                             <img
@@ -748,7 +756,8 @@ const PackagesTab = ({
                             {JSON.parse(viewingPackage.images).length}
                           </div>
                         </div>
-                      ),
+                        );
+                      },
                     )}
                   </div>
                 ) : (

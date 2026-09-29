@@ -22,6 +22,7 @@ import {
   BeakerIcon,
 } from "@heroicons/react/24/outline";
 import { getCourses } from "../../services/data.service";
+import { resolvePartnerFileUrl } from "../../utils/refurbishmentUtils";
 
 // ---------------------------------------------------------------------------
 // Custom Checkbox - pure SVG + HTML, no Radix
@@ -272,7 +273,10 @@ const PackageSelector = React.memo(function PackageSelector({
               if (pkg.images) {
                 try {
                   const imgs = JSON.parse(pkg.images);
-                  firstImage = Array.isArray(imgs) ? (imgs[0] ?? null) : null;
+                  firstImage =
+                    Array.isArray(imgs) && imgs[0]
+                      ? resolvePartnerFileUrl(imgs[0])
+                      : null;
                 } catch {
                   firstImage = null;
                 }

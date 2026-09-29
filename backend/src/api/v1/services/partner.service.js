@@ -2160,6 +2160,7 @@ class PartnerService {
         name: partner.name,
         partnerId: partner.partner_id,
         tempPassword: tempPassword,
+        isResend: true,
       });
 
       console.log(`Welcome email resent to partner: ${partner.partner_id}`);

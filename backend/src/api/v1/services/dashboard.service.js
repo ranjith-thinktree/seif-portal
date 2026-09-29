@@ -11,10 +11,19 @@ class DashboardService {
   /**
    * Get partner dashboard statistics
    * @param {string} partnerId - Partner UUID
+   * @param {string|null} year - Financial year 'YYYY-YY' (Apr–Mar on batch start date) or 'all'
    * @returns {Object} Partner dashboard data
    */
-  static async getPartnerDashboard(partnerId) {
+  static async getPartnerDashboard(partnerId, year = null) {
     try {
+      let fyClause = '';
+      const fyParams = [];
+      const startYear = year && year !== 'all' ? parseInt(String(year).split('-')[0], 10) : NaN;
+      if (Number.isFinite(startYear)) {
+        fyClause = ' AND b.batch_start_date >= ? AND b.batch_start_date < ?';
+        fyParams.push(`${startYear}-04-01`, `${startYear + 1}-04-01`);
+      }
+
       // Get total centers count
       const [centersResult] = await db.query(
         'SELECT COUNT(*) as total FROM centers WHERE partner_id = ? AND status = ?',
@@ -22,19 +31,22 @@ class DashboardService {
       );
       const totalCenters = centersResult[0].total;
 
-      // Get total batches count
+      // Same source as the partner Batch List
       const [batchesResult] = await db.query(
-        'SELECT COUNT(*) as total FROM batches WHERE partner_id = ?',
-        [partnerId]
+        `SELECT COUNT(*) as total FROM batches b WHERE b.partner_id = ?${fyClause}`,
+        [partnerId, ...fyParams]
       );
       const totalBatches = batchesResult[0].total;
 
-      // Get total students from uploaded_students (approved)
+      // Same source as the partner Students List (approved data lives in `students`)
       const [studentsResult] = await db.query(
-        `SELECT COUNT(*) as total 
-         FROM uploaded_students 
-         WHERE partner_id = ? AND approval_status = ?`,
-        [partnerId, 'approved']
+        fyClause
+          ? `SELECT COUNT(*) as total
+             FROM students s
+             INNER JOIN batches b ON s.batch_id = b.id
+             WHERE s.partner_id = ?${fyClause}`
+          : 'SELECT COUNT(*) as total FROM students s WHERE s.partner_id = ?',
+        [partnerId, ...fyParams]
       );
       const totalStudents = studentsResult[0].total;
 
