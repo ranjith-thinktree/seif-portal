@@ -47,6 +47,8 @@ const ReviewCentersPage = () => {
   const [sortOrder, setSortOrder] = useState("asc");
   const [selectedCenterIds, setSelectedCenterIds] = useState([]);
   const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approveMode, setApproveMode] = useState("selected");
+  const [approveProgress, setApproveProgress] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [duplicateConflicts, setDuplicateConflicts] = useState(null);
@@ -181,6 +183,7 @@ const ReviewCentersPage = () => {
   };
 
   const displayCenters = getFilteredAndSortedCenters();
+  const pendingTotal = Number(upload?.review_stats?.pending_centers) || 0;
 
   const selectableCenterIds = useMemo(
     () =>
@@ -296,6 +299,14 @@ const ReviewCentersPage = () => {
     setShowApproveModal(false);
     setShowRejectModal(false);
     setIsProcessing(false);
+    setApproveProgress(null);
+    setApproveMode("selected");
+  };
+
+  const openApproveModal = (mode) => {
+    setApproveMode(mode);
+    setApproveProgress(null);
+    setShowApproveModal(true);
   };
 
   const refreshReviewData = async () => {
@@ -303,20 +314,51 @@ const ReviewCentersPage = () => {
   };
 
   const handleBulkApprove = async () => {
-    if (selectedCenterIds.length === 0) {
-      return;
-    }
-
     setIsProcessing(true);
     setDuplicateConflicts(null);
+
+    let centerIds = selectedCenterIds;
+    if (approveMode === "all") {
+      try {
+        const collectedIds = [];
+        let page = 1;
+        let pages = 1;
+        do {
+          const response = await reviewService.getPendingCenters(uploadId, {
+            page,
+            limit: 100,
+            search: "",
+          });
+          const rows = response.data?.data || [];
+          pages = response.data?.pagination?.totalPages || 1;
+          rows.forEach((center) => {
+            if (center.review_status === "pending") collectedIds.push(center.id);
+          });
+          page += 1;
+        } while (page <= pages);
+        centerIds = collectedIds;
+      } catch (error) {
+        console.error("Error loading pending centers:", error);
+        showToast.error("Failed to load pending centers");
+        resetBulkActionState();
+        return;
+      }
+    }
+
+    if (centerIds.length === 0) {
+      showToast.error("No pending centers to approve");
+      resetBulkActionState();
+      return;
+    }
 
     // Process sequentially to avoid race condition in syncUploadLifecycle
     let successful = 0;
     let failed = 0;
     let blockedByDuplicates = null;
-    for (const centerId of selectedCenterIds) {
+    for (let index = 0; index < centerIds.length; index += 1) {
+      setApproveProgress({ current: index + 1, total: centerIds.length });
       try {
-        await reviewService.approveCenter(uploadId, centerId);
+        await reviewService.approveCenter(uploadId, centerIds[index]);
         successful++;
       } catch (error) {
         const data = error?.response?.data;
@@ -611,7 +653,7 @@ const ReviewCentersPage = () => {
           onSortChange={handleSortChange}
         />
 
-        {!isReadOnly && selectableCenterIds.length > 0 && (
+        {!isReadOnly && (pendingTotal > 0 || selectableCenterIds.length > 0) && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="text-sm text-gray-600">
               <span className="font-semibold text-gray-900">
@@ -619,10 +661,23 @@ const ReviewCentersPage = () => {
               </span>{" "}
               center{selectedCenterIds.length === 1 ? "" : "s"} selected on this
               page
+              {pendingTotal > 0 && (
+                <span className="block text-xs text-gray-500 mt-1">
+                  {pendingTotal} pending across every page
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setShowApproveModal(true)}
+                onClick={() => openApproveModal("all")}
+                disabled={pendingTotal === 0 || isProcessing}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-800 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircleIcon className="h-4 w-4" />
+                Approve All Pending ({pendingTotal})
+              </button>
+              <button
+                onClick={() => openApproveModal("selected")}
                 disabled={selectedCenterIds.length === 0 || isProcessing}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -776,7 +831,7 @@ const ReviewCentersPage = () => {
                             <button
                               onClick={() => {
                                 setSelectedCenterIds([center.id]);
-                                setShowApproveModal(true);
+                                openApproveModal("selected");
                               }}
                               disabled={center.review_status !== "pending"}
                               title={`Approve ${center.center_name}`}
@@ -820,34 +875,46 @@ const ReviewCentersPage = () => {
 
         <SuccessModal
           isOpen={showApproveModal}
-          onClose={() => setShowApproveModal(false)}
+          onClose={() => {
+            if (!isProcessing) setShowApproveModal(false);
+          }}
           title={
-            selectedCenterIds.length === 1
-              ? "Approve Center"
-              : "Approve Selected Centers"
+            approveMode === "all"
+              ? "Approve All Pending Centers"
+              : selectedCenterIds.length === 1
+                ? "Approve Center"
+                : "Approve Selected Centers"
           }
           description={
-            selectedCenterIds.length === 1
-              ? "This action will move all data from this center to the main system. Do you want to proceed?"
-              : `This action will approve ${selectedCenterIds.length} selected centers and move their data to the main system. Do you want to proceed?`
+            approveProgress
+              ? `Approving ${approveProgress.current} of ${approveProgress.total} centers. Keep this page open until it finishes.`
+              : approveMode === "all"
+                ? `This will approve all ${pendingTotal} pending centers in this upload, including centers on other pages. Already approved or rejected centers stay unchanged.`
+                : selectedCenterIds.length === 1
+                  ? "This action will move all data from this center to the main system. Do you want to proceed?"
+                  : `This action will approve ${selectedCenterIds.length} selected centers on this page and move their data to the main system. Do you want to proceed?`
           }
           partnerName={
-            selectedCenters.length === 1
+            approveMode === "selected" && selectedCenters.length === 1
               ? selectedCenters[0]?.partner_name || ""
               : ""
           }
           centerName={
-            selectedCenters.length === 1
-              ? selectedCenters[0]?.center_name || ""
-              : `${selectedCenterIds.length} centers selected`
+            approveMode === "all"
+              ? `${pendingTotal} pending centers`
+              : selectedCenters.length === 1
+                ? selectedCenters[0]?.center_name || ""
+                : `${selectedCenterIds.length} centers selected`
           }
           onConfirm={handleBulkApprove}
           isLoading={isProcessing}
           showCancel={true}
           buttonText={
-            selectedCenterIds.length === 1
-              ? "Confirm Approval"
-              : "Confirm Bulk Approval"
+            approveMode === "all"
+              ? "Approve All Pending"
+              : selectedCenterIds.length === 1
+                ? "Confirm Approval"
+                : "Confirm Bulk Approval"
           }
         />
 

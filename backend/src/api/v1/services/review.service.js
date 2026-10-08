@@ -128,11 +128,14 @@ class ReviewService {
   /**
    * Get students for a specific center in upload
    */
-  async getCenterStudentsForReview(uploadId, centerId, { page = 1, limit = 10, search = '' }) {
+  async getCenterStudentsForReview(uploadId, centerId, { page = 1, limit = null, search = '' }) {
     try {
       const uploadUuid = convertToUUID(uploadId);
       const centerUuid = convertToUUID(centerId);
-      const offset = (page - 1) * limit;
+      const parsedLimit = parseInt(limit, 10);
+      const usePaging = Number.isFinite(parsedLimit) && parsedLimit > 0;
+      const safeLimit = usePaging ? Math.min(parsedLimit, 10000) : null;
+      const offset = usePaging ? (Math.max(parseInt(page, 10) || 1, 1) - 1) * safeLimit : 0;
 
       let whereConditions = ['us.data_upload_id = ?', 'us.uploaded_center_id = ?'];
       let queryParams = [uploadUuid, centerUuid];
@@ -157,9 +160,8 @@ class ReviewService {
       );
       const total = countResult[0].total;
 
-      // Get paginated data
-      const validLimit = parseInt(limit);
-      const validOffset = parseInt(offset);
+      // Review must show every trainee in the center. A limit is optional.
+      const pagingSql = usePaging ? `LIMIT ${safeLimit} OFFSET ${offset}` : '';
       const [students] = await db.query(
         `SELECT 
           us.*,
@@ -171,7 +173,7 @@ class ReviewService {
         LEFT JOIN uploaded_batches ub ON us.uploaded_batch_id = ub.id
         WHERE ${whereClause}
         ORDER BY COALESCE(us.partner_student_id, us.student_name), us.student_name
-        LIMIT ${validLimit} OFFSET ${validOffset}`,
+        ${pagingSql}`,
         queryParams
       );
 
@@ -189,10 +191,10 @@ class ReviewService {
         data: students,
         center: centerResult[0] || null,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page: usePaging ? Math.max(parseInt(page, 10) || 1, 1) : 1,
+          limit: usePaging ? safeLimit : total,
           total,
-          totalPages: Math.ceil(total / limit),
+          totalPages: usePaging ? Math.ceil(total / safeLimit) : 1,
         },
       };
     } catch (error) {

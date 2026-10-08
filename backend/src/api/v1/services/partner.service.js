@@ -382,19 +382,17 @@ class PartnerService {
 
       await connection.commit();
 
-      // Send welcome email with credentials (async, don't wait)
-      // TODO: Re-enable email sending when SMTP is ready
-      // emailService
-      //   .sendPartnerWelcomeEmail({
-      //     email: partner_email,
-      //     name: name,
-      //     partnerId: readablePartnerId,
-      //     tempPassword: tempPassword,
-      //   })
-      //   .catch((err) => {
-      //     console.error('Failed to send welcome email:', err);
-      //     // Don't throw error - partner creation succeeded
-      //   });
+      // Partner row is already saved. A mail failure must not roll back the account.
+      emailService
+        .sendPartnerWelcomeEmail({
+          email: partner_email,
+          name: name,
+          partnerId: readablePartnerId,
+          tempPassword: tempPassword,
+        })
+        .catch((err) => {
+          console.error('Failed to send welcome email:', err);
+        });
 
       // Return created partner
       connection.release();

@@ -37,11 +37,14 @@ const reviewService = {
    * @returns {Promise<Object>} Students data with center details and pagination
    */
   getCenterStudents: async (uploadId, centerId, params = {}) => {
-    const { page = 1, limit = 10, search = "" } = params;
+    const { page = 1, search = "" } = params;
+    const query = { page, search };
+    // Omit limit so the review screen receives every student in the center.
+    if (params.limit) query.limit = params.limit;
     const response = await apiClient.get(
       `/review/${uploadId}/centers/${centerId}/students`,
       {
-        params: { page, limit, search },
+        params: query,
       }
     );
     return response.data;

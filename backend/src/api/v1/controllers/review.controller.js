@@ -76,9 +76,10 @@ class ReviewController {
       const { uploadId, centerId } = req.params;
       const { page, limit, search } = req.query;
 
+      const parsedLimit = parseInt(limit, 10);
       const result = await reviewService.getCenterStudentsForReview(uploadId, centerId, {
-        page: parseInt(page) || 1,
-        limit: parseInt(limit) || 10,
+        page: parseInt(page, 10) || 1,
+        limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : null,
         search: search || '',
       });
 
