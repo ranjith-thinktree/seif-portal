@@ -107,7 +107,7 @@ const Sidebar = () => {
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex-1 overflow-y-auto py-4 scrollbar-hide">
+        <nav className="flex-1 overflow-y-auto py-4 scrollbar-sidebar">
           <ul className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;

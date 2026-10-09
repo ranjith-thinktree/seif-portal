@@ -595,6 +595,26 @@ const OrganizationCentersPage = ({ embedded = false }) => {
     });
   }, [centers, searchTerm, activeFilters, sortBy, sortOrder]);
 
+  const centerStats = useMemo(() => {
+    const activeCenters = filteredAndSortedCenters.filter(
+      (center) => center.status === "active",
+    ).length;
+    const totalStudents = filteredAndSortedCenters.reduce(
+      (sum, center) => sum + (Number(center.total_students) || 0),
+      0,
+    );
+    const regions = new Set(
+      filteredAndSortedCenters.map((center) => center.region).filter(Boolean),
+    ).size;
+
+    return {
+      total: filteredAndSortedCenters.length,
+      active: activeCenters,
+      students: totalStudents,
+      regions,
+    };
+  }, [filteredAndSortedCenters]);
+
   const handleFilterChange = (key, value) => {
     setActiveFilters((prev) => ({ ...prev, [key]: value }));
     setCurrentPage(1);
@@ -678,25 +698,21 @@ const OrganizationCentersPage = ({ embedded = false }) => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <div className="text-sm text-gray-600">Total Centers</div>
-              <div className="text-2xl font-bold">{centers.length}</div>
+              <div className="text-2xl font-bold">{centerStats.total}</div>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <div className="text-sm text-gray-600">Active Centers</div>
               <div className="text-2xl font-bold text-green-600">
-                {centers.filter((c) => c.status === "active").length}
+                {centerStats.active}
               </div>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <div className="text-sm text-gray-600">Total Students</div>
-              <div className="text-2xl font-bold">
-                {centers.reduce((sum, c) => sum + (c.total_students || 0), 0)}
-              </div>
+              <div className="text-2xl font-bold">{centerStats.students}</div>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <div className="text-sm text-gray-600">Regions</div>
-              <div className="text-2xl font-bold">
-                {new Set(centers.map((c) => c.region).filter(Boolean)).size}
-              </div>
+              <div className="text-2xl font-bold">{centerStats.regions}</div>
             </div>
           </div>
 

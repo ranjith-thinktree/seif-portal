@@ -86,4 +86,29 @@
     scrollbar-width: thin;
     scrollbar-color: #D1D5DB transparent;
   }
+
+  /* Sidebar menu — thicker, always visible when the menu overflows */
+  .scrollbar-sidebar::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .scrollbar-sidebar::-webkit-scrollbar-track {
+    background: #F3F4F6;
+    border-radius: 99px;
+  }
+
+  .scrollbar-sidebar::-webkit-scrollbar-thumb {
+    background: #9CA3AF;
+    border-radius: 99px;
+    border: 2px solid #F3F4F6;
+  }
+
+  .scrollbar-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #6B7280;
+  }
+
+  .scrollbar-sidebar {
+    scrollbar-width: auto;
+    scrollbar-color: #9CA3AF #F3F4F6;
+  }
 }
