@@ -8,6 +8,7 @@ import UploadInstructions from "../UploadInstructions";
 import UploadPreview from "../UploadPreview";
 
 const TraineeDataTab = ({
+  showApprovalNote = true,
   noteOpen,
   setNoteOpen,
   success,
@@ -32,7 +33,8 @@ const TraineeDataTab = ({
 }) => {
   return (
     <div>
-      {/* Collapsible Important Note */}
+      {/* Partners must wait for admin approval. Admin-added centers do not. */}
+      {showApprovalNote && (
       <div className="mb-6 border-l-4 border-amber-500 rounded-r-lg overflow-hidden">
         <button
           type="button"
@@ -89,6 +91,7 @@ const TraineeDataTab = ({
           </div>
         )}
       </div>
+      )}
 
       {/* Success Message */}
       {success && (

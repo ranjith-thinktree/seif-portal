@@ -1365,6 +1365,7 @@ const UploadPage = () => {
             {/* Tab Content */}
             {activeTab === "upload" ? (
               <TraineeDataTab
+                showApprovalNote={!isAdmin}
                 noteOpen={noteOpen}
                 setNoteOpen={setNoteOpen}
                 success={success}

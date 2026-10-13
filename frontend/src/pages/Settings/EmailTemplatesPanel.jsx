@@ -1,29 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSelector } from "react-redux";
 import {
   ArrowPathIcon,
-  EnvelopeIcon,
   CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 import {
   getEmailTemplates,
   updateEmailTemplate,
   resetEmailTemplate,
-  testEmailTemplate,
 } from "../../services/certification.service";
 
 const EmailTemplatesPanel = () => {
-  const { user } = useSelector((state) => state.auth);
   const [templates, setTemplates] = useState([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [testEmail, setTestEmail] = useState(user?.email || "");
 
   const load = async () => {
     setLoading(true);
@@ -103,23 +97,6 @@ const EmailTemplatesPanel = () => {
       setError(err.response?.data?.message || "Failed to restore draft.");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    setError("");
-    setMessage("");
-    try {
-      const result = await testEmailTemplate(selectedKey, testEmail);
-      setMessage(result.message || `Test email sent to ${testEmail}`);
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          "Test email failed. Check SMTP settings and restart the backend.",
-      );
-    } finally {
-      setTesting(false);
     }
   };
 
@@ -224,22 +201,6 @@ const EmailTemplatesPanel = () => {
               >
                 Restore default
               </button>
-              <div className="flex items-center gap-2 ml-auto">
-                <input
-                  className="border rounded-lg px-3 py-2 text-sm w-56"
-                  value={testEmail}
-                  onChange={(e) => setTestEmail(e.target.value)}
-                  placeholder="test@email.com"
-                />
-                <button
-                  onClick={handleTest}
-                  disabled={testing || !testEmail}
-                  className="px-4 py-2 border text-sm rounded-lg inline-flex items-center gap-2"
-                >
-                  <EnvelopeIcon className="w-4 h-4" />
-                  {testing ? "Sending…" : "Send test"}
-                </button>
-              </div>
             </div>
           </>
         )}

@@ -66,7 +66,10 @@ const UploadInstructions = ({
             <p className="text-base font-semibold text-foreground pt-0.5">
               Fill in your data (keep any format: CSV, Excel)
               <span className="block mt-2 text-sm font-normal text-muted-foreground">
-                Rename file as: Partnername_CenterID_BatchID
+                Use one Batch Number for every trainee in the same batch, for
+                example BATCH-2026-Q2-ELEC. A different batch needs a different
+                number. Copy that same number down each row. Do not create a
+                new number for each trainee.
               </span>
             </p>
           </div>
